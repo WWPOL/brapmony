@@ -127,10 +127,11 @@ are treated as removed and the settings page says so.
 - `discord_migration_secrets` (service_role only): `server_id`, `bot_token_secret`,
   `client_id`, `client_secret_secret`.
 - `discord_migration_role_map`: `server_id`, `discord_role_id`, `discord_role_name` (snapshot),
-  `harmony_role_id` null, `ignored` bool. Exactly one of mapped / ignored. `@everyone` excluded.
+  `harmony_role_id`. `@everyone` and Discord-managed roles (`managed: true`: bot/integration roles,
+  Server Booster) are excluded and never stored or shown.
 - `discord_migration_links`: `server_id`, `user_id`, `discord_user_id`, `linked_at`, `last_synced_at`,
   `sync_avatar` bool default false, `sync_display_name` bool default false, `status`
-  (`active | left | banned`). Unique (server_id, user_id) and (server_id, discord_user_id). Kept after
+  (`active | left | banned | kicked_on_harmony`). Unique (server_id, user_id) and (server_id, discord_user_id). Kept after
   finish as history.
 - `discord_migration_link_states`: short-lived OAuth state (nonce, server_id, optional user_id, expiry),
   like `discord_bridge_link_states`.
@@ -150,9 +151,10 @@ and link states `service_role` only. Mutations through RPCs; register them in
    token, fetches the guild, and reports bot permissions (Ban Members yes/no).
 3. Discord server ID (prefilled from bridge).
 4. Role mapping: gateway fetches Discord roles; auto-match by exact name (case-insensitive) to Harmony
-   roles; owner confirms or edits each row or marks it ignored. Mapping to a role above the configuring
+   roles; owner confirms or edits each row (a dropdown of Harmony roles; no "ignore" option; a role
+   the owner doesn't want should be deleted on Discord before migrating, or on Harmony afterwards). Mapping to a role above the configuring
    admin's top role is refused (respect hierarchy).
-5. Readiness report: **gate** = every Discord role mapped or ignored. **Warnings only**: Discord
+5. Readiness report: **gate** = every non-managed Discord role mapped to a Harmony role. **Warnings only**: Discord
    channels without a paired Harmony channel (from bridge pairs), per-member channel overrides on Discord
    that will not carry over, missing Ban Members.
 6. Open migration → shows the shareable link `/migrate/<token>` and a copy button. The token is a
@@ -178,10 +180,16 @@ Who can configure: owner or MANAGE_SERVER (mirrors bridge).
 4. Existing account path: create link row, join server, apply roles, done.
 
    Joining rules (apply to both paths): the migration link acts as an invite, so it works even when the
-   server is otherwise invite-only. A **Harmony ban is sticky**: a user banned on Harmony is refused
-   even if they're still on Discord. A user kicked on Harmony may re-run the link page while they are
-   still in the Discord server. A link with `status = banned` (banned on Discord) is refused. One with
-   `status = left` becomes `active` again if they are back in the Discord server. The welcome/rules
+   server is otherwise invite-only. **Harmony moderation always takes precedence over Discord:**
+   - Banned on Harmony → refused by the link page; sync never re-adds them; lifted only by a Harmony
+     admin.
+   - Kicked on Harmony → link status `kicked_on_harmony`; the link page refuses them. An admin lets
+     them back with a normal invite or an **Allow back** action on the migration's member list (clears
+     the status).
+   - Banned on Discord (`status = banned`) → refused. Left Discord (`status = left`) → becomes
+     `active` again if they are back in the Discord server and not blocked by the rules above.
+   - Removals flow only one way: Discord can take people out of the Harmony server; nothing on Discord
+     overrides a Harmony ban or kick. The welcome/rules
    gate applies after joining, as for any new member. Roles are granted right away, and the rules gate
    still blocks sending messages until accepted.
 
@@ -247,6 +255,8 @@ separately. Re-open: `state = open`, immediate sync.
 - Durable link; cron + admin Sync button; roles always sync; per-user opt-in profile fields.
 - One-way Discord → Harmony.
 - Discord leave/kick → removed from Harmony server; Discord ban → Harmony ban.
+- Harmony bans and kicks take precedence: the link page and sync never undo them.
+- No "ignore" option for roles; every non-managed Discord role must map. Managed roles are hidden.
 - Discord owns mapped roles while open: a linked member's mapped roles always match Discord, hand
   grants included; unmapped roles untouched.
 - Finish closes the link (stragglers need re-open or a manual invite) and stops syncing.
@@ -254,6 +264,9 @@ separately. Re-open: `state = open`, immediate sync.
 ## Calls made by the designer (check these)
 
 - Roles-only gate; channels/overrides are warnings.
+- Discord-managed roles excluded from mapping (can't be deleted on Discord while the bot exists).
+- A kick on Harmony detected via a trigger/event on membership removal for linked users; "Allow back"
+  clears it.
 - Removal brake (10%, min 3) and pause on lost guild access.
 - New accounts require email + password; email collision → "sign in instead".
 - Instance switch for account creation under invite/closed registration (default on).
@@ -261,7 +274,7 @@ separately. Re-open: `state = open`, immediate sync.
 - Gateway writes via new service-only RPCs attributed to "Discord migration"; hierarchy checked when
   the role map is saved; owner and ADMINISTRATOR holders are never auto-removed.
 - `instance_bot`/`bridge` sources reference the bridge's Vault ids live; pause if they vanish.
-- Harmony bans are sticky; Harmony kicks can re-link; the link works as an invite.
+- The link works as an invite.
 - Email confirmation follows the instance; never auto-confirmed.
 - Link URL uses an unguessable token, not the server id.
 - Local accounts only (no federated users).
