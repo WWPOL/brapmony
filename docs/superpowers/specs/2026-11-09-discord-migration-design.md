@@ -199,9 +199,10 @@ Who can configure: owner or MANAGE_SERVER (mirrors bridge).
    (username prefilled from Discord username, email, password, profile sync checkboxes). Submit →
    gateway validates ticket, checks the instance switch, creates the GoTrue user, creates the profile,
    link, membership and roles. Email confirmation follows the instance's GoTrue setting. If none is
-   required, the page signs in with the password. If it is required, the account is created unconfirmed:
-   membership and roles are already in place, and the result screen says "confirm your email, then sign
-   in". The email is never auto-confirmed, because Discord membership proves nothing about the email. Username collision → inline error. Email belonging to an existing
+   required, the page signs in with the password. If it is required, the account is created unconfirmed and
+   the result screen says "confirm your email, then sign in". The verified Discord claim is kept for 7
+   days, bound to the new account, and completes (join + roles) automatically on first sign-in. Both
+   paths end in the same claim step run by the signed-in user. The email is never auto-confirmed, because Discord membership proves nothing about the email. Username collision → inline error. Email belonging to an existing
    account → "sign in instead" (never merge silently).
 6. Result screen: joined, roles received, profile-sync toggles (also later in user settings under the
    server's membership or Connections).
