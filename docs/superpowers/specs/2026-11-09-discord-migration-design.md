@@ -290,3 +290,28 @@ separately. Re-open: `state = open`, immediate sync.
 - Test split: pgTAP for RLS/RPCs/grants, vitest for gateway OAuth/sync logic (mock Discord), one
   Playwright happy path with a stubbed Discord.
 - Docs: `docs/run/` page for owners, `docs/self-host/` notes for operators (redirect URI, switch).
+
+## Delivery stack (agreed 2026-11-09)
+
+The work ships as three PRs, in order. The implementation plan in
+`docs/superpowers/plans/2026-11-09-discord-migration.md` is **parked**: it must be revised for the
+additions below before execution.
+
+1. **Profile features** (own design doc): pronouns, accent color shown for local accounts, per-server
+   avatar and banner. Bio already exists (`profiles.bio`). Discord does not expose bio or pronouns to
+   apps, so they are Harmony-native fields and are never synced.
+2. **This migration**, extended with:
+   - Opt-in sync, chosen by each user: server nickname (`user_servers.nickname`), profile banner
+     (`profiles.banner_url`, via bot `GET /users/{id}`), accent color, per-server avatar and banner.
+     These add to avatar and display name.
+   - Always-on sync: Discord timeouts → `server_member_timeouts`. Lifting a timeout on Discord removes
+     only timeouts the migration created; timeouts set by a Harmony moderator are never touched.
+   - The Discord server join date stored on the link and shown on the member's profile card, as bridged
+     profiles show "Joined server".
+3. **Message ownership** (own design, after the separate Discord history-import work lands; rebase
+   onto it):
+   - Reassign authorship of bridged messages (`metadata.discord_user.id`) and imported messages to the
+     linked Harmony account.
+   - Keep `discord_message_id`, so the bridge keeps relaying edits and deletes, and it keeps permission
+     to edit messages it relayed.
+   - A trigger reassigns new bridged messages from linked Discord users as they arrive.
