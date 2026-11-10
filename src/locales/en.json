@@ -681,6 +681,14 @@
         "USE_EXTERNAL_SOUNDS": {
           "label": "Use External Sounds",
           "description": "Play sounds from other servers they belong to"
+        },
+        "CHANGE_NICKNAME": {
+          "label": "Change Nickname",
+          "description": "Set their own nickname and server profile in this server"
+        },
+        "MANAGE_NICKNAMES": {
+          "label": "Manage Nicknames",
+          "description": "Change or reset the nicknames and server profiles of members ranked below them"
         }
       },
       "everyoneMembersNote": "The {'@'}everyone role applies to every member of this server automatically. There's no roster to manage.",

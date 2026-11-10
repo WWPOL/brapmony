@@ -681,6 +681,14 @@
         "USE_EXTERNAL_SOUNDS": {
           "label": "Utiliser des sons externes",
           "description": "Jouer des sons d'autres serveurs dont ils sont membres"
+        },
+        "CHANGE_NICKNAME": {
+          "label": "Changer de pseudo",
+          "description": "Définir son propre pseudo et profil de serveur sur ce serveur"
+        },
+        "MANAGE_NICKNAMES": {
+          "label": "Gérer les pseudos",
+          "description": "Modifier ou réinitialiser les pseudos et profils de serveur des membres de rang inférieur"
         }
       },
       "everyoneMembersNote": "Le rôle {'@'}everyone s'applique automatiquement à chaque membre de ce serveur. Il n'y a pas de liste à gérer.",

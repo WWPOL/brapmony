@@ -681,6 +681,14 @@
         "USE_EXTERNAL_SOUNDS": {
           "label": "외부 소리 사용",
           "description": "속한 다른 서버의 소리를 재생합니다"
+        },
+        "CHANGE_NICKNAME": {
+          "label": "닉네임 변경",
+          "description": "이 서버에서 자신의 닉네임과 서버 프로필을 설정합니다"
+        },
+        "MANAGE_NICKNAMES": {
+          "label": "닉네임 관리",
+          "description": "더 낮은 등급 멤버의 닉네임과 서버 프로필을 변경하거나 초기화합니다"
         }
       },
       "everyoneMembersNote": "{'@'}everyone 역할은 이 서버의 모든 멤버에게 자동으로 적용됩니다. 관리할 명단이 없습니다.",

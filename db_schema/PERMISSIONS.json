@@ -893,6 +893,42 @@
       "unit": [
         "src/stores/__tests__/soundboard.test.ts"
       ]
+    },
+    "CHANGE_NICKNAME": {
+      "scope": "server",
+      "sql": [],
+      "backend": [
+        "bot-gateway/src/auth/botPermissions.ts"
+      ],
+      "client": [
+        "src/services/RoleService.ts"
+      ],
+      "pgtap": [
+        "db_schema/tests/246_nickname_permissions.sql"
+      ],
+      "e2e": [
+        "e2e/specs/permission-audit.spec.ts"
+      ],
+      "unit": [
+        "src/services/__tests__/RoleService.test.ts"
+      ]
+    },
+    "MANAGE_NICKNAMES": {
+      "scope": "server",
+      "sql": [],
+      "backend": [
+        "bot-gateway/src/auth/botPermissions.ts"
+      ],
+      "client": [
+        "src/services/RoleService.ts"
+      ],
+      "pgtap": [
+        "db_schema/tests/246_nickname_permissions.sql"
+      ],
+      "e2e": [
+        "e2e/specs/permission-audit.spec.ts"
+      ],
+      "unit": []
     }
   }
 }

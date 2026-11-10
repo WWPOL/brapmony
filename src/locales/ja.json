@@ -681,6 +681,14 @@
         "USE_EXTERNAL_SOUNDS": {
           "label": "外部のサウンドを使用",
           "description": "所属する他のサーバーのサウンドを再生します"
+        },
+        "CHANGE_NICKNAME": {
+          "label": "ニックネームの変更",
+          "description": "このサーバーでの自分のニックネームとサーバープロフィールを設定します"
+        },
+        "MANAGE_NICKNAMES": {
+          "label": "ニックネームの管理",
+          "description": "自分より下位のメンバーのニックネームとサーバープロフィールを変更またはリセットします"
         }
       },
       "everyoneMembersNote": "{'@'}everyone ロールはこのサーバーのすべてのメンバーに自動的に適用されます。管理するメンバー一覧はありません。",

@@ -681,6 +681,14 @@
         "USE_EXTERNAL_SOUNDS": {
           "label": "Usar sonidos externos",
           "description": "Reproducir sonidos de otros servidores a los que pertenecen"
+        },
+        "CHANGE_NICKNAME": {
+          "label": "Cambiar apodo",
+          "description": "Establecer su propio apodo y perfil de servidor en este servidor"
+        },
+        "MANAGE_NICKNAMES": {
+          "label": "Gestionar apodos",
+          "description": "Cambiar o restablecer los apodos y perfiles de servidor de miembros de rango inferior"
         }
       },
       "everyoneMembersNote": "El rol {'@'}everyone se aplica automáticamente a todos los miembros de este servidor. No hay lista que gestionar.",

@@ -681,6 +681,14 @@
         "USE_EXTERNAL_SOUNDS": {
           "label": "Externe Sounds verwenden",
           "description": "Sounds von anderen Servern abspielen, denen sie angehören"
+        },
+        "CHANGE_NICKNAME": {
+          "label": "Spitzname ändern",
+          "description": "Den eigenen Spitznamen und das Serverprofil auf diesem Server festlegen"
+        },
+        "MANAGE_NICKNAMES": {
+          "label": "Spitznamen verwalten",
+          "description": "Spitznamen und Serverprofile von Mitgliedern mit niedrigerem Rang ändern oder zurücksetzen"
         }
       },
       "everyoneMembersNote": "Die Rolle {'@'}everyone gilt automatisch für jedes Mitglied dieses Servers. Es gibt keine Mitgliederliste zu verwalten.",

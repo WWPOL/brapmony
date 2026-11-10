@@ -681,6 +681,14 @@
         "USE_EXTERNAL_SOUNDS": {
           "label": "使用外部声音",
           "description": "播放其所在的其他服务器的声音"
+        },
+        "CHANGE_NICKNAME": {
+          "label": "更改昵称",
+          "description": "设置自己在此服务器中的昵称和服务器资料"
+        },
+        "MANAGE_NICKNAMES": {
+          "label": "管理昵称",
+          "description": "更改或重置等级较低成员的昵称和服务器资料"
         }
       },
       "everyoneMembersNote": "{'@'}everyone 角色会自动应用于此服务器的每位成员，无需管理成员名单。",

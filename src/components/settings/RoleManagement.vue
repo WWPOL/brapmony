@@ -563,7 +563,7 @@ const PERMISSION_SECTIONS: Array<{ id: string; keys: string[] }> = [
   },
   {
     id: 'membership',
-    keys: ['KICK_MEMBERS', 'BAN_MEMBERS', 'TIMEOUT_MEMBERS'],
+    keys: ['KICK_MEMBERS', 'BAN_MEMBERS', 'TIMEOUT_MEMBERS', 'CHANGE_NICKNAME', 'MANAGE_NICKNAMES'],
   },
   {
     id: 'text',
