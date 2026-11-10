@@ -205,6 +205,55 @@ describe('ServerProfilesSettings', () => {
     expect(w.get('[data-testid="field-bio"]').attributes('maxlength')).toBe('500')
   })
 
+  it('keeps unsaved text when an avatar upload saves', async () => {
+    query.server = 'A'
+    const { profileService } = await import('@/services/ProfileService')
+    vi.mocked(profileService.uploadServerAvatar).mockResolvedValueOnce({ success: true, url: 'http://db.test/av.png' } as any)
+    const w = await mountTab()
+    await w.get('[data-testid="field-nickname"]').setValue('Typed')
+    await w.get('[data-testid="field-bio"]').setValue('Typed bio')
+    const input = w.get('[data-testid="field-avatar"]')
+    Object.defineProperty(input.element, 'files', { value: [new File(['x'], 'a.png', { type: 'image/png' })], configurable: true })
+    await input.trigger('change')
+    await flushPromises()
+    expect(setMy).toHaveBeenCalledWith('A', { avatar_url: 'http://db.test/av.png' })
+    expect((w.get('[data-testid="field-nickname"]').element as HTMLInputElement).value).toBe('Typed')
+    expect((w.get('[data-testid="field-bio"]').element as HTMLTextAreaElement).value).toBe('Typed bio')
+    expect(w.get('[data-testid="save-server-profile"]').attributes('disabled')).toBeUndefined()
+  })
+
+  it('Reset on one field keeps unsaved text in the others', async () => {
+    query.server = 'A'
+    userDataService.setMemberServerProfile('A', ME, { pronouns: 'they/them' })
+    const w = await mountTab()
+    await w.get('[data-testid="field-nickname"]').setValue('Typed')
+    await w.get('[data-testid="reset-pronouns"]').trigger('click')
+    await flushPromises()
+    expect((w.get('[data-testid="field-pronouns"]').element as HTMLInputElement).value).toBe('')
+    expect((w.get('[data-testid="field-nickname"]').element as HTMLInputElement).value).toBe('Typed')
+  })
+
+  it('an untouched field follows a stored change; an edited one keeps the edit', async () => {
+    query.server = 'A'
+    userDataService.setMemberServerProfile('A', ME, { nickname: 'Old', bio: 'Old bio' })
+    const w = await mountTab()
+    await w.get('[data-testid="field-bio"]').setValue('My edit')
+    userDataService.setMemberServerProfile('A', ME, { nickname: 'Mod set', bio: 'Other bio' })
+    await flushPromises()
+    expect((w.get('[data-testid="field-nickname"]').element as HTMLInputElement).value).toBe('Mod set')
+    expect((w.get('[data-testid="field-bio"]').element as HTMLTextAreaElement).value).toBe('My edit')
+  })
+
+  it('switching server loads that server\'s values', async () => {
+    query.server = 'A'
+    userDataService.setMemberServerProfile('B', ME, { nickname: 'Beta nick' })
+    const w = await mountTab()
+    await w.get('[data-testid="field-nickname"]').setValue('Typed in A')
+    await w.get('[data-testid="server-picker"]').setValue('B')
+    await flushPromises()
+    expect((w.get('[data-testid="field-nickname"]').element as HTMLInputElement).value).toBe('Beta nick')
+  })
+
   it('shows the RPC error in a toast and keeps the cache', async () => {
     query.server = 'A'
     setMy.mockRejectedValueOnce(new Error('nope'))

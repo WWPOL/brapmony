@@ -237,13 +237,21 @@ const accountPronouns = computed(() => (userId.value ? getUserPronouns(userId.va
 
 const draft = reactive<Record<TextKey, string>>({ nickname: '', bio: '', pronouns: '' })
 
-function resetDraft() {
-  for (const k of TEXT_KEYS) draft[k] = stored.value?.[k] ?? ''
-}
+const storedText = (k: TextKey) => stored.value?.[k] ?? ''
+
+// A server switch reloads every field. Otherwise a stored change (an upload, a Reset, a
+// moderator's edit arriving live) only moves fields the member has not edited, so unsaved
+// text survives.
+watch(selectedServerId, () => {
+  for (const k of TEXT_KEYS) draft[k] = storedText(k)
+}, { immediate: true })
 watch(
-  () => [selectedServerId.value, stored.value?.nickname, stored.value?.bio, stored.value?.pronouns],
-  resetDraft,
-  { immediate: true },
+  () => TEXT_KEYS.map(storedText),
+  (now, before) => {
+    TEXT_KEYS.forEach((k, i) => {
+      if (draft[k].trim() === (before?.[i] ?? '').trim()) draft[k] = now[i]
+    })
+  },
 )
 
 watch(
