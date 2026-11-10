@@ -1419,7 +1419,7 @@ export default defineComponent({
     const ensureAutoSuggest = (): ReturnType<typeof useAutoSuggest> => {
       if (!autoSuggest.value) {
         autoSuggestScope = effectScope();
-        autoSuggest.value = autoSuggestScope.run(() => useAutoSuggest(editRichEditorRef, getCurrentText, updateText, { mode: 'chat', enableCommands: false }))!;
+        autoSuggest.value = autoSuggestScope.run(() => useAutoSuggest(editRichEditorRef, getCurrentText, updateText, { mode: 'chat', enableCommands: false, profileServerId: () => props.serverId }))!;
       }
       return autoSuggest.value;
     };

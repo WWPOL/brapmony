@@ -680,7 +680,15 @@ export class NotificationFormatter {
     const actor = this.getServerActor(notification)
     const nickname = this.getServerActorProfile(notification)?.nickname
     if (!actor?.accountName || !nickname) return formatted
-    const swap = (text: string | undefined) => text?.replace(actor.accountName!, nickname)
+    // The actor leads a title ("Name sent a message") and ends a short title ("Message from Name");
+    // only that position changes, never the same text inside a channel or server name.
+    const name = actor.accountName
+    const swap = (text: string | undefined) => {
+      if (!text) return text
+      if (text.startsWith(name)) return nickname + text.slice(name.length)
+      if (text.endsWith(name)) return text.slice(0, text.length - name.length) + nickname
+      return text
+    }
     return { ...formatted, title: swap(formatted.title) ?? formatted.title, shortTitle: swap(formatted.shortTitle) }
   }
 

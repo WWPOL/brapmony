@@ -65,6 +65,11 @@ export interface AutoSuggestConfig {
   pollsEnabled?: () => boolean;
   /** Server channel the text goes to; without USE_EXTERNAL_EMOJIS there, only its server's custom emoji are offered. */
   channelId?: () => string | null | undefined;
+  /**
+   * Server whose member profiles (nicknames, avatars) show in mention suggestions. Return null in a
+   * DM or group conversation. Without it, the current server's.
+   */
+  profileServerId?: () => string | null | undefined;
   maxSuggestions?: number;
 }
 
@@ -376,6 +381,7 @@ export function useAutoSuggest(
       let usersToSearch: any[] = [];
 
       const currentServerId = serverChannelStore.currentServerId;
+      const profileServerId = config.profileServerId ? (config.profileServerId() ?? null) : (currentServerId ?? null);
       
       debug.log(`AutoSuggest: bridgedUsers count = ${bridgedUsers.value.length}, loaded = ${bridgedUsersLoaded.value}`);
       
@@ -396,7 +402,7 @@ export function useAutoSuggest(
         }
         seenUsers.add(userData.id);
         
-        const serverFields = currentServerId ? userDataService.getMemberServerFields(currentServerId, userData.id) : null;
+        const serverFields = profileServerId ? userDataService.getMemberServerFields(profileServerId, userData.id) : null;
         const nickname = serverFields?.nickname?.trim() || '';
         const serverAvatar = serverFields?.avatar_url?.trim() || '';
         const displayName = userData.displayName?.toLowerCase() || '';
@@ -417,7 +423,7 @@ export function useAutoSuggest(
             display_name: nickname || userData.displayName,
             username: userData.username,
             avatar: serverAvatar || userData.avatarUrl,
-            profileServerId: currentServerId ?? null, // the server whose nickname DisplayName shows
+            profileServerId, // the server whose nickname DisplayName shows
             display_text: displayText, // shown in the input
             mention_text: mentionText, // persisted to the DB
             user: userData

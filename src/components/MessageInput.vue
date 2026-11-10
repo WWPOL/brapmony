@@ -811,6 +811,7 @@ const autoSuggest = useAutoSuggest(richEditorRef, getCurrentText, updateText, {
   enableChannels: !!props.channelId && !props.conversationId,
   pollsEnabled: () => props.allowPolls,
   channelId: () => (props.conversationId ? null : props.channelId),
+  profileServerId: () => (props.conversationId ? null : (props.serverId || serverChannelStore.currentServerId || null)),
 });
 
 // The editor carries no aria-expanded (role=textbox); the list opening and its

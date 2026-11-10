@@ -47,6 +47,14 @@ describe('NotificationFormatter server profiles', () => {
     expect(NotificationFormatter.getActorInfo(n)?.serverId).toBe('srv')
   })
 
+  it('changes only the actor part when the account name also appears elsewhere in the text', () => {
+    const n = channelMessage({ sender: { user_id: 'u1', display_name: 'Ann', username: 'ann' } })
+    const formatted = { title: 'Ann mentioned you in #Ann-chat', message: 'x', shortTitle: 'Mention in #Ann-chat from Ann' }
+    const out = NotificationFormatter.withServerNickname(n, formatted)
+    expect(out.title).toBe('Nick mentioned you in #Ann-chat')
+    expect(out.shortTitle).toBe('Mention in #Ann-chat from Nick')
+  })
+
   it('leaves DMs alone', () => {
     const n = channelMessage({ server_id: undefined, channel_id: undefined, conversation_id: 'conv' })
     const formatted = NotificationFormatter.formatNotification(n)
