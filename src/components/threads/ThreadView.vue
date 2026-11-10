@@ -183,7 +183,7 @@
               <div class="message-meta">
                 <span v-if="parentForeignAuthor" class="username">{{ parentForeignAuthor.name }}</span>
                 <span v-else class="username" :style="{ color: getAuthorColor(displayParentMessage.user_id) }">
-                  <DisplayName :userId="displayParentMessage.user_id" />
+                  <DisplayName :userId="displayParentMessage.user_id" :server-id="threadServerId" />
                   <FederatedUserBadge :user-id="displayParentMessage.user_id" />
                 </span>
                 <span class="timestamp">{{ formatTimestamp(displayParentMessage.created_at) }}</span>
@@ -192,6 +192,7 @@
                 <UnifiedMessageContent
                   :content="displayParentMessage.content"
                   :message-id="displayParentMessage.id"
+                  :server-id="threadServerId"
                   :media-hidden="mediaHidden"
                 />
               </div>
@@ -309,6 +310,7 @@ import { supabase } from '@/supabase'
 import { isModerationRejectionCode, moderationRejectionFromError } from '@/services/AutoModService'
 import { threadService, isThreadNoticeParent } from '@/services/ThreadService'
 import { useUserData } from '@/composables/useUserData'
+import { getMemberDisplayName, getMemberAvatarUrl } from '@/composables/useMemberProfile'
 import { useEncryptionFallbackPrompt } from '@/composables/useEncryptionFallbackPrompt'
 import { useProfileStore } from '@/stores/useProfile'
 import { format } from 'date-fns'
@@ -381,11 +383,7 @@ const emit = defineEmits<{
   'thread-created': [thread: ThreadWithDetails, parentMessage: Message]
 }>()
 
-const { 
-  getUserDisplayName: getDisplayName, 
-  getUserColor: getColor,
-  getUserAvatarUrl: getAvatarUrl 
-} = useUserData()
+const { getUserColor: getColor } = useUserData()
 
 const chatStore = useChatStore()
 const threadsStore = useThreadsStore()
@@ -1064,7 +1062,7 @@ const scrollToBottom = () => {
 
 const getAuthorName = (userId?: string) => {
   if (!userId) return 'Unknown'
-  return getDisplayName(userId).value
+  return getMemberDisplayName(userId, threadServerId.value).value
 }
 
 const getAuthorColor = (userId?: string) => {
@@ -1074,7 +1072,7 @@ const getAuthorColor = (userId?: string) => {
 
 const getAuthorAvatar = (userId?: string) => {
   if (!userId) return '/default_avatar.webp'
-  return getAvatarUrl(userId).value
+  return getMemberAvatarUrl(userId, threadServerId.value).value
 }
 
 const formatTimestamp = (date: Date | string) => {
@@ -1356,7 +1354,7 @@ const handleReplyingTo = (messageId: string, displayName?: string, userId?: stri
     // Fallback: find the message and get user display name
     const replyMessage = messages.value.find(m => m.id === messageId)
     if (replyMessage) {
-      replyingToUserName.value = getDisplayName(replyMessage.user_id).value
+      replyingToUserName.value = getMemberDisplayName(replyMessage.user_id ?? '', threadServerId.value).value
       if (!replyingToUserId.value) replyingToUserId.value = replyMessage.user_id ?? ''
     }
   }

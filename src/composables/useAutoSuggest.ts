@@ -396,10 +396,13 @@ export function useAutoSuggest(
         }
         seenUsers.add(userData.id);
         
+        const serverFields = currentServerId ? userDataService.getMemberServerFields(currentServerId, userData.id) : null;
+        const nickname = serverFields?.nickname?.trim() || '';
+        const serverAvatar = serverFields?.avatar_url?.trim() || '';
         const displayName = userData.displayName?.toLowerCase() || '';
         const usernameStr = userData.username?.toLowerCase() || '';
 
-        if (displayName.includes(query) || usernameStr.includes(query)) {
+        if (displayName.includes(query) || usernameStr.includes(query) || nickname.toLowerCase().includes(query)) {
           const isLocal = userData.isLocal;
           const currentDomain = runtimeConfig.domain as string;
           const userDomain = userData.domain || currentDomain;
@@ -411,9 +414,10 @@ export function useAutoSuggest(
 
           suggestions.push({
             id: userData.id,
-            display_name: userData.displayName,
+            display_name: nickname || userData.displayName,
             username: userData.username,
-            avatar: userData.avatarUrl,
+            avatar: serverAvatar || userData.avatarUrl,
+            profileServerId: currentServerId ?? null, // the server whose nickname DisplayName shows
             display_text: displayText, // shown in the input
             mention_text: mentionText, // persisted to the DB
             user: userData

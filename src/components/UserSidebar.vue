@@ -230,7 +230,7 @@
               @touchcancel.passive="handleUserTouchEnd"
             >
               <Avatar
-                :src="getUserAvatarUrl(item.user!.id).value"
+                :src="getMemberAvatarUrl(item.user!.id, serverChannelStore.currentServerId).value"
                 size="sm"
                 :status="getStatusForAvatarValue(item.user!.id)"
                 class="user-avatar"
@@ -241,7 +241,7 @@
                     class="user-name"
                     :style="memberNameStyle(item.nameColor || memberNameColor(item.user!.id))"
                   >
-                    <DisplayName :user-id="item.user!.id" :truncate="true" />
+                    <DisplayName :user-id="item.user!.id" :server-id="serverChannelStore.currentServerId" :truncate="true" />
                   </span>
                   <span class="sr-only">{{ memberStateText(item) }}</span>
                   <span
@@ -386,6 +386,7 @@ import { authContextService } from '@/services/AuthContextService';
 import { getUserIdsForServer} from '@/services/usersService';
 import { UserStatus } from '@/types';
 import { useUserData, DEFAULT_USER_COLOR } from '@/composables/useUserData';
+import { getMemberDisplayName, getMemberAvatarUrl } from '@/composables/useMemberProfile';
 import { useLayoutState } from '@/composables/useLayoutState';
 import { useHapticSettings } from '@/composables/useHapticSettings';
 import { roleService, type ServerRole } from '@/services/RoleService';
@@ -978,7 +979,7 @@ const filteredUsers = computed(() => {
   
   const query = searchQuery.value.toLowerCase();
   return users.value.filter((user: User) => {
-    const displayName = getUserDisplayName(user.id).value.toLowerCase();
+    const displayName = getMemberDisplayName(user.id, serverChannelStore.currentServerId).value.toLowerCase();
     const username = user.username?.toLowerCase() || '';
     return displayName.includes(query) || username.includes(query);
   });
@@ -1056,7 +1057,7 @@ const groupedUsers = computed(() => {
   const sortKey = (id: string): string => {
     let key = sortKeys.get(id);
     if (key === undefined) {
-      key = getUserDisplayName(id).value.toLowerCase();
+      key = getMemberDisplayName(id, serverChannelStore.currentServerId).value.toLowerCase();
       sortKeys.set(id, key);
     }
     return key;

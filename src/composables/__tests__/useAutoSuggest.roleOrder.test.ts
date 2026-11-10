@@ -25,7 +25,7 @@ const members = ['everyone', 'here', 'crew'].map((username) => ({
 }))
 
 vi.mock('@/services/userDataService', () => ({
-  userDataService: { getUsersInContext: () => members, getAllUsers: () => members },
+  userDataService: { getUsersInContext: () => members, getAllUsers: () => members, getMemberServerFields: () => null },
 }))
 
 vi.mock('@/services/activityPubService', () => ({

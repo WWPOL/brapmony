@@ -274,6 +274,7 @@
     <div class="composer-status">
       <TypingIndicator
         :typing-users="typingUsers"
+        :server-id="conversationId ? null : (serverId || serverChannelStore.currentServerId || null)"
         class="typing-indicator-wrapper"
       />
       <slot name="status-end" />

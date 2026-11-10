@@ -219,7 +219,7 @@
           <template v-else>
             <span class="mention-at">@</span>
             <template v-if="part.userId">
-              <DisplayName :userId="part.userId" :fallback="part.username" :truncate="false" />
+              <DisplayName :userId="part.userId" :server-id="serverId" :fallback="part.username" :truncate="false" />
             </template>
             <template v-else>{{ part.username }}</template>
             <span
@@ -941,6 +941,11 @@ export default defineComponent({
     messageId: {
       type: String,
       required: true
+    },
+    /** The server the message sits in; its member nicknames show in mentions. Null or unset: account names. */
+    serverId: {
+      type: String as PropType<string | null>,
+      default: null
     },
     imageLoaded: {
       type: Object as PropType<Record<string, boolean>>,

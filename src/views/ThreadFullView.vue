@@ -128,15 +128,15 @@
       <div class="section-label">Original message</div>
       <div class="parent-message" :id="`message-${thread.parent_message.id}`">
         <Avatar 
-          :src="getAvatarUrl(thread.parent_message.user_id).value" 
-          :alt="getDisplayName(thread.parent_message.user_id).value"
+          :src="getMemberAvatarUrl(thread.parent_message.user_id ?? '', serverId).value" 
+          :alt="getMemberDisplayName(thread.parent_message.user_id ?? '', serverId).value"
           size="md"
           :interactive="true"
         />
         <div class="message-content">
           <div class="message-header">
             <span class="username" :style="{ color: getColor(thread.parent_message.user_id).value }">
-              <DisplayName :userId="thread.parent_message.user_id" />
+              <DisplayName :userId="thread.parent_message.user_id" :server-id="serverId" />
               <FederatedUserBadge :user-id="getHarmonyProfileUserId(thread.parent_message)" />
             </span>
             <span class="timestamp">{{ formatDate(thread.parent_message.created_at) }}</span>
@@ -145,6 +145,7 @@
             <UnifiedMessageContent
               :content="thread.parent_message.content"
               :message-id="thread.parent_message.id"
+              :server-id="serverId"
               :media-hidden="mediaHidden"
             />
           </div>
@@ -247,6 +248,7 @@ import { useToast } from 'vue-toastification'
 import { threadService, isThreadNoticeParent } from '@/services/ThreadService'
 import { supabase } from '@/supabase'
 import { useUserData } from '@/composables/useUserData'
+import { getMemberDisplayName, getMemberAvatarUrl } from '@/composables/useMemberProfile'
 import { useEncryptionFallbackPrompt } from '@/composables/useEncryptionFallbackPrompt'
 import { useProfileStore } from '@/stores/useProfile'
 import { format } from 'date-fns'
@@ -297,11 +299,7 @@ const { confirm, prompt } = useConfirmDialog()
 const route = useRoute()
 const router = useRouter()
 
-const { 
-  getUserDisplayName: getDisplayName, 
-  getUserColor: getColor,
-  getUserAvatarUrl: getAvatarUrl 
-} = useUserData()
+const { getUserColor: getColor } = useUserData()
 
 const chatStore = useChatStore()
 const reactionsStore = useReactionsStore()
@@ -898,7 +896,7 @@ const handleReplyingTo = (messageId: string, displayName?: string, userId?: stri
     // Fallback: find the message and get user display name
     const replyMessage = messages.value.find(m => m.id === messageId)
     if (replyMessage) {
-      replyingToUserName.value = getDisplayName(replyMessage.user_id ?? '').value
+      replyingToUserName.value = getMemberDisplayName(replyMessage.user_id ?? '', props.serverId).value
       if (!replyingToUserId.value && replyMessage.user_id) replyingToUserId.value = replyMessage.user_id
     }
   }
