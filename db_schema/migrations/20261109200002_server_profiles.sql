@@ -229,6 +229,9 @@ BEGIN
     IF v_me IS NULL THEN
         RAISE EXCEPTION 'not authenticated' USING ERRCODE = '42501';
     END IF;
+    IF NOT EXISTS (SELECT 1 FROM public.servers s WHERE s.id = p_server_id AND s.is_local_server IS NOT FALSE) THEN
+        RAISE EXCEPTION 'Server profiles are kept by the instance that hosts the server' USING ERRCODE = '42501';
+    END IF;
     IF NOT EXISTS (SELECT 1 FROM public.user_servers us
                     WHERE us.server_id = p_server_id AND us.user_id = v_me AND us.status = 'accepted') THEN
         RAISE EXCEPTION 'not a member of this server' USING ERRCODE = '42501';
@@ -261,6 +264,7 @@ AS $$
 DECLARE
     v_me uuid := public.get_current_profile_id();
     v_owner uuid;
+    v_local boolean;
     v_old public.user_servers%ROWTYPE;
     v_new public.user_servers%ROWTYPE;
     v_name text;
@@ -270,9 +274,16 @@ BEGIN
         RAISE EXCEPTION 'not authenticated' USING ERRCODE = '42501';
     END IF;
 
-    SELECT s.owner INTO v_owner FROM public.servers s WHERE s.id = p_server_id;
+    IF NOT p_set_nickname AND NOT p_reset_profile THEN
+        RAISE EXCEPTION 'nothing to change: set p_set_nickname or p_reset_profile' USING ERRCODE = '22023';
+    END IF;
+
+    SELECT s.owner, s.is_local_server IS NOT FALSE INTO v_owner, v_local FROM public.servers s WHERE s.id = p_server_id;
     IF NOT FOUND THEN
         RAISE EXCEPTION 'no such server' USING ERRCODE = 'P0002';
+    END IF;
+    IF NOT v_local THEN
+        RAISE EXCEPTION 'Server profiles are kept by the instance that hosts the server' USING ERRCODE = '42501';
     END IF;
 
     IF v_me IS DISTINCT FROM v_owner THEN

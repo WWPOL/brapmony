@@ -9,7 +9,7 @@
 --   pend   a pending member
 BEGIN;
 SET LOCAL search_path = tests, public;
-SELECT plan(34);
+SELECT plan(40);
 
 INSERT INTO auth.users (id, instance_id, aud, role, email) VALUES
   ('f2470000-0000-0000-0000-0000000000a1', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'pend247@test.local');
@@ -193,6 +193,42 @@ SELECT is(current_setting('t247.svc'), 'from discord', 'service_role writes a me
 SELECT is((SELECT bio || '|' || pronouns FROM public.user_servers
             WHERE user_id = '11111111-0000-0000-0000-000000000001' AND server_id = 'f2470000-0000-0000-0000-000000000001'),
           'from discord|he/him', 'and the row has it');
+
+-- fix round 1 ----------------------------------------------------------------------------------------
+SELECT tests.authenticate_as('dddddddd-0000-0000-0000-000000000004');
+SELECT throws_ok($$SELECT public.moderate_server_profile('f2470000-0000-0000-0000-000000000001',
+                    '11111111-0000-0000-0000-000000000001', NULL, false, true)$$,
+                 '42501', NULL, 'without MANAGE_NICKNAMES a reset is refused too');
+SELECT tests.clear_authentication();
+SELECT tests.authenticate_as('bbbbbbbb-0000-0000-0000-000000000002');
+SELECT throws_ok($$SELECT public.moderate_server_profile('f2470000-0000-0000-0000-000000000001',
+                    '11111111-0000-0000-0000-000000000001')$$,
+                 '22023', NULL, 'moderate_server_profile with nothing to change raises 22023');
+SELECT tests.clear_authentication();
+
+-- A remote server copy: both RPCs refuse, even to the member holding the permissions.
+INSERT INTO public.servers (id, name, owner, is_local_server) VALUES
+  ('f2470000-0000-0000-0000-000000000002', 'Remote247', '33333333-0000-0000-0000-000000000003', false);
+INSERT INTO public.user_servers (user_id, server_id, status) VALUES
+  ('11111111-0000-0000-0000-000000000001', 'f2470000-0000-0000-0000-000000000002', 'accepted'),
+  ('33333333-0000-0000-0000-000000000003', 'f2470000-0000-0000-0000-000000000002', 'accepted')
+ON CONFLICT (user_id, server_id) DO UPDATE SET status = EXCLUDED.status;
+UPDATE public.server_roles SET permissions = permissions | (1::bigint << 32) | (1::bigint << 33)
+ WHERE server_id = 'f2470000-0000-0000-0000-000000000002' AND is_default;
+SELECT tests.authenticate_as('aaaaaaaa-0000-0000-0000-000000000001');
+SELECT throws_ok($$SELECT public.set_my_server_profile('f2470000-0000-0000-0000-000000000002', '{"nickname":"R"}'::jsonb)$$,
+                 '42501', NULL, 'set_my_server_profile refuses a remote server copy');
+SELECT tests.clear_authentication();
+SELECT tests.authenticate_as('cccccccc-0000-0000-0000-000000000003');
+SELECT throws_ok($$SELECT public.moderate_server_profile('f2470000-0000-0000-0000-000000000002',
+                    '11111111-0000-0000-0000-000000000001', 'R', true)$$,
+                 '42501', NULL, 'moderate_server_profile refuses a remote server copy, even to its owner row');
+SELECT tests.clear_authentication();
+SELECT is((SELECT nickname FROM public.user_servers
+            WHERE user_id = '11111111-0000-0000-0000-000000000001' AND server_id = 'f2470000-0000-0000-0000-000000000002'),
+          NULL, 'and nothing was written');
+SELECT is((SELECT count(*)::int FROM public.server_audit_log WHERE server_id = 'f2470000-0000-0000-0000-000000000002'), 0,
+          'and nothing was audited');
 
 SELECT * FROM finish();
 ROLLBACK;
