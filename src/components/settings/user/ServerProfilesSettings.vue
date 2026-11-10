@@ -34,7 +34,7 @@
                 v-model="draft.nickname"
                 type="text"
                 class="form-input"
-                maxlength="32"
+                maxlength="64"
                 :placeholder="accountName"
                 :disabled="locked"
                 data-testid="field-nickname"

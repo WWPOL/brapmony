@@ -26,11 +26,11 @@
         <!-- Keyboard and screen-reader way in; the card is the pointer target. -->
         <h3 class="user-name" :style="{ color: user.color || undefined }">
           <button v-if="isInteractive" type="button" class="card-name-btn" @click.stop="handleClick">
-            <DisplayName v-if="user.id" :user-id="draftNickname ? undefined : user.id" :server-id="serverId" :fallback="draftNickname || displayName" :color="user.color || undefined" />
+            <DisplayName v-if="user.id" :user-id="draftName ? undefined : user.id" :server-id="serverId" :fallback="draftName || displayName" :color="user.color || undefined" />
             <template v-else>{{ displayName }}</template>
           </button>
           <template v-else>
-            <DisplayName v-if="user.id" :user-id="draftNickname ? undefined : user.id" :server-id="serverId" :fallback="draftNickname || displayName" :color="user.color || undefined" />
+            <DisplayName v-if="user.id" :user-id="draftName ? undefined : user.id" :server-id="serverId" :fallback="draftName || displayName" :color="user.color || undefined" />
             <template v-else>{{ displayName }}</template>
           </template>
         </h3>
@@ -237,8 +237,9 @@ const emit = defineEmits<{
 }>()
 
 const identity = useCardServerIdentity(() => props.user, () => props.serverId, () => props.serverProfile)
-// Unsaved edits are not in the cache DisplayName reads, so their nickname shows as plain text.
-const draftNickname = computed(() => (props.serverProfile ? identity.nickname.value : null))
+// Unsaved edits are not in the cache DisplayName reads: with an override the name shows as plain
+// text, the draft nickname or, once cleared, the account name, as saving would produce.
+const draftName = computed(() => (props.serverProfile ? (identity.nickname.value || displayName.value) : null))
 
 // Stores
 const router = useRouter()

@@ -162,6 +162,14 @@ describe('ServerProfilesSettings', () => {
     expect((w.get('[data-testid="field-nickname"]').element as HTMLInputElement).value).toBe('Kept')
   })
 
+  it('limits the fields to 64, 40 and 500 characters', async () => {
+    query.server = 'A'
+    const w = await mountTab()
+    expect(w.get('[data-testid="field-nickname"]').attributes('maxlength')).toBe('64')
+    expect(w.get('[data-testid="field-pronouns"]').attributes('maxlength')).toBe('40')
+    expect(w.get('[data-testid="field-bio"]').attributes('maxlength')).toBe('500')
+  })
+
   it('shows the RPC error in a toast and keeps the cache', async () => {
     query.server = 'A'
     setMy.mockRejectedValueOnce(new Error('nope'))

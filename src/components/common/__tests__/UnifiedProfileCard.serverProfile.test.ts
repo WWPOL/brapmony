@@ -84,4 +84,10 @@ describe('UnifiedProfileCard server profile', () => {
     expect(w.get('.user-name').text()).toBe('Drafty')
     expect(w.get('[data-testid="card-pronouns"]').text()).toBe('she/her')
   })
+
+  it('shows the account name once the draft nickname is cleared, not the stored one', () => {
+    const w = card({ serverId: S, serverProfile: { nickname: null } })
+    expect(w.get('.user-name').text()).toBe('Account Name')
+    expect(w.find('[data-testid="card-account-name"]').exists()).toBe(false)
+  })
 })
