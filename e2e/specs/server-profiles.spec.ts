@@ -3,7 +3,7 @@
 // but leaves the nickname.
 //
 // CHANGE_NICKNAME comes from the server's @everyone role, so the member edits their own
-// profile without a grant. The moderator holds MANAGE_NICKNAMES through a role above the member's.
+// profile without a grant. The moderator holds MANAGE_NICKNAMES through a role above the plain member's; a third user owns the server.
 
 import { test, expect, type Page } from '@playwright/test'
 import {
@@ -16,7 +16,6 @@ import {
   seedServer,
   addMember,
   signIn,
-  userClient,
   type SeededServer,
   type SpecUser,
 } from './harness'
@@ -28,6 +27,7 @@ const PNG = Buffer.from(
   'base64',
 )
 
+let owner: SpecUser
 let member: SpecUser
 let moderator: SpecUser
 let friend: SpecUser
@@ -37,10 +37,12 @@ const channelText = 'hello from the server'
 const dmText = 'hello from the dm'
 
 test.beforeAll(async () => {
+  owner = await createUser(admin, 'spo')
   member = await createUser(admin, 'spm')
   moderator = await createUser(admin, 'spmod')
   friend = await createUser(admin, 'spf')
-  server = await seedServer(admin, member, `Profiles ${member.username}`)
+  server = await seedServer(admin, owner, `Profiles ${owner.username}`)
+  await addMember(admin, member, server.id)
   await addMember(admin, moderator, server.id)
   await grantRole(admin, server.id, moderator, {
     name: 'Nick mod',
@@ -72,6 +74,7 @@ test.beforeAll(async () => {
 })
 
 test.afterAll(async () => {
+  await deleteUser(admin, owner)
   await deleteUser(admin, member)
   await deleteUser(admin, moderator)
   await deleteUser(admin, friend)
@@ -147,13 +150,22 @@ test('server nickname and avatar show in the server, not in DMs, and a reset kee
   })
 
   await test.step('a moderator resets the server profile: avatar reverts, nickname stays', async () => {
-    const mod = await userClient(moderator)
-    const { error } = await mod.rpc('moderate_server_profile', {
-      p_server_id: server.id,
-      p_user_id: member.id,
-      p_reset_profile: true,
-    })
-    expect(error).toBeNull()
+    const modContext = await browser.newContext()
+    const modPage = await modContext.newPage()
+    await signIn(modPage, moderator)
+    await modPage.goto(`/chat/${server.id}/${server.generalChannelId}`)
+    await dismissAnnouncements(modPage)
+    await expect(messageList(modPage)).toBeVisible({ timeout: 30000 })
+
+    const memberItem = modPage.locator('.user-sidebar .user-item').filter({ hasText: 'Ally' })
+    await expect(memberItem).toBeVisible({ timeout: 30000 })
+    await memberItem.click({ button: 'right' })
+    await modPage.getByTestId('user-menu-reset-server-profile').click()
+    const dialog = modPage.getByRole('dialog', { name: 'Reset server profile' })
+    await expect(dialog).toBeVisible({ timeout: 30000 })
+    await dialog.getByRole('button', { name: 'Reset', exact: true }).click()
+    await expect.poll(async () => (await storedProfile()).avatar_url, { timeout: 30000 }).toBeNull()
+    await modContext.close()
 
     const stored = await storedProfile()
     expect(stored.avatar_url).toBeNull()
