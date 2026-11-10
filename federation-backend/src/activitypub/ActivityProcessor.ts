@@ -1452,6 +1452,7 @@ export class ActivityProcessor {
         public_key: profileData.public_key,
         manually_approves_followers: profileData.manually_approves_followers === true,
         instance_role: profileData.instance_role,
+        pronouns: profileData.pronouns ?? null,
       };
 
       if (profileData.custom_status) {
@@ -3770,6 +3771,7 @@ export class ActivityProcessor {
       is_local: false,
       manually_approves_followers: profileData.manually_approves_followers === true,
       instance_role: profileData.instance_role,
+      pronouns: profileData.pronouns ?? null,
       updated_at: new Date().toISOString(),
       last_synced_at: new Date().toISOString(),
       ...(await movedColumns(supabase, profileData, existing)),
