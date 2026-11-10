@@ -669,7 +669,7 @@ message_upload_paths	p_content jsonb, p_media_paths text[]	text[]	invoker	public
 mfa_enabled_for	p_auth_user_id uuid	boolean	definer	pg_catalog, public, pg_temp	service_role	unreferenced
 migrate_account_followers	p_migration_id uuid, p_limit integer	integer	definer	pg_catalog, public, pg_temp	service_role	client
 moderate_report	p_report_id uuid, p_action text, p_note text, p_reason text, p_show_resolver boolean	jsonb	definer	public, pg_temp	authenticated+service_role	client
-moderate_server_profile	p_server_id uuid, p_user_id uuid, p_nickname text, p_set_nickname boolean, p_reset_profile boolean	jsonb	definer	public, extensions, pg_temp	authenticated+service_role	unreferenced
+moderate_server_profile	p_server_id uuid, p_user_id uuid, p_nickname text, p_set_nickname boolean, p_reset_profile boolean	jsonb	definer	public, extensions, pg_temp	authenticated+service_role	client
 moderate_user	p_admin_id uuid, p_target_user_id uuid, p_action text, p_reason text	boolean	definer	public, pg_temp	authenticated+service_role	client
 move_voice_member	p_server_id uuid, p_user_id uuid, p_channel_id uuid	jsonb	definer	public, pg_temp	authenticated+service_role	client
 my_voice_state	p_server_id uuid	jsonb	definer	public, pg_temp	authenticated+service_role	client
@@ -890,7 +890,7 @@ set_kofi_webhook_token	p_token text	void	definer	public, pg_temp	authenticated+s
 set_member_instance		trigger	invoker	public, extensions, pg_temp	anon+authenticated+service_role	trigger
 set_message_embeds_suppressed	p_message_id uuid, p_suppressed boolean	boolean	definer	public, pg_temp	authenticated+service_role	client
 set_my_account_aliases	p_uris text[]	jsonb	definer	pg_catalog, public, pg_temp	authenticated+service_role	client
-set_my_server_profile	p_server_id uuid, p_fields jsonb	jsonb	definer	public, extensions, pg_temp	authenticated+service_role	unreferenced
+set_my_server_profile	p_server_id uuid, p_fields jsonb	jsonb	definer	public, extensions, pg_temp	authenticated+service_role	client
 set_server_featured	p_server_id uuid, p_is_featured boolean, p_order integer	void	definer	public, extensions, pg_temp	anon+authenticated+service_role	client
 set_server_member_timeout	p_server_id uuid, p_user_id uuid, p_seconds integer, p_reason text	jsonb	definer	public, pg_temp	authenticated+service_role	client
 set_server_newcomer_alerts	p_server_id uuid, p_enabled boolean	jsonb	definer	public, pg_temp	authenticated+service_role	client

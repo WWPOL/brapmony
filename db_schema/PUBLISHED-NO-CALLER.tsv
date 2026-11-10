@@ -57,5 +57,4 @@ rotate_prekeys	service key	service_role
 run_trending_maintenance	service key	service_role
 safe_upsert_remote_profile	service key	service_role
 server_has_remote_members	service key	service_role
-service_set_member_server_profile	service key	service_role
 user_has_encryption	service key	service_role
