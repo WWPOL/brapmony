@@ -3012,6 +3012,19 @@
       "moderators": "{server} のモデレーター",
       "outcomeBy": "{server} のモデレーター：{outcome}",
       "reviewedTitle": "{server} のモデレーターがあなたの通報を確認しました"
+    },
+    "serverProfile": {
+      "nicknameTitle": "ニックネームを変更",
+      "nicknameLabel": "{name}のニックネーム",
+      "nicknamePlaceholder": "ニックネームなし",
+      "nicknameHint": "空欄にするとニックネームを削除します。このサーバーでのみ有効です。",
+      "nicknameDone": "{name}のニックネームを{nickname}にしました。",
+      "nicknameCleared": "{name}のニックネームを削除しました。",
+      "resetTitle": "サーバープロフィールをリセット",
+      "resetMessage": "{name}のサーバーアバター、バナー、自己紹介、代名詞を消去しますか？ニックネームは残ります。",
+      "resetConfirm": "リセット",
+      "resetDone": "{name}のサーバープロフィールをリセットしました。",
+      "failed": "{name}を更新できませんでした。"
     }
   },
   "files": {
@@ -6373,7 +6386,9 @@
       "kick": "{name} をキック",
       "ban": "{name} をBAN",
       "copyId": "ユーザー ID をコピー",
-      "fallbackName": "ユーザー"
+      "fallbackName": "ユーザー",
+      "moderateNickname": "{name}のニックネームを変更",
+      "resetServerProfile": "{name}のサーバープロフィールをリセット"
     },
     "rail": {
       "folder": "フォルダー",

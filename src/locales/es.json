@@ -3012,6 +3012,19 @@
       "moderators": "Moderadores de {server}",
       "outcomeBy": "Moderadores de {server}: {outcome}",
       "reviewedTitle": "Los moderadores de {server} revisaron tu denuncia"
+    },
+    "serverProfile": {
+      "nicknameTitle": "Cambiar apodo",
+      "nicknameLabel": "Apodo de {name}",
+      "nicknamePlaceholder": "Sin apodo",
+      "nicknameHint": "Déjalo vacío para quitar el apodo. Solo se aplica en este servidor.",
+      "nicknameDone": "{name} ahora se llama {nickname}.",
+      "nicknameCleared": "Se quitó el apodo de {name}.",
+      "resetTitle": "Restablecer perfil de servidor",
+      "resetMessage": "¿Borrar el avatar, el banner, la biografía y los pronombres de servidor de {name}? Se conserva el apodo.",
+      "resetConfirm": "Restablecer",
+      "resetDone": "Se restableció el perfil de servidor de {name}.",
+      "failed": "No se pudo actualizar a {name}."
     }
   },
   "files": {
@@ -6373,7 +6386,9 @@
       "kick": "Expulsar a {name}",
       "ban": "Banear a {name}",
       "copyId": "Copiar ID de usuario",
-      "fallbackName": "Usuario"
+      "fallbackName": "Usuario",
+      "moderateNickname": "Cambiar el apodo de {name}",
+      "resetServerProfile": "Restablecer el perfil de servidor de {name}"
     },
     "rail": {
       "folder": "carpeta",

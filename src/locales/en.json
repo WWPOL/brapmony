@@ -3066,6 +3066,19 @@
       "moderators": "{server}'s moderators",
       "outcomeBy": "{server}'s moderators: {outcome}",
       "reviewedTitle": "{server}'s moderators reviewed your report"
+    },
+    "serverProfile": {
+      "nicknameTitle": "Change nickname",
+      "nicknameLabel": "Nickname for {name}",
+      "nicknamePlaceholder": "No nickname",
+      "nicknameHint": "Leave empty to remove the nickname. Only applies in this server.",
+      "nicknameDone": "{name} is now called {nickname}.",
+      "nicknameCleared": "Removed the nickname of {name}.",
+      "resetTitle": "Reset server profile",
+      "resetMessage": "Clear the server avatar, banner, bio and pronouns of {name}? Their nickname is kept.",
+      "resetConfirm": "Reset",
+      "resetDone": "Reset the server profile of {name}.",
+      "failed": "Could not update {name}."
     }
   },
   "files": {
@@ -6369,7 +6382,9 @@
       "kick": "Kick {name}",
       "ban": "Ban {name}",
       "copyId": "Copy user ID",
-      "fallbackName": "User"
+      "fallbackName": "User",
+      "moderateNickname": "Change nickname for {name}",
+      "resetServerProfile": "Reset server profile of {name}"
     },
     "rail": {
       "folder": "folder",

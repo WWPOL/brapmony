@@ -3012,6 +3012,19 @@
       "moderators": "Moderatoren von {server}",
       "outcomeBy": "Moderatoren von {server}: {outcome}",
       "reviewedTitle": "Die Moderation von {server} hat deine Meldung geprüft"
+    },
+    "serverProfile": {
+      "nicknameTitle": "Nickname ändern",
+      "nicknameLabel": "Nickname für {name}",
+      "nicknamePlaceholder": "Kein Nickname",
+      "nicknameHint": "Leer lassen, um den Nickname zu entfernen. Gilt nur auf diesem Server.",
+      "nicknameDone": "{name} heißt jetzt {nickname}.",
+      "nicknameCleared": "Nickname von {name} entfernt.",
+      "resetTitle": "Serverprofil zurücksetzen",
+      "resetMessage": "Serveravatar, Banner, Bio und Pronomen von {name} löschen? Der Nickname bleibt erhalten.",
+      "resetConfirm": "Zurücksetzen",
+      "resetDone": "Serverprofil von {name} zurückgesetzt.",
+      "failed": "{name} konnte nicht aktualisiert werden."
     }
   },
   "files": {
@@ -6373,7 +6386,9 @@
       "kick": "{name} kicken",
       "ban": "{name} bannen",
       "copyId": "Nutzer-ID kopieren",
-      "fallbackName": "Nutzer"
+      "fallbackName": "Nutzer",
+      "moderateNickname": "Nickname von {name} ändern",
+      "resetServerProfile": "Serverprofil von {name} zurücksetzen"
     },
     "rail": {
       "folder": "Ordner",

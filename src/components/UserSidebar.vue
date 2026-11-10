@@ -347,6 +347,16 @@
       @done="handleKickBanDone"
     />
 
+    <!-- A moderator changing another member's nickname. -->
+    <ChangeNicknameDialog
+      v-if="nicknameMember && serverChannelStore.currentServerId"
+      :show="true"
+      :server-id="serverChannelStore.currentServerId"
+      :user="nicknameMember"
+      @close="nicknameMember = null"
+      @done="nicknameMember = null"
+    />
+
     <!-- This instance's staff removing a member from here, on a server hosted elsewhere. -->
     <InstanceRemoveMemberModal
       v-if="instanceRemoveMember && serverChannelStore.currentServerId"
@@ -375,6 +385,8 @@ import BotProfileModal from '@/components/BotProfileModal.vue';
 import UserContextMenu from '@/components/UserContextMenu.vue';
 import KickBanModal from '@/components/moderation/KickBanModal.vue';
 import InstanceRemoveMemberModal from '@/components/moderation/InstanceRemoveMemberModal.vue';
+import ChangeNicknameDialog from '@/components/moderation/ChangeNicknameDialog.vue';
+import { useModerateServerProfile } from '@/composables/useModerateServerProfile';
 import InviteModal from './InviteModal.vue';
 import Avatar from '@/components/common/Avatar.vue';
 import DisplayName from '@/components/DisplayName.vue';
@@ -625,6 +637,14 @@ async function handleContextAction(action: string, user: User) {
         ? { path: '/settings/server-profiles', query: { server: serverChannelStore.currentServerId } }
         : '/settings/server-profiles');
       break;
+    case 'moderate-nickname':
+      nicknameMember.value = memberRow(user);
+      break;
+    case 'reset-server-profile':
+      if (serverChannelStore.currentServerId) {
+        await resetServerProfileWithConfirm(serverChannelStore.currentServerId, memberRow(user));
+      }
+      break;
     case 'invite':
       await openInviteForUser(user);
       break;
@@ -800,6 +820,9 @@ function openKickBanModal(user: User, mode: 'kick' | 'ban') {
 }
 
 const instanceRemoveMember = ref<ReturnType<typeof memberRow> | null>(null);
+const { resetServerProfileWithConfirm } = useModerateServerProfile();
+/** Member whose nickname a moderator is changing. */
+const nicknameMember = ref<ReturnType<typeof memberRow> | null>(null);
 
 function openInstanceRemove(user: User) {
   instanceRemoveMember.value = memberRow(user);

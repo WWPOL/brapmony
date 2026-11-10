@@ -3012,6 +3012,19 @@
       "moderators": "Modérateurs de {server}",
       "outcomeBy": "Modérateurs de {server} : {outcome}",
       "reviewedTitle": "Les modérateurs de {server} ont examiné ton signalement"
+    },
+    "serverProfile": {
+      "nicknameTitle": "Changer le pseudo",
+      "nicknameLabel": "Pseudo de {name}",
+      "nicknamePlaceholder": "Aucun pseudo",
+      "nicknameHint": "Laissez vide pour supprimer le pseudo. Ne s’applique que sur ce serveur.",
+      "nicknameDone": "{name} s’appelle désormais {nickname}.",
+      "nicknameCleared": "Pseudo de {name} supprimé.",
+      "resetTitle": "Réinitialiser le profil de serveur",
+      "resetMessage": "Effacer l’avatar, la bannière, la bio et les pronoms de serveur de {name} ? Le pseudo est conservé.",
+      "resetConfirm": "Réinitialiser",
+      "resetDone": "Profil de serveur de {name} réinitialisé.",
+      "failed": "Impossible de mettre à jour {name}."
     }
   },
   "files": {
@@ -6373,7 +6386,9 @@
       "kick": "Expulser {name}",
       "ban": "Bannir {name}",
       "copyId": "Copier l'identifiant de l'utilisateur",
-      "fallbackName": "Utilisateur"
+      "fallbackName": "Utilisateur",
+      "moderateNickname": "Changer le pseudo de {name}",
+      "resetServerProfile": "Réinitialiser le profil de serveur de {name}"
     },
     "rail": {
       "folder": "dossier",
