@@ -501,6 +501,11 @@ describe('toActivityPub converters', () => {
       expect(actor.attachment[1].name).toBe('Website')
     })
 
+    it('escapes markup characters in pronouns', () => {
+      const actor = profileToActor({ username: 'alice', pronouns: 'a<b & x' })
+      expect(actor.attachment[0].value).toBe('a&lt;b &amp; x')
+    })
+
     it('does not duplicate pronouns when a user field is named Pronouns', () => {
       const actor = profileToActor({
         username: 'alice',

@@ -372,7 +372,7 @@ export function profileToActor(profile: any): any {
     (field: any) => typeof field?.name === 'string' && field.name.trim().toLowerCase() === 'pronouns',
   );
   if (typeof profile.pronouns === 'string' && profile.pronouns && !hasPronounsField) {
-    attachment.unshift({ type: 'PropertyValue', name: 'Pronouns', value: profile.pronouns });
+    attachment.unshift({ type: 'PropertyValue', name: 'Pronouns', value: fieldValueToHtml(profile.pronouns) });
   }
   if (Array.isArray(profile.profile_fields) || attachment.length > 0) {
     actor.attachment = attachment;
