@@ -154,7 +154,7 @@ SELECT is((SELECT nickname FROM public.user_servers
             WHERE user_id = '11111111-0000-0000-0000-000000000001' AND server_id = 'f2470000-0000-0000-0000-000000000001'),
           'Renamed', 'the nickname was changed');
 SELECT is((SELECT changes->'nickname' FROM public.server_audit_log
-            WHERE server_id = 'f2470000-0000-0000-0000-000000000001' AND action = 'member_nickname_changed'
+            WHERE server_id = 'f2470000-0000-0000-0000-000000000001' AND action = 'member.nickname_update'
               AND target_id = '11111111-0000-0000-0000-000000000001'),
           '{"old":"Keep","new":"Renamed"}'::jsonb, 'and audited old to new');
 
@@ -176,7 +176,7 @@ SELECT is((SELECT (nickname IS NOT NULL AND avatar_url IS NULL AND banner_url IS
             WHERE user_id = '11111111-0000-0000-0000-000000000001' AND server_id = 'f2470000-0000-0000-0000-000000000001'),
           true, 'a reset clears the four fields and keeps the nickname');
 SELECT is((SELECT count(*)::int FROM public.server_audit_log
-            WHERE server_id = 'f2470000-0000-0000-0000-000000000001' AND action = 'member_server_profile_reset'
+            WHERE server_id = 'f2470000-0000-0000-0000-000000000001' AND action = 'member.profile_reset'
               AND target_id = '11111111-0000-0000-0000-000000000001'), 1, 'and is audited');
 
 -- service_set_member_server_profile ---------------------------------------------------------------------

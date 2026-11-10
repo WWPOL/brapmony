@@ -4590,6 +4590,8 @@
       "member_voice_undeafen": "{actor}님이 {target}님의 서버 헤드셋 음소거를 해제했습니다",
       "member_voice_move": "{actor}님이 {target}님을 다른 음성 채널로 옮겼습니다",
       "member_voice_disconnect": "{actor}님이 {target}님의 음성 연결을 끊었습니다",
+      "member_nickname_update": "{actor}님이 {target}님의 닉네임을 변경했습니다",
+      "member_profile_reset": "{actor}님이 {target}님의 서버 프로필을 초기화했습니다",
       "message_delete": "{actor}님이 {channel}에서 {target}님의 메시지 {count}개를 삭제했습니다",
       "server_update": "{actor}님이 서버를 수정했습니다",
       "settings_update": "{actor}님이 서버 설정을 변경했습니다",
@@ -4612,6 +4614,7 @@
       "sticker_delete": "{actor} 님이 스티커 {target}을(를) 삭제했습니다"
     },
     "fields": {
+      "nickname": "닉네임",
       "name": "이름",
       "description": "설명",
       "category": "카테고리",

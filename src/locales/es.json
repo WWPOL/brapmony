@@ -4590,6 +4590,8 @@
       "member_voice_undeafen": "{actor} quitó el ensordecimiento de servidor a {target}",
       "member_voice_move": "{actor} movió a {target} a otro canal de voz",
       "member_voice_disconnect": "{actor} desconectó a {target} de la voz",
+      "member_nickname_update": "{actor} cambió el apodo de {target}",
+      "member_profile_reset": "{actor} restableció el perfil de servidor de {target}",
       "message_delete": "{actor} eliminó un mensaje de {target} en {channel} | {actor} eliminó {count} mensajes de {target} en {channel}",
       "server_update": "{actor} editó el servidor",
       "settings_update": "{actor} cambió los ajustes del servidor",
@@ -4612,6 +4614,7 @@
       "sticker_delete": "{actor} eliminó el sticker {target}"
     },
     "fields": {
+      "nickname": "Apodo",
       "name": "Nombre",
       "description": "Descripción",
       "category": "Categoría",

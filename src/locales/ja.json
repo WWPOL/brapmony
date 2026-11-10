@@ -4590,6 +4590,8 @@
       "member_voice_undeafen": "{actor}が{target}のサーバースピーカーミュートを解除しました",
       "member_voice_move": "{actor}が{target}を別のボイスチャンネルに移動しました",
       "member_voice_disconnect": "{actor}が{target}をボイスから切断しました",
+      "member_nickname_update": "{actor}が{target}のニックネームを変更しました",
+      "member_profile_reset": "{actor}が{target}のサーバープロフィールをリセットしました",
       "message_delete": "{actor}が{channel}で{target}のメッセージを{count}件削除しました",
       "server_update": "{actor}がサーバーを編集しました",
       "settings_update": "{actor}がサーバー設定を変更しました",
@@ -4612,6 +4614,7 @@
       "sticker_delete": "{actor} がスタンプ {target} を削除しました"
     },
     "fields": {
+      "nickname": "ニックネーム",
       "name": "名前",
       "description": "説明",
       "category": "カテゴリー",

@@ -4590,6 +4590,8 @@
       "member_voice_undeafen": "{actor} 解除了 {target} 的服务器拒听",
       "member_voice_move": "{actor} 将 {target} 移到了另一个语音频道",
       "member_voice_disconnect": "{actor} 断开了 {target} 的语音连接",
+      "member_nickname_update": "{actor} 更改了 {target} 的昵称",
+      "member_profile_reset": "{actor} 重置了 {target} 的服务器资料",
       "message_delete": "{actor} 在 {channel} 中删除了 {target} 的 {count} 条消息",
       "server_update": "{actor} 编辑了服务器",
       "settings_update": "{actor} 修改了服务器设置",
@@ -4612,6 +4614,7 @@
       "sticker_delete": "{actor} 删除了贴纸 {target}"
     },
     "fields": {
+      "nickname": "昵称",
       "name": "名称",
       "description": "描述",
       "category": "分类",

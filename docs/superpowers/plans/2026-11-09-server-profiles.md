@@ -100,7 +100,7 @@
     - It requires `MANAGE_NICKNAMES` and that the caller's top role position is strictly above the target's (reuse the comparison `guard_server_role_hierarchy` uses).
     - The owner can only be changed by the owner.
     - `p_set_nickname` sets the nickname (null clears); `p_reset_profile` clears `avatar_url`, `banner_url`, `bio` and `pronouns`.
-    - Audit via `server_audit_write`: `member_nickname_changed` (changes old→new) and `member_server_profile_reset`.
+    - Audit via `server_audit_write`: `member.nickname_update` (changes old→new) and `member.profile_reset`.
   - `service_set_member_server_profile(p_server_id uuid, p_user_id uuid, p_fields jsonb) RETURNS jsonb` (service_role only): the same key rules and no permission check.
   - Profile `pronouns` is written through the existing profile update path. If profiles are updated by direct client UPDATE under RLS, the column just needs to be covered by that policy.
 - RLS: if members can UPDATE their own `user_servers` row directly, they must no longer be able to change the five profile columns. Use a column-level `REVOKE UPDATE (nickname, avatar_url, banner_url, bio, pronouns) … FROM authenticated`, or a trigger that rejects changes to them unless `current_setting('harmony.server_profile_write', true) = 'on'`, which the RPCs set with `SET LOCAL`. Pick whichever matches how the table is updated today, and keep folder, position and mute writable.

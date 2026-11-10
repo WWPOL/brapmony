@@ -4590,6 +4590,8 @@
       "member_voice_undeafen": "{actor} lifted the server deafen on {target}",
       "member_voice_move": "{actor} moved {target} to another voice channel",
       "member_voice_disconnect": "{actor} disconnected {target} from voice",
+      "member_nickname_update": "{actor} changed the nickname of {target}",
+      "member_profile_reset": "{actor} reset the server profile of {target}",
       "message_delete": "{actor} deleted a message by {target} in {channel} | {actor} deleted {count} messages by {target} in {channel}",
       "server_update": "{actor} updated the server",
       "settings_update": "{actor} updated the server settings",
@@ -4612,6 +4614,7 @@
       "sticker_delete": "{actor} removed sticker {target}"
     },
     "fields": {
+      "nickname": "Nickname",
       "name": "Name",
       "description": "Description",
       "category": "Category",

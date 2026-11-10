@@ -4590,6 +4590,8 @@
       "member_voice_undeafen": "{actor} hat die serverweite Taubschaltung von {target} aufgehoben",
       "member_voice_move": "{actor} hat {target} in einen anderen Sprachkanal verschoben",
       "member_voice_disconnect": "{actor} hat {target} aus dem Sprachkanal getrennt",
+      "member_nickname_update": "{actor} hat den Spitznamen von {target} geändert",
+      "member_profile_reset": "{actor} hat das Serverprofil von {target} zurückgesetzt",
       "message_delete": "{actor} hat eine Nachricht von {target} in {channel} gelöscht | {actor} hat {count} Nachrichten von {target} in {channel} gelöscht",
       "server_update": "{actor} hat den Server bearbeitet",
       "settings_update": "{actor} hat die Servereinstellungen geändert",
@@ -4612,6 +4614,7 @@
       "sticker_delete": "{actor} hat den Sticker {target} entfernt"
     },
     "fields": {
+      "nickname": "Spitzname",
       "name": "Name",
       "description": "Beschreibung",
       "category": "Kategorie",

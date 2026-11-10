@@ -4590,6 +4590,8 @@
       "member_voice_undeafen": "{actor} a levé la mise en sourdine du son serveur de {target}",
       "member_voice_move": "{actor} a déplacé {target} vers un autre salon vocal",
       "member_voice_disconnect": "{actor} a déconnecté {target} du vocal",
+      "member_nickname_update": "{actor} a changé le pseudo de {target}",
+      "member_profile_reset": "{actor} a réinitialisé le profil serveur de {target}",
       "message_delete": "{actor} a supprimé un message de {target} dans {channel} | {actor} a supprimé {count} messages de {target} dans {channel}",
       "server_update": "{actor} a modifié le serveur",
       "settings_update": "{actor} a modifié les paramètres du serveur",
@@ -4612,6 +4614,7 @@
       "sticker_delete": "{actor} a supprimé le sticker {target}"
     },
     "fields": {
+      "nickname": "Pseudo",
       "name": "Nom",
       "description": "Description",
       "category": "Catégorie",

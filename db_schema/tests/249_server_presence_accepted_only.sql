@@ -37,7 +37,7 @@ SELECT public.moderate_server_profile('f2490000-0000-0000-0000-000000000001', '1
                                       NULL, false, true);
 SELECT tests.clear_authentication();
 SELECT is((SELECT count(*)::int FROM public.server_audit_log
-            WHERE server_id = 'f2490000-0000-0000-0000-000000000001' AND action = 'member_server_profile_reset'),
+            WHERE server_id = 'f2490000-0000-0000-0000-000000000001' AND action = 'member.profile_reset'),
           0, 'resetting an already-empty profile writes no audit row');
 
 UPDATE public.user_servers SET bio = 'hello'
@@ -47,7 +47,7 @@ SELECT public.moderate_server_profile('f2490000-0000-0000-0000-000000000001', '1
                                       NULL, false, true);
 SELECT tests.clear_authentication();
 SELECT is((SELECT count(*)::int FROM public.server_audit_log
-            WHERE server_id = 'f2490000-0000-0000-0000-000000000001' AND action = 'member_server_profile_reset'),
+            WHERE server_id = 'f2490000-0000-0000-0000-000000000001' AND action = 'member.profile_reset'),
           1, 'resetting a non-empty profile writes exactly one');
 SELECT is((SELECT bio FROM public.user_servers
             WHERE user_id = '11111111-0000-0000-0000-000000000001' AND server_id = 'f2490000-0000-0000-0000-000000000001'),
@@ -58,7 +58,7 @@ SELECT public.moderate_server_profile('f2490000-0000-0000-0000-000000000001', '1
                                       NULL, false, true);
 SELECT tests.clear_authentication();
 SELECT is((SELECT count(*)::int FROM public.server_audit_log
-            WHERE server_id = 'f2490000-0000-0000-0000-000000000001' AND action = 'member_server_profile_reset'),
+            WHERE server_id = 'f2490000-0000-0000-0000-000000000001' AND action = 'member.profile_reset'),
           1, 'a second reset adds none');
 
 SELECT * FROM finish();

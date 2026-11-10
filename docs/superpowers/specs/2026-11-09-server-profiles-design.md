@@ -109,7 +109,7 @@ Plus two Discord-equivalent permissions to govern it.
   - `moderate_server_profile(p_server_id uuid, p_user_id uuid, p_nickname text, p_reset_profile bool)
     RETURNS jsonb`. Requires `MANAGE_NICKNAMES`, and the caller must outrank the target by top role
     position. Never applies to the owner unless the caller is the owner. It writes the server audit
-    log (`member_nickname_changed`, `member_server_profile_reset`).
+    log (`member.nickname_update`, `member.profile_reset`).
   - Both write the audit log for self-changes only if the existing audit conventions log self nickname
     changes; otherwise only moderator actions are logged.
   - `service_set_member_server_profile(p_server_id uuid, p_user_id uuid, p_fields jsonb) RETURNS jsonb`
