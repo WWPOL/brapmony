@@ -7,12 +7,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 
-const { toast, query, setMy, loadMy, canChange } = vi.hoisted(() => ({
+const { toast, query, setMy, loadMy, canChange, permCheck } = vi.hoisted(() => ({
   toast: { success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn() },
   query: { server: undefined as string | undefined },
   setMy: vi.fn(async () => ({})),
   loadMy: vi.fn(async () => {}),
   canChange: { value: true },
+  permCheck: { gate: null as Promise<void> | null },
 }))
 
 vi.mock('vue-i18n', async (importOriginal) => ({
@@ -26,7 +27,12 @@ vi.mock('vue-router', async (importOriginal) => ({
   useRouter: () => ({ push: vi.fn() }),
 }))
 vi.mock('@/composables/useServerPermissions', () => ({
-  useServerPermissions: () => ({ checkServerPermission: () => canChange.value }),
+  useServerPermissions: () => ({
+    hasPermissionAsync: async () => {
+      if (permCheck.gate) await permCheck.gate
+      return canChange.value
+    },
+  }),
 }))
 vi.mock('@/services/serverProfileService', () => ({
   setMyServerProfile: setMy,
@@ -70,6 +76,7 @@ describe('ServerProfilesSettings', () => {
     setMy.mockClear()
     toast.error.mockClear()
     canChange.value = true
+    permCheck.gate = null
     query.server = undefined
     ;(userDataService as any).users.clear()
     ;(userDataService as any).memberServerFields.clear()
@@ -160,6 +167,34 @@ describe('ServerProfilesSettings', () => {
     }
     // Stored values still display.
     expect((w.get('[data-testid="field-nickname"]').element as HTMLInputElement).value).toBe('Kept')
+  })
+
+  it('shows a skeleton, not the locked note or disabled inputs, while the permission is pending', async () => {
+    query.server = 'A'
+    let release!: () => void
+    permCheck.gate = new Promise<void>(r => { release = r })
+    const w = await mountTab()
+    expect(w.get('[data-testid="server-profile-loading"]').attributes('aria-busy')).toBe('true')
+    expect(w.find('[data-testid="server-profile-locked"]').exists()).toBe(false)
+    expect(w.find('[data-testid="field-nickname"]').exists()).toBe(false)
+    release()
+    await flushPromises()
+    expect(w.find('[data-testid="server-profile-loading"]').exists()).toBe(false)
+    expect(w.get('[data-testid="field-nickname"]').attributes('disabled')).toBeUndefined()
+    expect(w.find('[data-testid="server-profile-locked"]').exists()).toBe(false)
+  })
+
+  it('shows the locked state once the pending permission resolves denied', async () => {
+    query.server = 'A'
+    canChange.value = false
+    let release!: () => void
+    permCheck.gate = new Promise<void>(r => { release = r })
+    const w = await mountTab()
+    expect(w.find('[data-testid="server-profile-locked"]').exists()).toBe(false)
+    release()
+    await flushPromises()
+    expect(w.get('[data-testid="server-profile-locked"]').text()).toBe('serverProfile.locked')
+    expect(w.get('[data-testid="field-nickname"]').attributes('disabled')).toBeDefined()
   })
 
   it('limits the fields to 64, 40 and 500 characters', async () => {

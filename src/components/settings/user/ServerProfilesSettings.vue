@@ -22,7 +22,28 @@
         </select>
       </div>
 
-      <p v-if="locked" class="locked-note" role="status" data-testid="server-profile-locked">{{ t('serverProfile.locked') }}</p>
+      <div
+        v-if="selectedServerId && loading"
+        class="profile-layout profile-skeleton"
+        aria-busy="true"
+        data-testid="server-profile-loading"
+      >
+        <span class="sr-only" role="status">{{ t('common.loading') }}</span>
+        <div class="profile-form" aria-hidden="true">
+          <div v-for="n in 5" :key="n" class="form-group">
+            <div class="skeleton skeleton-label"></div>
+            <div class="skeleton skeleton-input" :class="{ tall: n === 3 }"></div>
+          </div>
+          <div class="skeleton skeleton-button"></div>
+        </div>
+        <div class="profile-preview" aria-hidden="true">
+          <div class="skeleton skeleton-label"></div>
+          <div class="skeleton skeleton-card"></div>
+        </div>
+      </div>
+
+      <template v-else>
+        <p v-if="locked" class="locked-note" role="status" data-testid="server-profile-locked">{{ t('serverProfile.locked') }}</p>
 
       <div v-if="selectedServerId" class="profile-layout">
         <form class="profile-form" @submit.prevent="save">
@@ -136,6 +157,7 @@
           />
         </div>
       </div>
+      </template>
     </template>
   </section>
 </template>
@@ -167,7 +189,7 @@ const toast = useToast()
 const uid = `server-profile-${useId()}`
 const serverChannelStore = useServerChannelStore()
 const { getCurrentUser, getUserPronouns } = useUserData()
-const { checkServerPermission } = useServerPermissions()
+const { hasPermissionAsync } = useServerPermissions()
 
 /** Joined servers; those hosted elsewhere are listed but cannot be picked. */
 const servers = computed(() => serverChannelStore.servers)
@@ -197,9 +219,11 @@ watch([servers, queryServer], () => {
 const me = computed(() => getCurrentUser.value)
 const userId = computed(() => me.value?.id ?? '')
 
-const locked = computed(() =>
-  !selectedServerId.value || !checkServerPermission(selectedServerId.value, Permission.CHANGE_NICKNAME),
-)
+// Tri-state permission check plus the stored-profile load, per selected server.
+const permState = ref<'loading' | 'allowed' | 'denied'>('loading')
+const profileLoaded = ref(false)
+const loading = computed(() => permState.value === 'loading' || !profileLoaded.value)
+const locked = computed(() => !selectedServerId.value || permState.value !== 'allowed')
 
 const stored = computed(() => (userId.value && selectedServerId.value
   ? getMemberServerProfile(userId.value, selectedServerId.value).value
@@ -225,12 +249,23 @@ watch(
 watch(
   () => [selectedServerId.value, userId.value] as const,
   async ([serverId, id]) => {
+    permState.value = 'loading'
+    profileLoaded.value = false
     if (!serverId || !id) return
-    try {
-      await loadMyServerProfile(serverId, id)
-    } catch (error) {
+    const current = () => selectedServerId.value === serverId && userId.value === id
+    const perm: Promise<'allowed' | 'denied'> = hasPermissionAsync(serverId, id, Permission.CHANGE_NICKNAME)
+      .then(ok => (ok ? 'allowed' : 'denied'))
+      .catch((error) => {
+        debug.warn('Checking nickname permission failed:', error)
+        return 'denied'
+      })
+    const profile = loadMyServerProfile(serverId, id).catch((error) => {
       debug.warn('Loading own server profile failed:', error)
-    }
+    })
+    const [state] = await Promise.all([perm, profile])
+    if (!current()) return
+    permState.value = state
+    profileLoaded.value = true
   },
   { immediate: true },
 )
@@ -374,6 +409,64 @@ const previewProfile = computed(() => ({
   font-size: 14px;
   color: var(--text-secondary);
   margin: 0 0 8px 0;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.skeleton {
+  background-color: var(--background-modifier-hover);
+  background-image: linear-gradient(90deg, transparent 0%, var(--background-modifier-hover) 50%, transparent 100%);
+  background-size: 200% 100%;
+  animation: shimmer 1.6s ease-in-out infinite;
+  border-radius: var(--radius-sm);
+}
+
+.skeleton-label {
+  width: 90px;
+  height: 12px;
+  margin-bottom: 6px;
+}
+
+.skeleton-input {
+  height: 36px;
+  border-radius: var(--radius-md);
+}
+
+.skeleton-input.tall {
+  height: 80px;
+}
+
+.skeleton-button {
+  width: 80px;
+  height: 36px;
+  border-radius: var(--radius-md);
+}
+
+.skeleton-card {
+  height: 240px;
+  border-radius: var(--radius-lg);
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: 100% 0;
+  }
+  100% {
+    background-position: -100% 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton {
+    animation: none;
+  }
 }
 
 .form-group {
