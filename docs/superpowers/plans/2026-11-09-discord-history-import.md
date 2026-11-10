@@ -92,15 +92,15 @@ interface ImportMessage {
 ### Task H1: One row per Discord message per channel
 
 **Files:**
-- Create: `db_schema/migrations/20261109100001_discord_message_dedupe_cleanup.sql`: in a transaction, for each `(channel_id, metadata->>'discord_message_id')` with more than one row, soft-delete all but the oldest (`created_at`, then `id`). Soft-delete means `is_deleted = true` under `harmony.silent_content_update` so no edit badge appears.
-- Create: `db_schema/migrations/20261109100002_discord_message_unique_index.sql`: no transaction, following `20261031800002_search_quality_backfill.sql`. It runs `CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS messages_channel_discord_message_id_unique ON public.messages (channel_id, (metadata->>'discord_message_id')) WHERE channel_id IS NOT NULL AND metadata ? 'discord_message_id' AND is_deleted IS NOT TRUE;`
+- Create: `db_schema/migrations/20261110900001_discord_message_dedupe_cleanup.sql`: in a transaction, for each `(channel_id, metadata->>'discord_message_id')` with more than one row, soft-delete all but the oldest (`created_at`, then `id`). Soft-delete means `is_deleted = true` under `harmony.silent_content_update` so no edit badge appears.
+- Create: `db_schema/migrations/20261110900002_discord_message_unique_index.sql`: no transaction, following `20261031800002_search_quality_backfill.sql`. It runs `CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS messages_channel_discord_message_id_unique ON public.messages (channel_id, (metadata->>'discord_message_id')) WHERE channel_id IS NOT NULL AND metadata ? 'discord_message_id' AND is_deleted IS NOT TRUE;`
 - Modify: `bot-gateway/src/api/BotRestAPI.ts` `sendMessage` (~L567–650).
-- Test: `db_schema/tests/246_discord_message_dedupe.sql`, `bot-gateway/src/api/__tests__/BotRestAPI.bridge.test.ts`.
+- Test: `db_schema/tests/262_discord_message_dedupe.sql`, `bot-gateway/src/api/__tests__/BotRestAPI.bridge.test.ts`.
 
 **Interfaces:**
 - Produces: index `messages_channel_discord_message_id_unique`. Later tasks insert with `ON CONFLICT (channel_id, (metadata->>'discord_message_id')) WHERE … DO NOTHING`, using the same predicate.
 
-- [ ] **Step 1: Write the pgTAP test** `246_discord_message_dedupe.sql`, `plan(3)`:
+- [ ] **Step 1: Write the pgTAP test** `262_discord_message_dedupe.sql`, `plan(3)`:
   - a second insert of the same `discord_message_id` in the same channel raises `unique_violation` (`throws_ok … '23505'`);
   - the same ID in another channel succeeds;
   - a soft-deleted duplicate doesn't block a new row.
@@ -115,8 +115,8 @@ interface ImportMessage {
 ### Task H2: Import jobs table and RPCs
 
 **Files:**
-- Create: `db_schema/migrations/20261109100003_discord_bridge_imports.sql`.
-- Test: `db_schema/tests/247_discord_bridge_imports.sql`.
+- Create: `db_schema/migrations/20261110900003_discord_bridge_imports.sql`.
+- Test: `db_schema/tests/263_discord_bridge_imports.sql`.
 
 **Interfaces:**
 - **Table** `public.discord_bridge_imports`, with the columns of `ImportJob` plus:
@@ -151,7 +151,7 @@ interface ImportMessage {
     - anything else raises `invalid_transition`.
   - `done`, `failed` and `cancelled` set `finished_at`; every update sets `updated_at`.
 
-- [ ] **Step 1: Write the pgTAP test** `247_discord_bridge_imports.sql` (fixture pattern as in `137_bridge_thread_author.sql`). Assertions:
+- [ ] **Step 1: Write the pgTAP test** `263_discord_bridge_imports.sql` (fixture pattern as in `137_bridge_thread_author.sql`). Assertions:
   - alice (manager) start with `NULL` creates rows only for `both`/`to_harmony` pairs, skipping a `to_discord` pair and an encrypted channel;
   - bob (non-manager) start raises;
   - an explicit `to_discord` pair raises `pair_not_importable`;
@@ -169,9 +169,9 @@ interface ImportMessage {
 ### Task H3: The quiet-import flag
 
 **Files:**
-- Create: `db_schema/migrations/20261109100004_history_import_quiet.sql`.
+- Create: `db_schema/migrations/20261110900004_history_import_quiet.sql`.
 - Modify: `bot-gateway/src/api/BotRestAPI.ts` (`botSuppliedMetadata`, near L96); `bot-gateway/src/gateway/EventDispatcher.ts` (`handleMessageCreate`, ~L820).
-- Test: `db_schema/tests/248_history_import_quiet.sql`, `bot-gateway/src/gateway/__tests__/` (existing EventDispatcher test file, or new `EventDispatcher.historyImport.test.ts`), `bot-gateway/src/api/__tests__/BotRestAPI.bridge.test.ts`.
+- Test: `db_schema/tests/264_history_import_quiet.sql`, `bot-gateway/src/gateway/__tests__/` (existing EventDispatcher test file, or new `EventDispatcher.historyImport.test.ts`), `bot-gateway/src/api/__tests__/BotRestAPI.bridge.test.ts`.
 
 **Interfaces:**
 - Produces `public.is_history_import() RETURNS boolean`: STABLE, `current_setting('harmony.history_import', true) = 'true'`. Revoke from `PUBLIC, anon, authenticated`; grant `service_role`. Triggers call it as definer.
@@ -194,7 +194,7 @@ interface ImportMessage {
 
 Write the classification as a comment table at the top of the migration.
 
-- [ ] **Step 1: Write the pgTAP test** `248_history_import_quiet.sql`. A control insert of a bot message mentioning bob in `#general` produces bob's notification, unread and push queue rows, a federation queue row and a channel last-activity change. The builder names the exact tables found in the audit. Then the same insert inside `set_config('harmony.history_import','true',true)` with `created_at = now() - interval '2 years'` and a supplied `updated_at` 1 day later produces none of those, keeps the supplied `updated_at`, and is findable through `search_messages`. One `is()` per side effect.
+- [ ] **Step 1: Write the pgTAP test** `264_history_import_quiet.sql`. A control insert of a bot message mentioning bob in `#general` produces bob's notification, unread and push queue rows, a federation queue row and a channel last-activity change. The builder names the exact tables found in the audit. Then the same insert inside `set_config('harmony.history_import','true',true)` with `created_at = now() - interval '2 years'` and a supplied `updated_at` 1 day later produces none of those, keeps the supplied `updated_at`, and is findable through `search_messages`. One `is()` per side effect.
 - [ ] **Step 2: Run** `./scripts/run-db-tests.sh`. Expected: 248 fails.
 - [ ] **Step 3: Write the migration** with the audit table and the guards.
 - [ ] **Step 4: Run** `./scripts/run-db-tests.sh`. Expected: all pass, including every existing file.
@@ -210,8 +210,8 @@ Write the classification as a comment table at the top of the migration.
 ### Task H4: Import insert functions
 
 **Files:**
-- Create: `db_schema/migrations/20261109100005_history_import_functions.sql`.
-- Test: `db_schema/tests/249_history_import_functions.sql`.
+- Create: `db_schema/migrations/20261110900005_history_import_functions.sql`.
+- Test: `db_schema/tests/265_history_import_functions.sql`.
 
 **Interfaces** (all `SECURITY DEFINER`, granted to `service_role` only):
 
@@ -243,7 +243,7 @@ Write the classification as a comment table at the top of the migration.
   - It must not move `updated_at`: use `harmony.silent_content_update` as well.
   - Returns the count.
 
-- [ ] **Step 1: Write the pgTAP test** `249_history_import_functions.sql`. Assertions:
+- [ ] **Step 1: Write the pgTAP test** `265_history_import_functions.sql`. Assertions:
   - a wrong bot → `import_not_found`;
   - a non-running job → `import_not_running`;
   - a batch of 3 → 3 inserted, with original `created_at` and the marker; re-sending it → 0 inserted, 3 skipped, and `imported_count` still 3;
