@@ -122,9 +122,11 @@ Plus two Discord-equivalent permissions to govern it.
 - Permissions migration: append `CHANGE_NICKNAME`, `MANAGE_NICKNAMES` to `permission_bit_names()` and
   set bit 32 on every `server_roles` row with `is_default = true` (converging: OR the bit in).
   **Every path that creates a default role** must also include bit 32: server creation, templates
-  applied to new servers, federated or remote server copies, the bridge's clone, and any client-side
-  "default permissions" constant (search for the hard-coded default-role `permissions` values, e.g. the
-  seeding in `20261012300001_soundboard_external_sounds.sql`). A pgTAP test creates a fresh server and
+  applied to new servers, the bridge's clone, and any client-side "default permissions" constant.
+  Local copies of servers hosted on another instance are excluded: their roles come from the hosting
+  instance (`20261027200001_server_copies_authority.sql` fixes the copy mask), and server profiles are
+  unavailable for remote servers anyway. To find the paths, search for the hard-coded default-role
+  `permissions` values (e.g. the seeding in `20261012300001_soundboard_external_sounds.sql`). A pgTAP test creates a fresh server and
   asserts its default role has bit 32.
 - Bot install flags: `bot-gateway/src/auth/botPermissions.ts` `INSTALL_FLAG_BITS` today notes that
   `change_nickname` and `manage_nicknames` "have no role-permission bit". Map them to the new bits. Update
