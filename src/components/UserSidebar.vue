@@ -301,6 +301,7 @@
     <UserProfileModal 
       :show="showProfileModal" 
       :user="selectedUser" 
+      :server-id="serverChannelStore.currentServerId"
       @close="closeProfile"
       @invite="openInviteModal"
     />
@@ -619,9 +620,10 @@ async function handleContextAction(action: string, user: User) {
       await showUserProfile(user);
       break;
     case 'change-nickname':
-      // No standalone server-nickname modal exists; profile fields live on the
-      // user settings page.
-      router.push('/settings/account');
+      // Nicknames live in the Server profiles settings tab, opened on this server.
+      router.push(serverChannelStore.currentServerId
+        ? { path: '/settings/server-profiles', query: { server: serverChannelStore.currentServerId } }
+        : '/settings/server-profiles');
       break;
     case 'invite':
       await openInviteForUser(user);

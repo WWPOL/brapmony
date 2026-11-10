@@ -508,6 +508,7 @@
   <UserProfileModal
     :show="showProfileModal"
     :user="selectedUser"
+    :server-id="conversationId ? null : serverChannelStore.currentServerId"
     @close="closeProfile"
     @invite="openInviteModal"
     @mention="(username: string) => { emit('mentionUser', username); closeProfile(); }"

@@ -6714,6 +6714,32 @@
       "rejected": "サーバーがこのテンプレートを拒否しました：{detail}"
     }
   },
+  "serverProfile": {
+    "tabLabel": "サーバープロフィール",
+    "title": "サーバープロフィール",
+    "description": "サーバーごとに別のニックネーム、アバター、バナー、自己紹介、代名詞を設定できます。空欄のフィールドにはアカウントの値が使われます。",
+    "noServers": "まだサーバーに参加していません。",
+    "server": "サーバー",
+    "remoteUnavailable": "別のインスタンスでホスト中",
+    "locked": "このサーバーでプロフィールを変更する権限がありません。",
+    "nickname": "ニックネーム",
+    "pronouns": "代名詞",
+    "pronounsPlaceholder": "例: she/her",
+    "bio": "自己紹介",
+    "bioPlaceholder": "このサーバーに自己紹介を書きましょう",
+    "avatar": "アバター",
+    "banner": "バナー",
+    "reset": "リセット",
+    "resetField": "{field}をリセット",
+    "save": "変更を保存",
+    "saved": "サーバープロフィールを保存しました。",
+    "saveFailed": "サーバープロフィールを保存できませんでした。",
+    "uploadFailed": "画像をアップロードできませんでした。",
+    "preview": "プレビュー",
+    "menuEntry": "サーバープロフィールを編集",
+    "accountPronouns": "代名詞",
+    "accountPronounsHint": "プロフィールの名前の下に表示されます。40文字まで。"
+  },
   "notificationSettings": {
     "menuEntry": "通知設定",
     "title": "通知設定",

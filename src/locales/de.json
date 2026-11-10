@@ -6714,6 +6714,32 @@
       "rejected": "Der Server hat diese Vorlage abgelehnt: {detail}"
     }
   },
+  "serverProfile": {
+    "tabLabel": "Serverprofile",
+    "title": "Serverprofile",
+    "description": "Lege für jeden Server einen eigenen Spitznamen, Avatar, Banner, eine eigene Bio und Pronomen fest. Leere Felder verwenden deine Kontowerte.",
+    "noServers": "Du bist noch keinem Server beigetreten.",
+    "server": "Server",
+    "remoteUnavailable": "auf einer anderen Instanz gehostet",
+    "locked": "Du darfst dein Profil auf diesem Server nicht ändern.",
+    "nickname": "Spitzname",
+    "pronouns": "Pronomen",
+    "pronounsPlaceholder": "z. B. sie/ihr",
+    "bio": "Über mich",
+    "bioPlaceholder": "Erzähl diesem Server etwas über dich",
+    "avatar": "Avatar",
+    "banner": "Banner",
+    "reset": "Zurücksetzen",
+    "resetField": "{field} zurücksetzen",
+    "save": "Änderungen speichern",
+    "saved": "Serverprofil gespeichert.",
+    "saveFailed": "Dein Serverprofil konnte nicht gespeichert werden.",
+    "uploadFailed": "Das Bild konnte nicht hochgeladen werden.",
+    "preview": "Vorschau",
+    "menuEntry": "Serverprofil bearbeiten",
+    "accountPronouns": "Pronomen",
+    "accountPronounsHint": "Wird unter deinem Namen in deinem Profil angezeigt. Bis zu 40 Zeichen."
+  },
   "notificationSettings": {
     "menuEntry": "Benachrichtigungseinstellungen",
     "title": "Benachrichtigungseinstellungen",

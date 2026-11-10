@@ -1703,6 +1703,7 @@ class UserDataService extends EventTarget {
     bio?: string
     color?: string
     username?: string
+    pronouns?: string | null
   }): Promise<void> {
     if (!this.currentUserId) throw new Error('No current user')
     
@@ -1718,6 +1719,7 @@ class UserDataService extends EventTarget {
     if (profileData.avatarUrl !== undefined) userData.avatarUrl = profileData.avatarUrl
     if (profileData.bannerUrl !== undefined) userData.bannerUrl = profileData.bannerUrl
     if (profileData.bio !== undefined) userData.bio = profileData.bio
+    if (profileData.pronouns !== undefined) userData.pronouns = profileData.pronouns ?? undefined
     if (profileData.color !== undefined) userData.color = profileData.color
     if (profileData.username !== undefined) userData.username = profileData.username
     userData.lastCacheUpdate = new Date().toISOString()
@@ -1745,6 +1747,7 @@ class UserDataService extends EventTarget {
     bio?: string
     color?: string
     username?: string
+    pronouns?: string | null
     customStatus?: CustomUserStatus | undefined
   }): Promise<void> {
     if (!this.currentUserId) return

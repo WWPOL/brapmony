@@ -6710,6 +6710,32 @@
       "rejected": "The server refused this template: {detail}"
     }
   },
+  "serverProfile": {
+    "tabLabel": "Server profiles",
+    "title": "Server profiles",
+    "description": "Set a different nickname, avatar, banner, bio and pronouns for each server. Empty fields use your account values.",
+    "noServers": "You haven't joined any servers yet.",
+    "server": "Server",
+    "remoteUnavailable": "hosted on another instance",
+    "locked": "You don't have permission to change your profile in this server.",
+    "nickname": "Nickname",
+    "pronouns": "Pronouns",
+    "pronounsPlaceholder": "e.g. they/them",
+    "bio": "About me",
+    "bioPlaceholder": "Tell this server about yourself",
+    "avatar": "Avatar",
+    "banner": "Banner",
+    "reset": "Reset",
+    "resetField": "Reset {field}",
+    "save": "Save changes",
+    "saved": "Server profile saved.",
+    "saveFailed": "Couldn't save your server profile.",
+    "uploadFailed": "Couldn't upload the image.",
+    "preview": "Preview",
+    "menuEntry": "Edit server profile",
+    "accountPronouns": "Pronouns",
+    "accountPronounsHint": "Shown under your name on your profile. Up to 40 characters."
+  },
   "notificationSettings": {
     "menuEntry": "Notification settings",
     "title": "Notification settings",

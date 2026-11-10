@@ -337,6 +337,7 @@ export function useUserData() {
     bannerUrl?: string
     color?: string
     bio?: string
+    pronouns?: string | null
   }) => {
     await userDataService.updateCurrentUserProfile(profileData)
   }

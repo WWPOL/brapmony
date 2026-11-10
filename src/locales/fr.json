@@ -6714,6 +6714,32 @@
       "rejected": "Le serveur a refusé ce modèle : {detail}"
     }
   },
+  "serverProfile": {
+    "tabLabel": "Profils de serveur",
+    "title": "Profils de serveur",
+    "description": "Définis un pseudo, un avatar, une bannière, une bio et des pronoms différents pour chaque serveur. Les champs vides utilisent les valeurs de ton compte.",
+    "noServers": "Tu n'as encore rejoint aucun serveur.",
+    "server": "Serveur",
+    "remoteUnavailable": "hébergé sur une autre instance",
+    "locked": "Tu n'as pas l'autorisation de modifier ton profil sur ce serveur.",
+    "nickname": "Pseudo",
+    "pronouns": "Pronoms",
+    "pronounsPlaceholder": "ex. elle/iel",
+    "bio": "À propos de moi",
+    "bioPlaceholder": "Parle de toi à ce serveur",
+    "avatar": "Avatar",
+    "banner": "Bannière",
+    "reset": "Réinitialiser",
+    "resetField": "Réinitialiser {field}",
+    "save": "Enregistrer les modifications",
+    "saved": "Profil de serveur enregistré.",
+    "saveFailed": "Impossible d'enregistrer ton profil de serveur.",
+    "uploadFailed": "Impossible d'envoyer l'image.",
+    "preview": "Aperçu",
+    "menuEntry": "Modifier le profil de serveur",
+    "accountPronouns": "Pronoms",
+    "accountPronounsHint": "Affichés sous ton nom sur ton profil. 40 caractères maximum."
+  },
   "notificationSettings": {
     "menuEntry": "Paramètres de notification",
     "title": "Paramètres de notification",
