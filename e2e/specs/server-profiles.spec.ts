@@ -161,7 +161,7 @@ test('server nickname and avatar show in the server, not in DMs, and a reset kee
     await expect(memberItem).toBeVisible({ timeout: 30000 })
     await memberItem.click({ button: 'right' })
     await modPage.getByTestId('user-menu-reset-server-profile').click()
-    const dialog = modPage.getByRole('dialog', { name: 'Reset server profile' })
+    const dialog = modPage.getByRole('alertdialog', { name: 'Reset server profile' })
     await expect(dialog).toBeVisible({ timeout: 30000 })
     await dialog.getByRole('button', { name: 'Reset', exact: true }).click()
     await expect.poll(async () => (await storedProfile()).avatar_url, { timeout: 30000 }).toBeNull()
