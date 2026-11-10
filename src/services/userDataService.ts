@@ -1020,7 +1020,15 @@ class UserDataService extends EventTarget {
    */
   private async handleServerMemberLeave(serverId: string, payload: any): Promise<void> {
     const leftUserId = payload.old.user_id
-    this.memberServerFields.delete(`${serverId}:${leftUserId}`)
+    if (leftUserId === this.currentUserId) {
+      // The current user left: every member's server profile for this server goes.
+      const prefix = `${serverId}:`
+      for (const key of [...this.memberServerFields.keys()]) {
+        if (key.startsWith(prefix)) this.memberServerFields.delete(key)
+      }
+    } else {
+      this.memberServerFields.delete(`${serverId}:${leftUserId}`)
+    }
     this.emitEvent('user-updated', { userId: leftUserId })
     debug.log(`Member left server ${serverId}:`, leftUserId)
 
@@ -1040,25 +1048,46 @@ class UserDataService extends EventTarget {
     const row = payload?.new
     if (!row?.user_id) return
     this.applyMemberRow(serverId, row)
-    this.emitEvent('user-updated', { userId: row.user_id })
   }
 
   /**
-   * Stores the server profile fields a user_servers row carries. A row naming none of the
-   * five columns (the bare member:join broadcast) leaves the stored fields alone.
+   * Stores the server profile fields a user_servers row carries, without emitting. Only the keys
+   * the row names change; a row naming none of the five columns (the bare member:join
+   * broadcast) leaves the stored fields alone. Returns whether anything was stored.
    */
-  applyMemberRow(serverId: string, row: any): void {
-    if (!row?.user_id) return
-    if (!MEMBER_FIELD_KEYS.some(k => row[k] !== undefined)) return
-    this.setMemberServerProfile(serverId, row.user_id, row)
+  private storeMemberRow(serverId: string, row: any): boolean {
+    if (!row?.user_id) return false
+    const keys = MEMBER_FIELD_KEYS.filter(k => row[k] !== undefined)
+    if (keys.length === 0) return false
+    const key = `${serverId}:${row.user_id}`
+    const next: MemberServerFields = this.memberServerFields.get(key)
+      ?? { nickname: null, avatar_url: null, banner_url: null, bio: null, pronouns: null }
+    const merged = { ...next }
+    for (const k of keys) merged[k] = row[k] ?? null
+    this.memberServerFields.set(key, merged)
+    return true
   }
 
-  /** Sets a member's server profile fields; a field not given is null. Emits `user-updated`. */
+  /** Stores one row's fields and emits `user-updated` for it. */
+  applyMemberRow(serverId: string, row: any): void {
+    if (this.storeMemberRow(serverId, row)) this.emitEvent('user-updated', { userId: row.user_id })
+  }
+
+  /**
+   * Stores a loaded batch of user_servers rows (each carrying server_id) and emits `data-refreshed` once, not once per
+   * row: a large server loads thousands.
+   */
+  applyMemberRows(rows: Array<{ server_id: string, user_id: string }>): void {
+    const userIds: string[] = []
+    for (const row of rows ?? []) {
+      if (this.storeMemberRow(row.server_id, row)) userIds.push(row.user_id)
+    }
+    if (userIds.length > 0) this.emitEvent('data-refreshed', { userIds })
+  }
+
+  /** Sets a member's server profile fields. Only the fields given change. Emits `user-updated`. */
   setMemberServerProfile(serverId: string, userId: string, fields: Partial<MemberServerFields>): void {
-    const next = {} as MemberServerFields
-    for (const k of MEMBER_FIELD_KEYS) next[k] = (fields[k] as string | null | undefined) ?? null
-    this.memberServerFields.set(`${serverId}:${userId}`, next)
-    this.emitEvent('user-updated', { userId })
+    this.applyMemberRow(serverId, { ...fields, user_id: userId })
   }
 
   /** Raw server profile fields for a member, or null when none are loaded. */

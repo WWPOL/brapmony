@@ -35,7 +35,7 @@ const getUserIdsForServer = async (serverId: string): Promise<string[]> => {
       if (error) throw error;
       
       const userIds = data.map(item => item.user_id)
-      data.forEach(row => userDataService.applyMemberRow(serverId, row))
+      userDataService.applyMemberRows(data)
       
       // Cache the result
       serverMemberCache.set(serverId, { userIds, timestamp: Date.now() })
@@ -69,9 +69,10 @@ const getUserIdsForServers = async (serverIds: string[]): Promise<Map<string, st
 
     if (error) throw error
 
+    userDataService.applyMemberRows(data ?? [])
+
     const grouped = new Map<string, string[]>()
     data?.forEach(row => {
-      userDataService.applyMemberRow(row.server_id, row)
       if (!grouped.has(row.server_id)) grouped.set(row.server_id, [])
       grouped.get(row.server_id)!.push(row.user_id)
     })

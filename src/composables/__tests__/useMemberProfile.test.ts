@@ -1,12 +1,29 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 
+const h = vi.hoisted(() => ({
+  rows: [] as any[],
+  handlers: {} as Record<string, (p: any) => void>,
+}))
+
 vi.mock('@/supabase', () => ({
   SUPABASE_URL: 'http://db.test',
   SUPABASE_ANON_KEY: 'anon',
   supabase: {
-    from: () => { throw new Error('no db in this test') },
+    from: () => {
+      const q: any = {
+        select: () => q, eq: () => q, in: () => q,
+        then: (resolve: any) => resolve({ data: h.rows, error: null }),
+      }
+      return q
+    },
     rpc: vi.fn(async () => ({ data: null, error: null })),
-    channel: () => ({ on: () => ({}), subscribe: () => ({}) }),
+    channel: () => {
+      const ch: any = {
+        on: (_t: string, opts: { event: string }, cb: (p: any) => void) => { h.handlers[opts.event] = cb; return ch },
+        subscribe: () => ch,
+      }
+      return ch
+    },
     removeChannel: vi.fn(async () => 'ok'),
     auth: {
       getSession: async () => ({ data: { session: null } }),
@@ -17,6 +34,7 @@ vi.mock('@/supabase', () => ({
 
 import { setActivePinia, createPinia } from 'pinia'
 import { userDataService } from '@/services/userDataService'
+import { getUserIdsForServer, getUserIdsForServers, clearAllMemberCaches } from '@/services/usersService'
 import { useUserData } from '@/composables/useUserData'
 import {
   getMemberDisplayName,
@@ -106,5 +124,82 @@ describe('useMemberProfile', () => {
   it('getUserPronouns returns profiles.pronouns', () => {
     expect(useUserData().getUserPronouns(U).value).toBe('they/them')
     expect(useUserData().getUserPronouns('nobody').value).toBeNull()
+  })
+
+  it('a partial update keeps the other fields', () => {
+    userDataService.setMemberServerProfile(S, U, { nickname: 'Ally', bio: 'b', pronouns: 'she/her' })
+    userDataService.setMemberServerProfile(S, U, { nickname: 'Al' })
+    expect(userDataService.getMemberServerFields(S, U)).toEqual({
+      nickname: 'Al', avatar_url: null, banner_url: null, bio: 'b', pronouns: 'she/her',
+    })
+    userDataService.setMemberServerProfile(S, U, { bio: null })
+    expect(userDataService.getMemberServerFields(S, U)?.bio).toBeNull()
+    expect(userDataService.getMemberServerFields(S, U)?.nickname).toBe('Al')
+  })
+
+  describe('bulk loaders', () => {
+    beforeEach(() => { clearAllMemberCaches() })
+
+    it('loading N rows emits one event and fills the map', async () => {
+      h.rows = Array.from({ length: 50 }, (_, i) => ({
+        user_id: `u${i}`, server_id: S, nickname: `n${i}`,
+        avatar_url: null, banner_url: null, bio: null, pronouns: null,
+      }))
+      let events = 0
+      const count = () => { events++ }
+      for (const t of ['user-updated', 'data-refreshed']) userDataService.addEventListener(t, count)
+      const ids = await getUserIdsForServer(S)
+      for (const t of ['user-updated', 'data-refreshed']) userDataService.removeEventListener(t, count)
+      expect(ids).toHaveLength(50)
+      expect(events).toBe(1)
+      expect(userDataService.getMemberServerFields(S, 'u7')?.nickname).toBe('n7')
+    })
+
+    it('a multi-server load emits one event too', async () => {
+      h.rows = [
+        { user_id: 'a', server_id: 'S1', nickname: 'x', avatar_url: null, banner_url: null, bio: null, pronouns: null },
+        { user_id: 'b', server_id: 'S2', nickname: 'y', avatar_url: null, banner_url: null, bio: null, pronouns: null },
+      ]
+      let events = 0
+      const count = () => { events++ }
+      userDataService.addEventListener('data-refreshed', count)
+      userDataService.addEventListener('user-updated', count)
+      await getUserIdsForServers(['S1', 'S2'])
+      userDataService.removeEventListener('data-refreshed', count)
+      userDataService.removeEventListener('user-updated', count)
+      expect(events).toBe(1)
+      expect(userDataService.getMemberServerFields('S2', 'b')?.nickname).toBe('y')
+    })
+  })
+
+  it('the current user leaving purges that server entries', async () => {
+    ;(userDataService as any).currentUserId = 'me'
+    userDataService.setMemberServerProfile(S, 'x', { nickname: 'X' })
+    userDataService.setMemberServerProfile(S, 'y', { nickname: 'Y' })
+    userDataService.setMemberServerProfile('other', 'x', { nickname: 'Keep' })
+    await (userDataService as any).handleServerMemberLeave(S, { old: { user_id: 'me' } })
+    ;(userDataService as any).currentUserId = null
+    expect(userDataService.getMemberServerFields(S, 'x')).toBeNull()
+    expect(userDataService.getMemberServerFields(S, 'y')).toBeNull()
+    expect(userDataService.getMemberServerFields('other', 'x')?.nickname).toBe('Keep')
+  })
+
+  it('member:update arrives through the presence_event broadcast handler', async () => {
+    useUserData()
+    ;(userDataService as any).contexts.set(S, { id: S, type: 'server', userIds: new Set([U]), lastSync: new Date() })
+    await (userDataService as any).setupServerPresence(S, [U])
+    const name = getMemberDisplayName(U, S)
+    expect(name.value).toBe('Account Name')
+    // The shape public.broadcast_user_server_change() sends, wrapped as realtime delivers it.
+    h.handlers.presence_event({ payload: {
+      type: 'member:update', user_id: U, server_id: S,
+      nickname: 'Ally', avatar_url: 'srv.png', banner_url: null, bio: null, pronouns: 'she/her',
+    } })
+    expect(name.value).toBe('Ally')
+    expect(getMemberAvatarUrl(U, S).value).toBe('srv.png')
+    expect(getMemberPronouns(U, S).value).toBe('she/her')
+    h.handlers.presence_event({ payload: { type: 'member:leave', user_id: U, server_id: S } })
+    expect(getMemberDisplayName(U, S).value).toBe('Account Name')
+    ;(userDataService as any).contexts.delete(S)
   })
 })

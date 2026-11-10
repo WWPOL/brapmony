@@ -140,7 +140,7 @@ broadcast_user_block_change	definer	trigger	anon+authenticated+service_role	trig
 broadcast_user_event	definer	void	service_role	client, trigger	rpc in federation-backend/src/activitypub/ActivityProcessor.ts, federation-backend/src/activitypub/VoiceActivityHandler.ts, federation-backend/src/activitypub/voiceModerationFederation.ts, +2
 broadcast_user_mute_change	definer	trigger	anon+authenticated+service_role	trigger	trigger public.user_mutes AFTER INSERT/DELETE (trg_broadcast_user_mute)
 broadcast_user_role_change	definer	trigger	anon+authenticated+service_role	trigger	trigger public.user_roles AFTER INSERT/DELETE (trg_broadcast_user_role_change)
-broadcast_user_server_change	definer	trigger	anon+authenticated+service_role	trigger	trigger public.user_servers AFTER INSERT/DELETE (trg_broadcast_user_server_change)
+broadcast_user_server_change	definer	trigger	anon+authenticated+service_role	trigger	trigger public.user_servers AFTER INSERT/DELETE/UPDATE (trg_broadcast_user_server_change)
 broadcast_user_server_event	definer	trigger	anon+authenticated+service_role	trigger	trigger public.user_servers AFTER INSERT/DELETE (trg_broadcast_user_server)
 broadcast_voice_activity	definer	trigger	service_role	trigger	trigger public.voice_activities AFTER INSERT/DELETE/UPDATE (broadcast_voice_activity)
 build_harmony_embed	invoker	jsonb	anon+authenticated+service_role	client, trigger	called by fetch_link_preview
