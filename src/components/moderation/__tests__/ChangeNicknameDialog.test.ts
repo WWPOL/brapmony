@@ -8,12 +8,14 @@ const h = vi.hoisted(() => ({
   confirm: vi.fn(async (..._args: unknown[]) => true),
   toast: { success: vi.fn(), error: vi.fn() },
   nickname: 'Old' as string | null,
+  logError: vi.fn(),
 }))
 
 vi.mock('vue-i18n', async (importOriginal) => ({
   ...(await importOriginal<typeof import('vue-i18n')>()),
   useI18n: () => ({ t: (k: string) => k, locale: { value: 'en' } }),
 }))
+vi.mock('@/utils/debug', () => ({ debug: { error: h.logError, log: vi.fn(), warn: vi.fn() } }))
 vi.mock('vue-toastification', () => ({ useToast: () => h.toast }))
 vi.mock('@/services/serverProfileService', () => ({ moderateServerProfile: h.moderate }))
 vi.mock('@/services/userDataService', () => ({ userDataService: { setMemberServerProfile: h.setMember } }))
@@ -80,9 +82,20 @@ describe('ChangeNicknameDialog', () => {
     input().dispatchEvent(new Event('input'))
     submit().click()
     await flushPromises()
-    expect(h.toast.error).toHaveBeenCalled()
+    expect(h.toast.error).toHaveBeenCalledWith('moderation.serverProfile.failed')
+    expect(h.logError).toHaveBeenCalled()
     expect(wrapper.emitted('done')).toBeUndefined()
     expect(h.setMember).not.toHaveBeenCalled()
+  })
+
+  it('maps a 42501 to the permission message and never shows the raw RPC text', async () => {
+    h.moderate.mockRejectedValueOnce(Object.assign(new Error('Cannot change the server profile of a member with an equal or higher role'), { code: '42501' }))
+    await open()
+    input().value = 'X'
+    input().dispatchEvent(new Event('input'))
+    submit().click()
+    await flushPromises()
+    expect(h.toast.error).toHaveBeenCalledWith('moderation.serverProfile.noPermission')
   })
 })
 
@@ -102,5 +115,32 @@ describe('resetServerProfileWithConfirm', () => {
     const ok = await resetServerProfileWithConfirm('s1', USER)
     expect(h.moderate).not.toHaveBeenCalled()
     expect(ok).toBe(false)
+  })
+
+  it('shows only translated text on failure and logs the raw error', async () => {
+    h.moderate.mockRejectedValueOnce(new Error('raw rpc detail'))
+    await resetServerProfileWithConfirm('s1', USER)
+    expect(h.toast.error).toHaveBeenCalledWith('moderation.serverProfile.failed')
+    expect(h.logError).toHaveBeenCalled()
+  })
+
+  it('maps 42501 to the permission message', async () => {
+    h.moderate.mockRejectedValueOnce(Object.assign(new Error('Missing MANAGE_NICKNAMES permission'), { code: '42501' }))
+    await resetServerProfileWithConfirm('s1', USER)
+    expect(h.toast.error).toHaveBeenCalledWith('moderation.serverProfile.noPermission')
+  })
+
+  it('ignores a second call while a reset is pending, and allows one afterwards', async () => {
+    let release!: (v: boolean) => void
+    h.confirm.mockImplementationOnce(() => new Promise<boolean>((r) => { release = r }))
+    const first = resetServerProfileWithConfirm('s1', USER)
+    const second = await resetServerProfileWithConfirm('s1', USER)
+    expect(second).toBe(false)
+    expect(h.confirm).toHaveBeenCalledTimes(1)
+    release(true)
+    await first
+    expect(h.moderate).toHaveBeenCalledTimes(1)
+    await resetServerProfileWithConfirm('s1', USER)
+    expect(h.moderate).toHaveBeenCalledTimes(2)
   })
 })

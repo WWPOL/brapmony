@@ -3024,7 +3024,8 @@
       "resetMessage": "Serveravatar, Banner, Bio und Pronomen von {name} löschen? Der Nickname bleibt erhalten.",
       "resetConfirm": "Zurücksetzen",
       "resetDone": "Serverprofil von {name} zurückgesetzt.",
-      "failed": "{name} konnte nicht aktualisiert werden."
+      "failed": "{name} konnte nicht aktualisiert werden.",
+      "noPermission": "Du darfst {name} nicht ändern."
     }
   },
   "files": {

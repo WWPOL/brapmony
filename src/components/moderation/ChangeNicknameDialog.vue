@@ -110,7 +110,7 @@ async function submit() {
       : t('moderation.serverProfile.nicknameCleared', { name: name.value }))
     emit('done', nickname)
   } catch (error) {
-    toast.error(moderationErrorMessage(error, t('moderation.serverProfile.failed', { name: name.value })))
+    toast.error(moderationErrorMessage(error, t, name.value))
   } finally {
     busy.value = false
   }

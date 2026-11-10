@@ -3024,7 +3024,8 @@
       "resetMessage": "清除 {name} 的服务器头像、横幅、简介和代词？昵称将保留。",
       "resetConfirm": "重置",
       "resetDone": "已重置 {name} 的服务器资料。",
-      "failed": "无法更新 {name}。"
+      "failed": "无法更新 {name}。",
+      "noPermission": "你没有权限修改 {name}。"
     }
   },
   "files": {

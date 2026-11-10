@@ -3024,7 +3024,8 @@
       "resetMessage": "{name}의 서버 아바타, 배너, 소개, 대명사를 지울까요? 닉네임은 유지됩니다.",
       "resetConfirm": "초기화",
       "resetDone": "{name}의 서버 프로필을 초기화했습니다.",
-      "failed": "{name}을(를) 업데이트할 수 없습니다."
+      "failed": "{name}을(를) 업데이트할 수 없습니다.",
+      "noPermission": "{name}을(를) 변경할 권한이 없습니다."
     }
   },
   "files": {

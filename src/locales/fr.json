@@ -3024,7 +3024,8 @@
       "resetMessage": "Effacer l’avatar, la bannière, la bio et les pronoms de serveur de {name} ? Le pseudo est conservé.",
       "resetConfirm": "Réinitialiser",
       "resetDone": "Profil de serveur de {name} réinitialisé.",
-      "failed": "Impossible de mettre à jour {name}."
+      "failed": "Impossible de mettre à jour {name}.",
+      "noPermission": "Vous n’avez pas la permission de modifier {name}."
     }
   },
   "files": {

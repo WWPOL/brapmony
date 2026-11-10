@@ -3024,7 +3024,8 @@
       "resetMessage": "{name}のサーバーアバター、バナー、自己紹介、代名詞を消去しますか？ニックネームは残ります。",
       "resetConfirm": "リセット",
       "resetDone": "{name}のサーバープロフィールをリセットしました。",
-      "failed": "{name}を更新できませんでした。"
+      "failed": "{name}を更新できませんでした。",
+      "noPermission": "{name}を変更する権限がありません。"
     }
   },
   "files": {

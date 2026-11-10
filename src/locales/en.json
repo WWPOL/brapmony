@@ -3078,7 +3078,8 @@
       "resetMessage": "Clear the server avatar, banner, bio and pronouns of {name}? Their nickname is kept.",
       "resetConfirm": "Reset",
       "resetDone": "Reset the server profile of {name}.",
-      "failed": "Could not update {name}."
+      "failed": "Could not update {name}.",
+      "noPermission": "You don't have permission to change {name}."
     }
   },
   "files": {
