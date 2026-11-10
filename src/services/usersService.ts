@@ -1,5 +1,8 @@
 import { supabase } from '@/supabase';
 import type { Profile } from '@/types';
+import { userDataService } from '@/services/userDataService';
+
+const MEMBER_ROW_SELECT = 'user_id, server_id, nickname, avatar_url, banner_url, bio, pronouns'
 
 // Cache for server member IDs with TTL
 const serverMemberCache = new Map<string, { userIds: string[], timestamp: number }>()
@@ -26,12 +29,13 @@ const getUserIdsForServer = async (serverId: string): Promise<string[]> => {
     try {
       const { data, error } = await supabase
         .from('user_servers')
-        .select('user_id')
+        .select(MEMBER_ROW_SELECT)
         .eq('server_id', serverId);
 
       if (error) throw error;
       
       const userIds = data.map(item => item.user_id)
+      data.forEach(row => userDataService.applyMemberRow(serverId, row))
       
       // Cache the result
       serverMemberCache.set(serverId, { userIds, timestamp: Date.now() })
@@ -60,13 +64,14 @@ const getUserIdsForServers = async (serverIds: string[]): Promise<Map<string, st
   if (uncachedIds.length > 0) {
     const { data, error } = await supabase
       .from('user_servers')
-      .select('user_id, server_id')
+      .select(MEMBER_ROW_SELECT)
       .in('server_id', uncachedIds)
 
     if (error) throw error
 
     const grouped = new Map<string, string[]>()
     data?.forEach(row => {
+      userDataService.applyMemberRow(row.server_id, row)
       if (!grouped.has(row.server_id)) grouped.set(row.server_id, [])
       grouped.get(row.server_id)!.push(row.user_id)
     })
