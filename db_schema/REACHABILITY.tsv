@@ -138,12 +138,14 @@ bot_is_integration	definer	boolean	authenticated+service_role	policy, trigger	po
 bot_permission_mask	invoker	bigint	-	client	called by bot_command_upsert_row, bot_commands_replace, bot_install_mask
 bot_permission_names	invoker	jsonb	-	client	called by bot_command_json
 bot_rate_limit_take	definer	integer	service_role	client	rpc in bot-gateway/src/auth/BotAuthMiddleware.ts
+bridge_delete_server_sound	definer	text	service_role	client	rpc in bot-gateway/src/api/BotRestAPI.ts
 bridge_import_guard	definer	discord_bridge_imports	service_role	client	called by bridge_import_link_replies, bridge_import_messages, bridge_import_thread
 bridge_import_link_replies	definer	integer	service_role	client	rpc in bot-gateway/src/bridge/historyImport.ts
 bridge_import_link_replies_core	definer	integer	-	client	called by bridge_import_link_replies, bridge_import_messages
 bridge_import_messages	definer	jsonb	service_role	client	rpc in bot-gateway/src/bridge/historyImport.ts
 bridge_import_present_ids	definer	text[]	service_role	client	rpc in bot-gateway/src/bridge/historyImport.ts
 bridge_import_server_emoji	definer	TABLE(status text, id uuid, name text, url text, discord_emoji_id text)	service_role	client	rpc in bot-gateway/src/api/BotRestAPI.ts
+bridge_import_server_sound	definer	TABLE(status text, id uuid, name text, emoji text, emoji_id uuid, volume numeric, discord_sound_id text)	service_role	client	rpc in bot-gateway/src/api/BotRestAPI.ts
 bridge_import_thread	definer	uuid	service_role	client	rpc in bot-gateway/src/bridge/historyImport.ts
 broadcast_bot_installation_change	definer	trigger	service_role	trigger	trigger public.bot_server_permissions AFTER INSERT/DELETE/UPDATE (broadcast_bot_installation_change)
 broadcast_bot_presence_change	definer	trigger	service_role	trigger	trigger public.bot_presence AFTER INSERT/UPDATE (broadcast_bot_presence_change)

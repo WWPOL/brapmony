@@ -22,6 +22,11 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - **Backslash escapes in messages.** `\*not italic\*`, `\@name`, `\#channel`, `\:emoji:`, `\> line`
   and `\https://link` show as typed, and an escaped mention pings nobody. Inline code keeps its
   backslashes.
+- **Discord bridge soundboard sync.** The Discord bridge can sync a server's
+  soundboard (`/bridge sync-sounds` in harmony-discord-bridge) through three
+  bot-gateway endpoints for the server's bridge bot: `GET
+  /servers/{id}/sounds`, `POST /servers/{id}/sounds/discord` and `DELETE
+  /servers/{id}/sounds/{soundId}`.
 - **Import Discord history.** A Discord bridge can now copy a paired
   channel's older messages, threads and pins into its Harmony channel, with
   their original dates and Discord authors. Start it with **Import history**
