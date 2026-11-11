@@ -109,3 +109,16 @@ Under the attachment mode setting in Instance admin → Config (`src/components/
 - Exact backoff numbers, lease length, poll interval.
 - stream vs TUS upload, after testing against storage-api.
 - Whether `bridge_mirror_status` lives in a new RPC or extends an existing admin config RPC.
+
+## Calls made after review (builder check)
+
+These were settled by the designer, not the user; flagged so they can be checked.
+
+1. **Refresh has no acknowledgement** (the bridge's `onRefreshAttachments` is fire-and-forget, deduped 15 s, swallows errors). After sending it the worker waits 2 min, re-reads the message, and compares: links changed means refreshed; still expired counts one attempt on the normal backoff, and 5 attempts end in `failed` ("Discord would not refresh the link"). A 404/403 on a link that is not expired means `failed` ("gone from Discord").
+2. **The bridge's refresh write could undo a mirror.** `PATCH /messages/:id/content-silent` re-reads the row and swaps without comparing to the bridge's snapshot. Guard in the gateway's `silentUpdateMessageContent`: a silent update may not replace a part that carries a storage `path` with one that doesn't (409 instead). Refresh writes only ever swap Discord links, so nothing legitimate is refused.
+3. **Enqueue after insert, plus a startup backfill.** Callers enqueue deferred messages right after their insert (history import maps `inserted[].discord_message_id` back to the deferred parts; dropped, rejected and already-present messages are not enqueued). The gap of a crash between insert and enqueue is closed by running the backfill walk again on every gateway start while the mode is `mirror` (it only enqueues messages not already queued or done), as well as on each switch to mirror. Note imported messages are backdated, so the walk keys on `(created_at, id)` over the whole range, not "since last time".
+4. **Only bridge bots.** Backfill and worker take messages whose `bot_id` is a bridge bot (`discord_bridges.bot_id`), since only those can answer `REFRESH_ATTACHMENTS`. The inline path is unchanged for other bots.
+5. **One gateway process.** Self-hosted Harmony runs one bot-gateway container, so `sendToBot` reaches every bridge. The claim RPC stays lease-based so a second process can't double-mirror; multi-process routing is out of scope and noted in the docs.
+6. **Mode tracking.** The worker stores `bridge_mirror_last_mode` next to the backfill cursor in `instance_config` and resets the cursor only on a transition into `mirror`. A restart while in mirror resumes the cursor (and per 3, re-walks once finished). Builder confirms service_role may write these keys past any instance_config guard trigger.
+7. **Part shapes.** Backfilled `url` parts with a Discord-CDN link become `file` parts, as on the live path. APNG detection reads the first bytes of the temp file (only the chunk headers before the first IDAT). Stickers go through the same path as any image.
+8. **Temp location.** `BRIDGE_MIRROR_TMPDIR` (default `os.tmpdir()`, which in the gateway container is the container's disk, not tmpfs). Docs say it needs free space about the size of the largest file.
