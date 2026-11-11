@@ -93,6 +93,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   hold one keep it.
 
 ### Fixed
+- **Pinned messages show bridged authors.** Pins of messages from the Discord bridge (live or
+  imported), webhooks and bots listed "Unknown"; they now show the same name and avatar as in chat.
 - **Discord bridge import notices.** The bridge settings now explain "A history import is waiting for
   the Message Content Intent" and "The import left out N private threads of #channel" instead of
   "The bridge reported a problem (…)". Left-out private threads are shown as a note and no longer
