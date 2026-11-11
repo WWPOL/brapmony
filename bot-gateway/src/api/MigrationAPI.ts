@@ -3,6 +3,7 @@ import { rateLimit } from 'express-rate-limit'
 import { randomBytes } from 'crypto'
 import { supabase, createUserClient, fetchMailerAutoconfirm } from '../config/supabase.js'
 import { configuredBaseUrl } from '../bridge/bridgeConfig.js'
+import { MIGRATION_CALLBACK_PATH } from '../bridge/instanceBot.js'
 import { meetsAssurance } from '../utils/sessionAssurance.js'
 import {
   type DiscordResult,
@@ -111,7 +112,7 @@ export class MigrationAPI {
   }
 
   private redirectUri(base: string): string {
-    return `${base}/bridge/v2/migrate/callback`
+    return `${base}${MIGRATION_CALLBACK_PATH}`
   }
 
   private appUrl(base: string, token: string, params: Record<string, string>): string {

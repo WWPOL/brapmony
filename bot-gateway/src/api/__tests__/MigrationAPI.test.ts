@@ -16,7 +16,7 @@ const CLIENT_ID = '300000000000000091'
 const CLIENT_SECRET = 'client-secret-must-not-leak-0123'
 const BOT_TOKEN = 'bot.token-must-not-leak.0123456789'
 const JWT = 'user.jwt.value'
-const CALLBACK = 'https://harmony.test/bridge/v2/migrate/callback'
+const CALLBACK = 'https://harmony.test/bot-gateway/bridge/v2/migrate/callback'
 const APP = 'https://harmony.test'
 
 const mocks = vi.hoisted(() => ({

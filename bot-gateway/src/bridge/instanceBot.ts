@@ -55,6 +55,9 @@ export function isAuthorizationCode(value: unknown): value is string {
   return typeof value === 'string' && AUTHORIZATION_CODE.test(value)
 }
 
+/** Path of the migration's OAuth2 redirect URI behind the instance's reverse proxy. */
+export const MIGRATION_CALLBACK_PATH = '/bot-gateway/bridge/v2/migrate/callback'
+
 /** The OAuth2 redirect URI registered on the Discord application. `base` is configuredBaseUrl(). */
 export function discordCallbackUrl(base: string): string {
   return `${base}/bot-gateway/bridge/v2/discord/callback`

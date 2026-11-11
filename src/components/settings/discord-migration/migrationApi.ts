@@ -3,7 +3,7 @@
  * discord_migration_* RPC (managers only); the role snapshot comes from the gateway's refresh route.
  */
 import { supabase } from '@/supabase'
-import { resolveHarmonyBaseUrl } from '@/utils/discordBridgeSetup'
+import { MIGRATION_CALLBACK_PATH, resolveHarmonyBaseUrl } from '@/utils/discordBridgeSetup'
 
 export type MigrationState = 'draft' | 'open' | 'finished'
 export type CredentialSource = 'instance_bot' | 'bridge' | 'own'
@@ -205,7 +205,7 @@ export function gatewayBaseUrl(): string {
 
 /** Discord redirects here after a member signs in; the admin registers it for the own application. */
 export function migrationRedirectUri(): string {
-  return `${gatewayBaseUrl()}/bridge/v2/migrate/callback`
+  return `${resolveHarmonyBaseUrl()}${MIGRATION_CALLBACK_PATH}`
 }
 
 /** The invitation link members open. */
