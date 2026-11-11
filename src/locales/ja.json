@@ -688,6 +688,14 @@
         "USE_EXTERNAL_SOUNDS": {
           "label": "外部のサウンドを使用",
           "description": "所属する他のサーバーのサウンドを再生します"
+        },
+        "CHANGE_NICKNAME": {
+          "label": "ニックネームの変更",
+          "description": "このサーバーでの自分のニックネームとサーバープロフィールを設定します"
+        },
+        "MANAGE_NICKNAMES": {
+          "label": "ニックネームの管理",
+          "description": "自分より下位のメンバーのニックネームとサーバープロフィールを変更またはリセットします"
         }
       },
       "everyoneMembersNote": "{'@'}everyone ロールはこのサーバーのすべてのメンバーに自動的に適用されます。管理するメンバー一覧はありません。",
@@ -3023,6 +3031,20 @@
       "moderators": "{server} のモデレーター",
       "outcomeBy": "{server} のモデレーター：{outcome}",
       "reviewedTitle": "{server} のモデレーターがあなたの通報を確認しました"
+    },
+    "serverProfile": {
+      "nicknameTitle": "ニックネームを変更",
+      "nicknameLabel": "{name}のニックネーム",
+      "nicknamePlaceholder": "ニックネームなし",
+      "nicknameHint": "空欄にするとニックネームを削除します。このサーバーでのみ有効です。",
+      "nicknameDone": "{name}のニックネームを{nickname}にしました。",
+      "nicknameCleared": "{name}のニックネームを削除しました。",
+      "resetTitle": "サーバープロフィールをリセット",
+      "resetMessage": "{name}のサーバーアバター、バナー、自己紹介、代名詞を消去しますか？ニックネームは残ります。",
+      "resetConfirm": "リセット",
+      "resetDone": "{name}のサーバープロフィールをリセットしました。",
+      "failed": "{name}を更新できませんでした。",
+      "noPermission": "{name}を変更する権限がありません。"
     }
   },
   "files": {
@@ -4660,6 +4682,8 @@
       "member_voice_undeafen": "{actor}が{target}のサーバースピーカーミュートを解除しました",
       "member_voice_move": "{actor}が{target}を別のボイスチャンネルに移動しました",
       "member_voice_disconnect": "{actor}が{target}をボイスから切断しました",
+      "member_nickname_update": "{actor}が{target}のニックネームを変更しました",
+      "member_profile_reset": "{actor}が{target}のサーバープロフィールをリセットしました",
       "message_delete": "{actor}が{channel}で{target}のメッセージを{count}件削除しました",
       "server_update": "{actor}がサーバーを編集しました",
       "settings_update": "{actor}がサーバー設定を変更しました",
@@ -4682,6 +4706,7 @@
       "sticker_delete": "{actor} がスタンプ {target} を削除しました"
     },
     "fields": {
+      "nickname": "ニックネーム",
       "name": "名前",
       "description": "説明",
       "category": "カテゴリー",
@@ -6229,7 +6254,11 @@
       "bridgeExists": "このサーバーには別の方法で設定された Discord ブリッジがすでにあります。このインスタンスのボットを使うには、先にそれを切断してください。",
       "instanceFull": "このインスタンスのボットは、許可されている数の Discord サーバーにすでに参加しています。インスタンスの管理者に相談するか、自分の Discord ボットを使ってください。",
       "instanceOff": "このインスタンスは現在 Discord ボットを提供していません。自分の Discord ボットを使ってください。",
-      "link": "Discord とのリンクを開始できませんでした。もう一度試してください。"
+      "link": "Discord とのリンクを開始できませんでした。もう一度試してください。",
+      "import": "インポートを開始できませんでした。",
+      "cancelImport": "インポートをキャンセルできませんでした。",
+      "pairNotImportable": "このペアは履歴をインポートできません。Discord のメッセージを Harmony に取り込むペアの、暗号化されていないチャンネルだけが対象です。",
+      "importChanged": "インポートの状態が変わったため更新しました。もう一度お試しください。"
     },
     "time": {
       "secondsAgo": "たった今 | {count} 秒前 | {count} 秒前",
@@ -6338,6 +6367,46 @@
       "settingsSaved": "Discord ボットの設定を保存しました",
       "saveFailed": "Discord ボットの設定を保存できませんでした",
       "redirectLabel": "リダイレクト先のアドレス"
+    },
+    "import": {
+      "button": "履歴をインポート",
+      "buttonLabel": "#{channel} の履歴をインポート",
+      "importAll": "すべてインポート",
+      "cancelAll": "すべてキャンセル",
+      "cancel": "キャンセル",
+      "cancelLabel": "#{channel} のインポートをキャンセル",
+      "cancelling": "キャンセル中…",
+      "waiting": "待機中",
+      "running": "インポート中… {percent}%",
+      "runningUnknown": "インポート中…",
+      "threadsRunning": "スレッドをインポート中…",
+      "repliesRunning": "返信を関連付け中…",
+      "progressLabel": "#{channel} のインポートの進捗",
+      "backTo": "{date} まで遡り済み",
+      "messages": "{count} 件のメッセージ | {count} 件のメッセージ",
+      "threads": "スレッド {done} / {total}",
+      "done": "{count} 件のメッセージをインポートしました | {count} 件のメッセージをインポートしました",
+      "doneNothingNew": "最新の状態です：新しいメッセージはありません",
+      "failed": "インポートが停止しました: {reason}",
+      "failedUnknown": "インポートが停止しました",
+      "cancelled": "キャンセルしました",
+      "paused": "一時停止中: ブリッジを待っています",
+      "retry": "再試行",
+      "retryLabel": "#{channel} のインポートを再試行",
+      "resume": "再開",
+      "resumeLabel": "#{channel} のインポートを再開",
+      "again": "再度インポート",
+      "againLabel": "#{channel} の履歴を再度インポート",
+      "reasons": {
+        "pair_removed": "チャンネルのペアが削除されました",
+        "channel_encrypted": "チャンネルが暗号化されました"
+      },
+      "ineligible": {
+        "direction": "Discord のメッセージを Harmony に取り込むペアだけが履歴をインポートできます",
+        "encrypted": "暗号化されたチャンネルは履歴をインポートできません"
+      },
+      "needsUpdate": "履歴をインポートするには、ブリッジを 2.6.0 以降に更新してください",
+      "mirrorNote": "インポートしたファイルは、このインスタンスのストレージにコピーされます。"
     }
   },
   "imageEditor": {
@@ -6497,7 +6566,9 @@
       "kick": "{name} をキック",
       "ban": "{name} をBAN",
       "copyId": "ユーザー ID をコピー",
-      "fallbackName": "ユーザー"
+      "fallbackName": "ユーザー",
+      "moderateNickname": "{name}のニックネームを変更",
+      "resetServerProfile": "{name}のサーバープロフィールをリセット"
     },
     "rail": {
       "folder": "フォルダー",
@@ -6913,6 +6984,32 @@
       "invalid": "テンプレートが無効です：{detail}",
       "rejected": "サーバーがこのテンプレートを拒否しました：{detail}"
     }
+  },
+  "serverProfile": {
+    "tabLabel": "サーバープロフィール",
+    "title": "サーバープロフィール",
+    "description": "サーバーごとに別のニックネーム、アバター、バナー、自己紹介、代名詞を設定できます。空欄のフィールドにはアカウントの値が使われます。",
+    "noServers": "まだサーバーに参加していません。",
+    "server": "サーバー",
+    "remoteUnavailable": "別のインスタンスでホスト中",
+    "locked": "このサーバーでプロフィールを変更する権限がありません。",
+    "nickname": "ニックネーム",
+    "pronouns": "代名詞",
+    "pronounsPlaceholder": "例: she/her",
+    "bio": "自己紹介",
+    "bioPlaceholder": "このサーバーに自己紹介を書きましょう",
+    "avatar": "アバター",
+    "banner": "バナー",
+    "reset": "リセット",
+    "resetField": "{field}をリセット",
+    "save": "変更を保存",
+    "saved": "サーバープロフィールを保存しました。",
+    "saveFailed": "サーバープロフィールを保存できませんでした。",
+    "uploadFailed": "画像をアップロードできませんでした。",
+    "preview": "プレビュー",
+    "menuEntry": "サーバープロフィールを編集",
+    "accountPronouns": "代名詞",
+    "accountPronounsHint": "プロフィールの名前の下に表示されます。40文字まで。"
   },
   "notificationSettings": {
     "menuEntry": "通知設定",

@@ -688,6 +688,14 @@
         "USE_EXTERNAL_SOUNDS": {
           "label": "Use External Sounds",
           "description": "Play sounds from other servers they belong to"
+        },
+        "CHANGE_NICKNAME": {
+          "label": "Change Nickname",
+          "description": "Set their own nickname and server profile in this server"
+        },
+        "MANAGE_NICKNAMES": {
+          "label": "Manage Nicknames",
+          "description": "Change or reset the nicknames and server profiles of members ranked below them"
         }
       },
       "everyoneMembersNote": "The {'@'}everyone role applies to every member of this server automatically. There's no roster to manage.",
@@ -3077,6 +3085,20 @@
       "moderators": "{server}'s moderators",
       "outcomeBy": "{server}'s moderators: {outcome}",
       "reviewedTitle": "{server}'s moderators reviewed your report"
+    },
+    "serverProfile": {
+      "nicknameTitle": "Change nickname",
+      "nicknameLabel": "Nickname for {name}",
+      "nicknamePlaceholder": "No nickname",
+      "nicknameHint": "Leave empty to remove the nickname. Only applies in this server.",
+      "nicknameDone": "{name} is now called {nickname}.",
+      "nicknameCleared": "Removed the nickname of {name}.",
+      "resetTitle": "Reset server profile",
+      "resetMessage": "Clear the server avatar, banner, bio and pronouns of {name}? Their nickname is kept.",
+      "resetConfirm": "Reset",
+      "resetDone": "Reset the server profile of {name}.",
+      "failed": "Could not update {name}.",
+      "noPermission": "You don't have permission to change {name}."
     }
   },
   "files": {
@@ -4660,6 +4682,8 @@
       "member_voice_undeafen": "{actor} lifted the server deafen on {target}",
       "member_voice_move": "{actor} moved {target} to another voice channel",
       "member_voice_disconnect": "{actor} disconnected {target} from voice",
+      "member_nickname_update": "{actor} changed the nickname of {target}",
+      "member_profile_reset": "{actor} reset the server profile of {target}",
       "message_delete": "{actor} deleted a message by {target} in {channel} | {actor} deleted {count} messages by {target} in {channel}",
       "server_update": "{actor} updated the server",
       "settings_update": "{actor} updated the server settings",
@@ -4682,6 +4706,7 @@
       "sticker_delete": "{actor} removed sticker {target}"
     },
     "fields": {
+      "nickname": "Nickname",
       "name": "Name",
       "description": "Description",
       "category": "Category",
@@ -6225,7 +6250,11 @@
       "bridgeExists": "This server already has a Discord bridge set up another way. Disconnect it first to use this instance's bot.",
       "instanceFull": "This instance's bot is already in as many Discord servers as it allows. Ask the instance's admin, or use a Discord bot of your own instead.",
       "instanceOff": "This instance doesn't offer its Discord bot at the moment. Use a Discord bot of your own instead.",
-      "link": "Couldn't start linking with Discord. Try again."
+      "link": "Couldn't start linking with Discord. Try again.",
+      "import": "Couldn't start the import.",
+      "cancelImport": "Couldn't cancel the import.",
+      "pairNotImportable": "This pair can't import history. Only unencrypted channels in pairs that bring Discord messages to Harmony can.",
+      "importChanged": "The import changed in the meantime. It has been refreshed; try again."
     },
     "time": {
       "secondsAgo": "just now | {count} second ago | {count} seconds ago",
@@ -6334,6 +6363,46 @@
       "settingsSaved": "Discord bot settings saved",
       "saveFailed": "Couldn't save the Discord bot settings",
       "redirectLabel": "Redirect address"
+    },
+    "import": {
+      "button": "Import history",
+      "buttonLabel": "Import history for #{channel}",
+      "importAll": "Import all",
+      "cancelAll": "Cancel all",
+      "cancel": "Cancel",
+      "cancelLabel": "Cancel the import for #{channel}",
+      "cancelling": "Cancelling…",
+      "waiting": "Waiting",
+      "running": "Importing… {percent}%",
+      "runningUnknown": "Importing…",
+      "threadsRunning": "Importing threads…",
+      "repliesRunning": "Linking replies…",
+      "progressLabel": "Import progress for #{channel}",
+      "backTo": "Back to {date}",
+      "messages": "{count} message | {count} messages",
+      "threads": "Threads {done} of {total}",
+      "done": "Imported {count} message | Imported {count} messages",
+      "doneNothingNew": "Up to date: no new messages",
+      "failed": "Import stopped: {reason}",
+      "failedUnknown": "Import stopped",
+      "cancelled": "Cancelled",
+      "paused": "Paused: waiting for the bridge",
+      "retry": "Try again",
+      "retryLabel": "Try the import again for #{channel}",
+      "resume": "Resume",
+      "resumeLabel": "Resume the import for #{channel}",
+      "again": "Import again",
+      "againLabel": "Import history again for #{channel}",
+      "reasons": {
+        "pair_removed": "the channel pair was removed",
+        "channel_encrypted": "the channel is now encrypted"
+      },
+      "ineligible": {
+        "direction": "Only pairs that bring Discord messages to Harmony can import history",
+        "encrypted": "Encrypted channels can't import history"
+      },
+      "needsUpdate": "Update the bridge to 2.6.0 or later to import history",
+      "mirrorNote": "Imported files are copied into this instance's storage."
     }
   },
   "imageEditor": {
@@ -6493,7 +6562,9 @@
       "kick": "Kick {name}",
       "ban": "Ban {name}",
       "copyId": "Copy user ID",
-      "fallbackName": "User"
+      "fallbackName": "User",
+      "moderateNickname": "Change nickname for {name}",
+      "resetServerProfile": "Reset server profile of {name}"
     },
     "rail": {
       "folder": "folder",
@@ -6909,6 +6980,32 @@
       "invalid": "The template is not valid: {detail}",
       "rejected": "The server refused this template: {detail}"
     }
+  },
+  "serverProfile": {
+    "tabLabel": "Server profiles",
+    "title": "Server profiles",
+    "description": "Set a different nickname, avatar, banner, bio and pronouns for each server. Empty fields use your account values.",
+    "noServers": "You haven't joined any servers yet.",
+    "server": "Server",
+    "remoteUnavailable": "hosted on another instance",
+    "locked": "You don't have permission to change your profile in this server.",
+    "nickname": "Nickname",
+    "pronouns": "Pronouns",
+    "pronounsPlaceholder": "e.g. they/them",
+    "bio": "About me",
+    "bioPlaceholder": "Tell this server about yourself",
+    "avatar": "Avatar",
+    "banner": "Banner",
+    "reset": "Reset",
+    "resetField": "Reset {field}",
+    "save": "Save changes",
+    "saved": "Server profile saved.",
+    "saveFailed": "Couldn't save your server profile.",
+    "uploadFailed": "Couldn't upload the image.",
+    "preview": "Preview",
+    "menuEntry": "Edit server profile",
+    "accountPronouns": "Pronouns",
+    "accountPronounsHint": "Shown under your name on your profile. Up to 40 characters."
   },
   "notificationSettings": {
     "menuEntry": "Notification settings",

@@ -688,6 +688,14 @@
         "USE_EXTERNAL_SOUNDS": {
           "label": "Externe Sounds verwenden",
           "description": "Sounds von anderen Servern abspielen, denen sie angehören"
+        },
+        "CHANGE_NICKNAME": {
+          "label": "Spitzname ändern",
+          "description": "Den eigenen Spitznamen und das Serverprofil auf diesem Server festlegen"
+        },
+        "MANAGE_NICKNAMES": {
+          "label": "Spitznamen verwalten",
+          "description": "Spitznamen und Serverprofile von Mitgliedern mit niedrigerem Rang ändern oder zurücksetzen"
         }
       },
       "everyoneMembersNote": "Die Rolle {'@'}everyone gilt automatisch für jedes Mitglied dieses Servers. Es gibt keine Mitgliederliste zu verwalten.",
@@ -3023,6 +3031,20 @@
       "moderators": "Moderatoren von {server}",
       "outcomeBy": "Moderatoren von {server}: {outcome}",
       "reviewedTitle": "Die Moderation von {server} hat deine Meldung geprüft"
+    },
+    "serverProfile": {
+      "nicknameTitle": "Nickname ändern",
+      "nicknameLabel": "Nickname für {name}",
+      "nicknamePlaceholder": "Kein Nickname",
+      "nicknameHint": "Leer lassen, um den Nickname zu entfernen. Gilt nur auf diesem Server.",
+      "nicknameDone": "{name} heißt jetzt {nickname}.",
+      "nicknameCleared": "Nickname von {name} entfernt.",
+      "resetTitle": "Serverprofil zurücksetzen",
+      "resetMessage": "Serveravatar, Banner, Bio und Pronomen von {name} löschen? Der Nickname bleibt erhalten.",
+      "resetConfirm": "Zurücksetzen",
+      "resetDone": "Serverprofil von {name} zurückgesetzt.",
+      "failed": "{name} konnte nicht aktualisiert werden.",
+      "noPermission": "Du darfst {name} nicht ändern."
     }
   },
   "files": {
@@ -4660,6 +4682,8 @@
       "member_voice_undeafen": "{actor} hat die serverweite Taubschaltung von {target} aufgehoben",
       "member_voice_move": "{actor} hat {target} in einen anderen Sprachkanal verschoben",
       "member_voice_disconnect": "{actor} hat {target} aus dem Sprachkanal getrennt",
+      "member_nickname_update": "{actor} hat den Spitznamen von {target} geändert",
+      "member_profile_reset": "{actor} hat das Serverprofil von {target} zurückgesetzt",
       "message_delete": "{actor} hat eine Nachricht von {target} in {channel} gelöscht | {actor} hat {count} Nachrichten von {target} in {channel} gelöscht",
       "server_update": "{actor} hat den Server bearbeitet",
       "settings_update": "{actor} hat die Servereinstellungen geändert",
@@ -4682,6 +4706,7 @@
       "sticker_delete": "{actor} hat den Sticker {target} entfernt"
     },
     "fields": {
+      "nickname": "Spitzname",
       "name": "Name",
       "description": "Beschreibung",
       "category": "Kategorie",
@@ -6229,7 +6254,11 @@
       "bridgeExists": "Dieser Server hat schon eine anders eingerichtete Discord-Bridge. Trenne sie zuerst, um den Bot dieser Instanz zu verwenden.",
       "instanceFull": "Der Bot dieser Instanz ist schon auf so vielen Discord-Servern, wie sie erlaubt. Frag die Administration der Instanz oder verwende stattdessen einen eigenen Discord-Bot.",
       "instanceOff": "Diese Instanz bietet ihren Discord-Bot gerade nicht an. Verwende stattdessen einen eigenen Discord-Bot.",
-      "link": "Die Verknüpfung mit Discord konnte nicht gestartet werden. Versuche es erneut."
+      "link": "Die Verknüpfung mit Discord konnte nicht gestartet werden. Versuche es erneut.",
+      "import": "Der Import konnte nicht gestartet werden.",
+      "cancelImport": "Der Import konnte nicht abgebrochen werden.",
+      "pairNotImportable": "Dieses Paar kann keinen Verlauf importieren. Nur unverschlüsselte Kanäle in Paaren, die Discord-Nachrichten nach Harmony holen, können es.",
+      "importChanged": "Der Import hat sich inzwischen geändert und wurde aktualisiert. Versuche es erneut."
     },
     "time": {
       "secondsAgo": "gerade eben | vor {count} Sekunde | vor {count} Sekunden",
@@ -6338,6 +6367,46 @@
       "settingsSaved": "Einstellungen des Discord-Bots gespeichert",
       "saveFailed": "Die Einstellungen des Discord-Bots konnten nicht gespeichert werden",
       "redirectLabel": "Weiterleitungsadresse"
+    },
+    "import": {
+      "button": "Verlauf importieren",
+      "buttonLabel": "Verlauf für #{channel} importieren",
+      "importAll": "Alle importieren",
+      "cancelAll": "Alle abbrechen",
+      "cancel": "Abbrechen",
+      "cancelLabel": "Import für #{channel} abbrechen",
+      "cancelling": "Wird abgebrochen…",
+      "waiting": "Wartet",
+      "running": "Import läuft… {percent} %",
+      "runningUnknown": "Import läuft…",
+      "threadsRunning": "Threads werden importiert…",
+      "repliesRunning": "Antworten werden verknüpft…",
+      "progressLabel": "Importfortschritt für #{channel}",
+      "backTo": "Zurück bis {date}",
+      "messages": "{count} Nachricht | {count} Nachrichten",
+      "threads": "Threads {done} von {total}",
+      "done": "{count} Nachricht importiert | {count} Nachrichten importiert",
+      "doneNothingNew": "Aktuell: keine neuen Nachrichten",
+      "failed": "Import gestoppt: {reason}",
+      "failedUnknown": "Import gestoppt",
+      "cancelled": "Abgebrochen",
+      "paused": "Pausiert: wartet auf die Bridge",
+      "retry": "Erneut versuchen",
+      "retryLabel": "Import für #{channel} erneut versuchen",
+      "resume": "Fortsetzen",
+      "resumeLabel": "Import für #{channel} fortsetzen",
+      "again": "Erneut importieren",
+      "againLabel": "Verlauf für #{channel} erneut importieren",
+      "reasons": {
+        "pair_removed": "das Kanalpaar wurde entfernt",
+        "channel_encrypted": "der Kanal ist jetzt verschlüsselt"
+      },
+      "ineligible": {
+        "direction": "Nur Paare, die Discord-Nachrichten nach Harmony holen, können den Verlauf importieren",
+        "encrypted": "Verschlüsselte Kanäle können keinen Verlauf importieren"
+      },
+      "needsUpdate": "Aktualisiere die Bridge auf 2.6.0 oder neuer, um den Verlauf zu importieren",
+      "mirrorNote": "Importierte Dateien werden in den Speicher dieser Instanz kopiert."
     }
   },
   "imageEditor": {
@@ -6497,7 +6566,9 @@
       "kick": "{name} kicken",
       "ban": "{name} bannen",
       "copyId": "Nutzer-ID kopieren",
-      "fallbackName": "Nutzer"
+      "fallbackName": "Nutzer",
+      "moderateNickname": "Nickname von {name} ändern",
+      "resetServerProfile": "Serverprofil von {name} zurücksetzen"
     },
     "rail": {
       "folder": "Ordner",
@@ -6913,6 +6984,32 @@
       "invalid": "Die Vorlage ist ungültig: {detail}",
       "rejected": "Der Server hat diese Vorlage abgelehnt: {detail}"
     }
+  },
+  "serverProfile": {
+    "tabLabel": "Serverprofile",
+    "title": "Serverprofile",
+    "description": "Lege für jeden Server einen eigenen Spitznamen, Avatar, Banner, eine eigene Bio und Pronomen fest. Leere Felder verwenden deine Kontowerte.",
+    "noServers": "Du bist noch keinem Server beigetreten.",
+    "server": "Server",
+    "remoteUnavailable": "auf einer anderen Instanz gehostet",
+    "locked": "Du darfst dein Profil auf diesem Server nicht ändern.",
+    "nickname": "Spitzname",
+    "pronouns": "Pronomen",
+    "pronounsPlaceholder": "z. B. sie/ihr",
+    "bio": "Über mich",
+    "bioPlaceholder": "Erzähl diesem Server etwas über dich",
+    "avatar": "Avatar",
+    "banner": "Banner",
+    "reset": "Zurücksetzen",
+    "resetField": "{field} zurücksetzen",
+    "save": "Änderungen speichern",
+    "saved": "Serverprofil gespeichert.",
+    "saveFailed": "Dein Serverprofil konnte nicht gespeichert werden.",
+    "uploadFailed": "Das Bild konnte nicht hochgeladen werden.",
+    "preview": "Vorschau",
+    "menuEntry": "Serverprofil bearbeiten",
+    "accountPronouns": "Pronomen",
+    "accountPronounsHint": "Wird unter deinem Namen in deinem Profil angezeigt. Bis zu 40 Zeichen."
   },
   "notificationSettings": {
     "menuEntry": "Benachrichtigungseinstellungen",
