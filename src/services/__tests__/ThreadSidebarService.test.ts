@@ -125,6 +125,24 @@ describe('useThreadSidebarMode', () => {
     expect(mode.value).toBe('joined')
   })
 
+  it('a lookup for a server left behind changes nothing for the new one', async () => {
+    let resolveA!: (value: unknown) => void
+    rpc.mockImplementation((_name: string, args: { p_server_id: string }) =>
+      args.p_server_id === 'sa'
+        ? new Promise(resolve => { resolveA = resolve })
+        : Promise.resolve({ data: 'all', error: null }))
+    const serverId = ref<string | null>('sa')
+    const { mode } = useThreadSidebarMode(serverId, ref(true))
+    serverId.value = 'sb'
+    await flushPromises()
+    expect(mode.value).toBe('all')
+    resolveA({ data: 'joined', error: null })
+    await flushPromises()
+    expect(mode.value).toBe('all')
+    expect(stored('sb')).toBe('all')
+    expect(stored('sa')).toBeNull()
+  })
+
   it('setCached applies at once and remembers', async () => {
     rpc.mockResolvedValue({ data: 'all', error: null })
     const { mode } = useThreadSidebarMode(ref('c7'), ref(true))

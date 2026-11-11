@@ -1,15 +1,15 @@
 <template>
-  <section class="thread-sidebar settings-card" :aria-labelledby="headingId" data-testid="thread-sidebar">
+  <section v-if="isLocalServer" class="thread-sidebar settings-card" :aria-labelledby="headingId" data-testid="thread-sidebar">
     <h3 :id="headingId">{{ t('threadSidebar.server.title') }}</h3>
     <p>{{ t('threadSidebar.server.hint') }}</p>
-    <fieldset :key="renderKey" class="options" :disabled="busy || !state">
+    <fieldset class="options" :disabled="busy || !state">
       <label v-for="option in options" :key="option.id" class="option">
         <input
           type="radio"
           :name="`thread-sidebar-${serverId}`"
           :value="option.id"
           :checked="selected === option.id"
-          @change="save(option.value)"
+          @change="save(option)"
         >
         <span>{{ option.label }}</span>
       </label>
@@ -30,18 +30,17 @@ import {
   type ThreadSidebarState,
 } from '@/services/ThreadSidebarService'
 
-const props = defineProps<{ serverId: string }>()
+// The setting lives on the server's home instance; a copy of a remote server has none.
+const props = withDefaults(defineProps<{ serverId: string; isLocalServer?: boolean }>(), { isLocalServer: true })
 
 const { t } = useI18n()
 const toast = useToast()
 
 const state = ref<ThreadSidebarState | null>(null)
 const busy = ref(false)
-// Bumped after a failed save so the radios are rebuilt from the saved choice.
-const renderKey = ref(0)
+// The choice shown; set before a save is sent and put back if it fails.
+const selected = ref<string | null>(null)
 const headingId = computed(() => `thread-sidebar-${props.serverId}`)
-
-const selected = computed(() => (state.value ? (state.value.server_value ?? 'instance') : null))
 
 const options = computed(() => {
   const instanceMode = state.value?.instance_default ?? 'all'
@@ -57,31 +56,43 @@ const options = computed(() => {
 })
 
 async function load() {
+  const serverId = props.serverId
   state.value = null
+  selected.value = null
+  if (!props.isLocalServer) return
   try {
-    state.value = await getServerThreadSidebar(props.serverId)
+    const loaded = await getServerThreadSidebar(serverId)
+    if (props.serverId !== serverId) return
+    state.value = loaded
+    selected.value = loaded.server_value ?? 'instance'
   } catch (error) {
     debug.warn('Thread sidebar setting unavailable:', error)
   }
 }
 
-async function save(mode: ThreadSidebarMode | null) {
+async function save(option: { id: string; value: ThreadSidebarMode | null }) {
   if (busy.value) return
+  const serverId = props.serverId
+  const previous = selected.value
+  selected.value = option.id
   busy.value = true
   try {
-    const next = await setServerThreadSidebar(props.serverId, mode)
+    const next = await setServerThreadSidebar(serverId, option.value)
+    setCached(serverId, next.mode)
+    if (props.serverId !== serverId) return
     state.value = next
-    setCached(props.serverId, next.mode)
+    selected.value = next.server_value ?? 'instance'
   } catch (error) {
     debug.error('Failed to save the thread sidebar setting:', error)
+    if (props.serverId !== serverId) return
+    selected.value = previous
     toast.error(t('threadSidebar.saveFailed'))
-    renderKey.value++
   } finally {
     busy.value = false
   }
 }
 
-watch(() => props.serverId, load, { immediate: true })
+watch(() => [props.serverId, props.isLocalServer], load, { immediate: true })
 </script>
 
 <style scoped>

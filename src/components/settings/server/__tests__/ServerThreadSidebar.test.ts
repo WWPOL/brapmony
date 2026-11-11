@@ -94,6 +94,56 @@ describe('ServerThreadSidebar', () => {
     expect(checked(wrapper, 'joined')).toBe(false)
   })
 
+  it('keeps the focused radio in place after a failed save', async () => {
+    api.getServerThreadSidebar.mockResolvedValue({ mode: 'all', server_value: 'all', instance_default: 'all' })
+    api.setServerThreadSidebar.mockRejectedValueOnce(new Error('nope'))
+    const i18n = createI18n({ legacy: false, locale: 'en', messages: { en } })
+    const wrapper = mount(ServerThreadSidebar, {
+      props: { serverId: SERVER_ID },
+      global: { plugins: [i18n] },
+      attachTo: document.body,
+    })
+    await flushPromises()
+
+    const joined = radio(wrapper, 'joined').element as HTMLInputElement
+    joined.focus()
+    await radio(wrapper, 'joined').setValue(true)
+    await flushPromises()
+    expect(checked(wrapper, 'all')).toBe(true)
+    expect(document.activeElement).toBe(joined)
+    expect(wrapper.find('fieldset').element.contains(document.activeElement)).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('discards a save that resolves after the server changed', async () => {
+    api.getServerThreadSidebar.mockResolvedValue({ mode: 'all', server_value: 'all', instance_default: 'all' })
+    let finish!: (value: unknown) => void
+    api.setServerThreadSidebar.mockReturnValueOnce(new Promise(resolve => { finish = resolve }))
+    const wrapper = mountIt()
+    await flushPromises()
+
+    await radio(wrapper, 'joined').setValue(true)
+    api.getServerThreadSidebar.mockResolvedValue({ mode: 'all', server_value: null, instance_default: 'all' })
+    await wrapper.setProps({ serverId: 'server-2' })
+    await flushPromises()
+    finish({ mode: 'joined', server_value: 'joined', instance_default: 'all' })
+    await flushPromises()
+
+    expect(api.setCached).not.toHaveBeenCalledWith('server-2', expect.anything())
+    expect(checked(wrapper, 'instance')).toBe(true)
+  })
+
+  it('renders nothing and makes no lookup for a remote server', async () => {
+    const i18n = createI18n({ legacy: false, locale: 'en', messages: { en } })
+    const wrapper = mount(ServerThreadSidebar, {
+      props: { serverId: SERVER_ID, isLocalServer: false },
+      global: { plugins: [i18n] },
+    })
+    await flushPromises()
+    expect(wrapper.find('[data-testid="thread-sidebar"]').exists()).toBe(false)
+    expect(api.getServerThreadSidebar).not.toHaveBeenCalled()
+  })
+
   it('uses no missing i18n keys', async () => {
     api.getServerThreadSidebar.mockResolvedValue({ mode: 'all', server_value: null, instance_default: 'joined' })
     mountIt()

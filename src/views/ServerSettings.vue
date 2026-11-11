@@ -163,6 +163,7 @@
           <ServerThreadSidebar
             v-if="activeSection === 'overview' && permissions.canEditBasicInfo"
             :server-id="serverId"
+            :is-local-server="server.is_local_server !== false"
           />
 
           <ServerSystemMessages
