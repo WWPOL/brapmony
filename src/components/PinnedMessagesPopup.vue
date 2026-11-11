@@ -51,14 +51,15 @@
               >
                 <div class="message-header">
                   <Avatar
-                    :src="getUserAvatar(message.user_id)"
+                    :src="getAuthorAvatar(message)"
                     size="sm"
                     class="message-avatar"
                   />
                   <!-- The author and time are the jump control; the list item stays clickable for the pointer. -->
                   <button type="button" class="message-info jump-btn" @click.stop="jumpToMessage(message.id)">
-                    <span class="message-author" :style="{ color: getUserColorValue(message.user_id) }">
-                      <DisplayName :userId="message.user_id" :fallback="getUserDisplayName(message.user_id)" />
+                    <span class="message-author" :style="{ color: getAuthorColor(message) }">
+                      <template v-if="getForeignAuthor(message)">{{ getForeignAuthor(message)!.name }}</template>
+                      <DisplayName v-else :userId="message.user_id" :server-id="profileServerId" :fallback="getUserDisplayName(message.user_id)" />
                     </span>
                     <span class="message-time">
                       {{ formatTimestamp(message.created_at) }}
@@ -87,6 +88,7 @@
                     v-else
                     :content="message.content"
                     :message-id="message.id"
+                    :server-id="profileServerId"
                     :embed-payloads="message.metadata?.embeds"
                     :media-hidden="mediaHidden"
                   />
@@ -115,6 +117,7 @@ import { useServerChannelStore } from '@/stores/useServerChannel'
 import { usePinActions } from '@/composables/usePinActions'
 import { usePinsStore, pinScopeKey } from '@/stores/usePins'
 import { useUserData } from '@/composables/useUserData'
+import { getMemberDisplayName, getMemberAvatarUrl } from '@/composables/useMemberProfile'
 import { format } from 'date-fns'
 import Avatar from '@/components/common/Avatar.vue'
 import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
@@ -124,6 +127,8 @@ import DisplayName from '@/components/DisplayName.vue'
 import UnifiedMessageContent from '@/components/UnifiedMessageContent.vue'
 import type { Message } from '@/types'
 import { isUndecrypted } from '@/utils/channelEncryption'
+import { getForeignAuthor, isBotAuthorMessage, isBridgedAuthorMessage } from '@/utils/messageAuthor'
+import { BOT_NAME_COLOR } from '@/utils/botUtils'
 
 interface Props {
   isVisible: boolean
@@ -145,11 +150,7 @@ const { canPinMessages: canPinInChannel } = useChannelMessagePermissions(
   () => serverChannelStore.currentServerId,
   () => (props.conversationId ? null : props.channelId),
 )
-const { 
-  getUserDisplayName: getDisplayName, 
-  getUserColor: getColor,
-  getUserAvatarUrl: getAvatarUrl
-} = useUserData()
+const { getUserColor: getColor } = useUserData()
 
 const pinsStore = usePinsStore()
 const { setPinned } = usePinActions()
@@ -211,9 +212,12 @@ const close = () => {
   emit('close')
 }
 
+// A DM has no server, so its pins keep account profiles.
+const profileServerId = computed(() => (props.conversationId ? null : serverChannelStore.currentServerId))
+
 const getUserDisplayName = (userId?: string) => {
   if (!userId) return 'Unknown'
-  return getDisplayName(userId).value
+  return getMemberDisplayName(userId, profileServerId.value).value
 }
 
 const getUserColorValue = (userId?: string) => {
@@ -223,10 +227,24 @@ const getUserColorValue = (userId?: string) => {
 
 const getUserAvatar = (userId?: string) => {
   if (!userId) return '/default_avatar.webp'
-  return getAvatarUrl(userId).value
+  return getMemberAvatarUrl(userId, profileServerId.value).value
 }
 
-const formatTimestamp = (date: Date | string) => {
+// Bridged people, webhooks and bots have no profile: their message carries the name shown in
+// chat (metadata.discord_user, metadata.webhook), as useMessageAuthorPresentation reads it.
+const getAuthorAvatar = (message: Message) => {
+  const foreign = getForeignAuthor(message)
+  if (foreign) return foreign.avatar_url || '/default_avatar.webp'
+  return getUserAvatar(message.user_id)
+}
+
+const getAuthorColor = (message: Message) => {
+  if (isBridgedAuthorMessage(message)) return '#5865F2'
+  if (isBotAuthorMessage(message)) return BOT_NAME_COLOR
+  return getUserColorValue(message.user_id)
+}
+
+const formatTimestamp =(date: Date | string) => {
   try {
     const d = typeof date === 'string' ? new Date(date) : date
     return format(d, 'MMM d, yyyy h:mm a')

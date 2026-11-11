@@ -8,6 +8,22 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 ## [Unreleased]
 
 ### Added
+- **Migrate from Discord.** Owners and members with Manage Server can bring a Discord community over
+  from **Server settings** → **Migrate from Discord**. Match each Discord role to a Harmony role, then
+  share the invitation link. Members sign in with Discord (the `identify` scope only), create or link a
+  Harmony account and join with their mapped roles. While the migration is open, roles, membership,
+  timeouts and each member's chosen profile fields (picture, name, banner, accent colour, and their
+  nickname, picture and banner in the server) follow Discord, and profile cards show **Joined on
+  Discord**. **Apply Discord permissions** gives cloned roles the moderator permissions the bridge
+  can't; Administrator roles are owner-only with a confirmation. Harmony bans and kicks always win,
+  a removal brake pauses a suspicious sync, and **Finish migration** hands control back to Harmony.
+  Operators can turn off account creation for migrations with `harmony migration account-creation off`
+  and set the sync interval with `DISCORD_MIGRATION_SYNC_MS`. See Run a server → Migrate from Discord.
+- **Discord files are stored in the background.** With **Mirror to storage**, the gateway now also
+  stores the Discord files of messages already in Harmony, and files over 50 MB: the cap is the
+  instance's upload ceiling (`harmony config --upload-ceiling`). Large files are downloaded one at a
+  time through a temporary file. Expired links are refreshed through the bridge. **Instance admin** →
+  **Config** shows how many files are waiting, stored, too large or failed.
 - **Slash commands for bots.** Bots register commands with `PUT /commands`; members pick them from
   the `/` list in server channels and threads, fill in typed options (text, numbers, true or false,
   choices, members, channels, roles) and the bot receives `INTERACTION_CREATE`. It answers within
@@ -47,6 +63,20 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   through `GET /servers/{id}/emojis/discord` (the server's emoji limit and its
   Discord-linked emoji, removed ones included), an `update` flag on `POST
   /servers/{id}/emojis/discord`, and `DELETE /servers/{id}/emojis/{emojiId}`.
+- **Import Discord history.** A Discord bridge can now copy a paired
+  channel's older messages, threads and pins into its Harmony channel, with
+  their original dates and Discord authors. Start it with **Import history**
+  or **Import all** in Server settings, Discord Bridge, or with
+  `/bridge import-history` in Discord (bridge 2.6.0 or later). Imported
+  messages are quiet: no notifications, unread counts or federation, and a
+  repeat or a restart never duplicates a message. Reactions are not imported.
+- **Server profiles.** Set a nickname, avatar, banner, bio and pronouns for each server
+  (right-click the server, **Edit server profile**). They show in messages, the member list,
+  voice, mentions, notifications, search and pins; direct messages keep your account profile.
+- **Pronouns** on your account profile, shown under your name and federated.
+- **Change Nickname** and **Manage Nicknames** permissions. Every server's `@everyone` role
+  gets Change Nickname; Manage Nicknames lets moderators change a member's nickname or reset
+  their server profile, logged in the audit log.
 - **One-command self-hosting.** `curl -fsSL https://raw.githubusercontent.com/y4my4my4m/harmony/master/self-host/install.sh | bash`
   installs an instance on a blank Linux server: it checks the host (offering
   Docker and a swap file), asks a few questions, checks DNS, starts the
@@ -90,6 +120,15 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   hold one keep it.
 
 ### Fixed
+- **Imported Discord threads archive like other threads.** A thread brought in by the history import
+  had no last message time, so it never auto-archived and stayed listed under its channel. Imported
+  replies now set it when it is missing, and existing threads are backfilled from their newest message.
+- **Pinned messages show bridged authors.** Pins of messages from the Discord bridge (live or
+  imported), webhooks and bots listed "Unknown"; they now show the same name and avatar as in chat.
+- **Discord bridge import notices.** The bridge settings now explain "A history import is waiting for
+  the Message Content Intent" and "The import left out N private threads of #channel" instead of
+  "The bridge reported a problem (…)". Left-out private threads are shown as a note and no longer
+  mark the bridge "online, with problems".
 - **The message field no longer locks after switching servers.** A switch could leave "You do not
   have permission to send messages in this channel" in place of the field until a reload, on 1.9.5
   instances.

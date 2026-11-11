@@ -9,10 +9,14 @@ import { WebSocketGateway } from './gateway/WebSocketGateway.js'
 import { EventDispatcher } from './gateway/EventDispatcher.js'
 import { InteractionPoller } from './gateway/InteractionPoller.js'
 import { BotRestAPI } from './api/BotRestAPI.js'
-import { BridgeV2API, MIN_HOST_SECRET_LENGTH } from './api/BridgeV2API.js'
+import { MigrationAPI } from './api/MigrationAPI.js'
+import { MigrationSyncRunner } from './migration/MigrationSyncRunner.js'
+import { BridgeV2API,MIN_HOST_SECRET_LENGTH } from './api/BridgeV2API.js'
 import { BridgeConfigWatcher } from './gateway/BridgeConfigWatcher.js'
 import { TTLCache } from './utils/TTLCache.js'
-import { getBridgeAttachmentMode, hasDiscordCdnFilePart } from './utils/mirrorExternalMedia.js'
+import { getBridgeAttachmentMode, getUploadCeilingBytes, hasDiscordCdnFilePart } from './utils/mirrorExternalMedia.js'
+import { mirrorFileToStorage } from './utils/mirrorFile.js'
+import { MirrorWorker } from './bridge/mirrorWorker.js'
 import { meetsAssurance } from './utils/sessionAssurance.js'
 
 const app = express()
@@ -57,11 +61,41 @@ interactionPoller.start()
 const botAPI = new BotRestAPI(eventDispatcher)
 app.use('/api/v1', botAPI.router)
 
+// Migrate from Discord. Mounted before /bridge/v2 so the bridge router's middleware never sees these routes.
+const migrationSyncRunner = new MigrationSyncRunner()
+app.use('/bridge/v2/migrate', new MigrationAPI({ syncOne: migrationSyncRunner.syncOne }).router)
+
 // Discord bridge v2: setup-code redeem, hosted list, and the bridge bot's config, status and pairs.
 app.use('/bridge/v2', new BridgeV2API().router)
 
 const bridgeConfigWatcher = new BridgeConfigWatcher(gateway)
 bridgeConfigWatcher.start()
+migrationSyncRunner.start()
+
+// Stores Discord attachments in Harmony storage in the background (mirror mode).
+const mirrorWorker = new MirrorWorker({
+  rpc: async (name, args) => {
+    const { data, error } = await supabase.rpc(name, args)
+    if (error) throw new Error(`${name} failed: ${error.message}`)
+    return data
+  },
+  readMessage: async (id) => {
+    const { data, error } = await supabase
+      .from('messages')
+      .select('id, channel_id, bot_id, content, is_deleted')
+      .eq('id', id)
+      .maybeSingle()
+    if (error) throw new Error(`message read failed: ${error.message}`)
+    return data
+  },
+  mode: getBridgeAttachmentMode,
+  ceiling: getUploadCeilingBytes,
+  mirror: mirrorFileToStorage,
+  gateway,
+  now: () => Date.now(),
+  log: console,
+})
+mirrorWorker.start()
 if (config.bridge.hostSecret && config.bridge.hostSecret.length < MIN_HOST_SECRET_LENGTH) {
   console.warn(`BRIDGE_HOST_SECRET is shorter than ${MIN_HOST_SECRET_LENGTH} characters; GET /bridge/v2/hosted stays disabled`)
 }
@@ -297,7 +331,7 @@ app.post('/attachments/refresh', async (req, res): Promise<void> => {
 
   const { data: message } = await supabase
     .from('messages')
-    .select('id, channel_id, bot_id, content')
+    .select('id, channel_id, bot_id, content, is_deleted')
     .eq('id', messageId)
     .maybeSingle()
 
@@ -372,11 +406,14 @@ async function shutdown() {
   }, 10000)
   
   bridgeConfigWatcher.stop()
+  migrationSyncRunner.stop()
   interactionPoller.stop()
-
   // Awaited: the exit in the server.close callback drops bot_presence writes still in flight.
   await gateway.shutdown()
-  
+
+  // A download in flight must not hold up the exit; the lease returns its row to the queue.
+  await Promise.race([mirrorWorker.stop(), new Promise((resolve) => setTimeout(resolve, 3000))])
+
   await eventDispatcher.shutdown()
   
   server.close(() => {
