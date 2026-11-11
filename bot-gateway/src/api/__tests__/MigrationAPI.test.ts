@@ -226,7 +226,7 @@ describe('GET /bridge/v2/migrate/callback', () => {
     const res = await supertest(makeApp()).get(`/bridge/v2/migrate/callback?code=abc123&state=${STATE}`)
 
     expect(res.status).toBe(302)
-    expect(res.headers.location).toBe(`${APP}/migrate/${TOKEN}?ticket=${TICKET}`)
+    expect(res.headers.location).toBe(`${APP}/migrate/${TOKEN}?ticket=${TICKET}&username=dave`)
     expect(mocks.discord.exchangeUserCode).toHaveBeenCalledWith({
       clientId: CLIENT_ID,
       clientSecret: CLIENT_SECRET,

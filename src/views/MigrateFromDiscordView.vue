@@ -140,6 +140,7 @@ import {
 } from '@/services/discordMigrationService'
 import { useAuthStore } from '@/stores/auth'
 import { useProfileStore } from '@/stores/useProfile'
+import { useServerChannelStore } from '@/stores/useServerChannel'
 import { normalizeUsernameInput } from '@/utils/usernameRules'
 
 type ViewState = 'loading' | 'landing' | 'error' | 'claiming' | 'done' | 'form' | 'confirm-email' | 'federated'
@@ -174,7 +175,8 @@ const rolesGranted = ref<string[]>([])
 const claimedServerId = ref<string | null>(null)
 const syncFields = ref<SyncField[]>([])
 
-const username = ref('')
+// The gateway adds the Discord username to the return address.
+const username = ref(normalizeUsernameInput(queryValue('username')))
 const email = ref('')
 const password = ref('')
 const formError = ref('')
@@ -205,7 +207,10 @@ async function signOutHere() {
 }
 
 function openServer() {
-  if (claimedServerId.value) void router.push(`/chat/${claimedServerId.value}`)
+  if (!claimedServerId.value) return
+  // Same as picking the server in the sidebar; the chat route lands on its first channel.
+  useServerChannelStore().setCurrentServer(claimedServerId.value)
+  void router.push({ name: 'Chat' })
 }
 
 async function runClaim() {
@@ -220,8 +225,24 @@ async function runClaim() {
     }
     state.value = 'done'
   } catch (err) {
-    showError(err instanceof DiscordMigrationError ? err.code : 'unknown')
+    const code = err instanceof DiscordMigrationError ? err.code : 'unknown'
+    // NewProfile may have claimed this very ticket before the member came back here.
+    if (code === 'ticket_expired' && (await showAlreadyLinked())) return
+    showError(code)
   }
+}
+
+/** True when the member already holds an active link to this migration's server. */
+async function showAlreadyLinked(): Promise<boolean> {
+  const serverId = server.value?.serverId
+  if (!serverId) return false
+  const link = await myLink(serverId).catch(() => null)
+  if (link?.status !== 'active') return false
+  rolesGranted.value = []
+  claimedServerId.value = serverId
+  syncFields.value = link.syncFields
+  state.value = 'done'
+  return true
 }
 
 async function submitAccount() {
@@ -265,7 +286,7 @@ onMounted(async () => {
     return
   }
   if (ticket && signedIn.value) {
-    void preview(token).then((p) => { server.value = p }).catch(() => {})
+    server.value = await preview(token).catch(() => null)
     await runClaim()
     return
   }

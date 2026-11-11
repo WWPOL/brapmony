@@ -1477,7 +1477,7 @@ AS $$
                     WHERE us.server_id = p_server_id AND us.status = 'accepted' AND us.user_id = p_user_id)
 $$;
 
--- The public landing page of /migrate/<token>: {server_name, icon_url} while the migration is open, else null.
+-- The public landing page of /migrate/<token>: {server_id, server_name, icon_url} while the migration is open, else null.
 -- Reachable signed out; it reveals nothing the link holder could not see by opening the migration.
 CREATE OR REPLACE FUNCTION public.discord_migration_preview(p_token text)
 RETURNS jsonb
@@ -1486,7 +1486,7 @@ STABLE
 SECURITY DEFINER
 SET search_path = public, extensions, pg_temp
 AS $$
-    SELECT jsonb_build_object('server_name', s.name, 'icon_url', s.icon)
+    SELECT jsonb_build_object('server_id', s.id, 'server_name', s.name, 'icon_url', s.icon)
       FROM public.discord_migrations m
       JOIN public.servers s ON s.id = m.server_id
      WHERE m.link_token = p_token AND m.state = 'open'

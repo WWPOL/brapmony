@@ -401,7 +401,7 @@ export class MigrationAPI {
     const claim = data as { ticket?: string; error?: string } | null
     if (claim?.error) return back(claim.error.toLowerCase())
     if (!claim?.ticket) return back('unavailable')
-    res.redirect(302, this.appUrl(base, token, { ticket: claim.ticket }))
+    res.redirect(302, this.appUrl(base, token, { ticket: claim.ticket, username: user.value.username }))
   }
 
   // ---------------------------------------------------------------- account

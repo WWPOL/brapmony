@@ -67,8 +67,8 @@ describe('claim', () => {
 
 describe('preview', () => {
   it('maps the rpc payload', async () => {
-    rpc.mockResolvedValue({ data: { server_name: 'Lobby', icon_url: null }, error: null })
-    expect(await preview('tok')).toEqual({ serverName: 'Lobby', iconUrl: null })
+    rpc.mockResolvedValue({ data: { server_id: 'srv', server_name: 'Lobby', icon_url: null }, error: null })
+    expect(await preview('tok')).toEqual({ serverId: 'srv', serverName: 'Lobby', iconUrl: null })
     expect(rpc).toHaveBeenCalledWith('discord_migration_preview', { p_token: 'tok' })
   })
 

@@ -40,6 +40,7 @@ vi.mock('vue-router', () => ({
   RouterLink: { props: ['to'], template: '<a :href="typeof to === \'string\' ? to : \'\'"><slot /></a>' },
 }))
 vi.mock('@/stores/auth', () => ({ useAuthStore: () => h.auth }))
+vi.mock('@/stores/useServerChannel', () => ({ useServerChannelStore: () => ({ setCurrentServer: vi.fn() }) }))
 vi.mock('@/stores/useProfile', () => ({ useProfileStore: () => h.profile }))
 vi.mock('@/services/discordMigrationService', () => ({
   ...h.svc,
@@ -57,7 +58,7 @@ async function open(query: Record<string, string> = {}) {
 
 beforeEach(() => {
   Object.values(h.svc).forEach(fn => (fn as any).mockReset?.())
-  h.svc.preview.mockResolvedValue({ serverName: 'Lobby', iconUrl: null })
+  h.svc.preview.mockResolvedValue({ serverId: 'srv', serverName: 'Lobby', iconUrl: null })
   h.svc.setMySync.mockResolvedValue(undefined)
   h.svc.myLink.mockResolvedValue(null)
   h.auth.isLoggedIn = false
@@ -122,6 +123,30 @@ describe('MigrateFromDiscordView', () => {
     h.svc.claim.mockRejectedValue(new h.DiscordMigrationError('kicked_on_harmony'))
     const wrapper = await open({ ticket: 'tkt' })
     expect(wrapper.get('[data-testid="migrate-error"]').text()).toContain('discordMigration.migrate.errors.kicked_on_harmony')
+  })
+
+  it('a ticket claimed meanwhile (TICKET_EXPIRED) with an active link shows the result, not an error', async () => {
+    h.auth.isLoggedIn = true
+    h.profile.profile = { username: 'alice', is_local: true }
+    h.svc.claim.mockRejectedValue(new h.DiscordMigrationError('ticket_expired'))
+    h.svc.myLink.mockResolvedValue({ status: 'active', syncFields: ['avatar'], discordJoinedAt: null })
+    const wrapper = await open({ ticket: 'tkt' })
+    expect(h.svc.myLink).toHaveBeenCalledWith('srv')
+    expect(wrapper.find('[data-testid="migrate-error"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="migrate-done"]').exists()).toBe(true)
+  })
+
+  it('TICKET_EXPIRED without a link is still an error', async () => {
+    h.auth.isLoggedIn = true
+    h.profile.profile = { username: 'alice', is_local: true }
+    h.svc.claim.mockRejectedValue(new h.DiscordMigrationError('ticket_expired'))
+    const wrapper = await open({ ticket: 'tkt' })
+    expect(wrapper.get('[data-testid="migrate-error"]').text()).toContain('ticket_expired')
+  })
+
+  it('prefills the username from the Discord username in the address', async () => {
+    const wrapper = await open({ ticket: 'tkt', username: 'dave_d' })
+    expect((wrapper.get('[data-testid="migrate-username"]').element as HTMLInputElement).value).toBe('dave_d')
   })
 
   it('a federated session is asked to create an account here', async () => {

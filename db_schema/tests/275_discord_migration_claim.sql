@@ -10,7 +10,7 @@
 --              map D1 -> Mod, D2 -> Adm
 BEGIN;
 SET LOCAL search_path = tests, public;
-SELECT plan(82);
+SELECT plan(83);
 
 CREATE TEMP TABLE out (k text PRIMARY KEY, v jsonb) ON COMMIT DROP;
 GRANT ALL ON out TO PUBLIC;
@@ -407,6 +407,8 @@ INSERT INTO out SELECT 'tok', to_jsonb(m.link_token) FROM public.discord_migrati
 SET LOCAL role anon;
 SELECT is(public.discord_migration_preview((SELECT v #>> '{}' FROM out WHERE k = 'tok')) ->> 'server_name',
   'S2 275', 'preview names the server of an open migration, for anon');
+SELECT is(public.discord_migration_preview((SELECT v #>> '{}' FROM out WHERE k = 'tok')) ->> 'server_id',
+  'f2750000-0000-0000-0000-0000000000a2', 'preview carries the server id');
 SELECT is(public.discord_migration_preview('0000'), NULL, 'preview of an unknown token is null');
 RESET role;
 SELECT tests.authenticate_as('aaaaaaaa-0000-0000-0000-000000000001');

@@ -30,6 +30,7 @@ export class DiscordMigrationError extends Error {
 }
 
 export interface MigrationPreview {
+  serverId: string
   serverName: string
   iconUrl: string | null
 }
@@ -60,9 +61,9 @@ function rpcCode(error: { message?: string; code?: string }): string {
 export async function preview(token: string): Promise<MigrationPreview | null> {
   const { data, error } = await supabase.rpc('discord_migration_preview', { p_token: token })
   if (error) throw new DiscordMigrationError('unavailable')
-  const row = data as { server_name?: string; icon_url?: string | null } | null
+  const row = data as { server_id?: string; server_name?: string; icon_url?: string | null } | null
   if (!row?.server_name) return null
-  return { serverName: row.server_name, iconUrl: row.icon_url ?? null }
+  return { serverId: row.server_id ?? '', serverName: row.server_name, iconUrl: row.icon_url ?? null }
 }
 
 /** Full-page navigation: the gateway sends the browser on to Discord and back to /migrate/<token>. */
