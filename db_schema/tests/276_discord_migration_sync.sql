@@ -8,7 +8,7 @@
 --   s1  roles Mod (c1), Helper (c4), Artist (c3, unmapped), Admins (c2, ADMINISTRATOR); map D1 -> Mod, D2 -> Admins
 BEGIN;
 SET LOCAL search_path = tests, public;
-SELECT plan(76);
+SELECT plan(91);
 
 CREATE TEMP TABLE out (k text PRIMARY KEY, v jsonb) ON COMMIT DROP;
 GRANT ALL ON out TO PUBLIC;
@@ -219,6 +219,31 @@ RESET role;
 SELECT is((SELECT color FROM public.profiles WHERE id = '22222222-0000-0000-0000-000000000002'), '#ff0000',
   'profile: a non-integer or out-of-range accent colour is ignored, not an error');
 
+-- a profile write that fails does not undo the member's role sync ------------------------------------------
+-- (a non-string server banner makes service_set_member_server_profile raise after the display name was written)
+UPDATE public.discord_migration_links SET sync_fields = sync_fields || ARRAY['server_banner']
+ WHERE server_id = 'f2760000-0000-0000-0000-0000000000a1' AND user_id = '22222222-0000-0000-0000-000000000002';
+SET LOCAL role service_role;
+INSERT INTO out VALUES ('pe', public.discord_migration_sync_member('f2760000-0000-0000-0000-0000000000a1',
+  '22222222-0000-0000-0000-000000000002',
+  jsonb_build_object('present', true, 'role_ids', jsonb_build_array('700000000000000001'),
+                     'profile', jsonb_build_object('display_name', 'Half Written', 'server_banner_url', 5))));
+RESET role;
+UPDATE public.discord_migration_links SET sync_fields = array_remove(sync_fields, 'server_banner')
+ WHERE server_id = 'f2760000-0000-0000-0000-0000000000a1' AND user_id = '22222222-0000-0000-0000-000000000002';
+SELECT is((SELECT v -> 'profile_error' FROM out WHERE k = 'pe'), 'true'::jsonb, 'profile failure: the result says profile_error');
+SELECT ok(EXISTS (SELECT 1 FROM public.user_roles WHERE user_id = '22222222-0000-0000-0000-000000000002'
+                     AND role_id = 'f2760000-0000-0000-0000-0000000000c4'), 'profile failure: the roles were still applied');
+SELECT is((SELECT display_name FROM public.profiles WHERE id = '22222222-0000-0000-0000-000000000002'), 'Disc Bob 2',
+  'profile failure: the profile writes were rolled back together');
+SELECT ok((SELECT last_synced_at > now() - interval '1 minute' FROM public.discord_migration_links
+            WHERE server_id = 'f2760000-0000-0000-0000-0000000000a1' AND user_id = '22222222-0000-0000-0000-000000000002'),
+  'profile failure: and the link is marked synced');
+SET LOCAL role service_role;
+SELECT public.discord_migration_sync_member('f2760000-0000-0000-0000-0000000000a1',
+  '22222222-0000-0000-0000-000000000002', '{"present": true, "role_ids": []}');
+RESET role;
+
 -- timeouts_respect_harmony -----------------------------------------------------------------------------
 SET LOCAL role service_role;
 SELECT public.discord_migration_sync_member('f2760000-0000-0000-0000-0000000000a1',
@@ -320,6 +345,14 @@ SELECT is((SELECT count(*)::int FROM public.server_audit_log
   'removal_kinds: and the generic trigger wrote no extra row');
 
 -- brake_and_pause (s3: 30 active links) ---------------------------------------------------------------
+-- bob manages s3 through a MANAGE_SERVER role; mallory is a plain member; the owner is alice.
+INSERT INTO public.user_servers (user_id, server_id, status) VALUES
+  ('22222222-0000-0000-0000-000000000002', 'f2760000-0000-0000-0000-0000000000a3', 'accepted'),
+  ('33333333-0000-0000-0000-000000000003', 'f2760000-0000-0000-0000-0000000000a3', 'accepted');
+INSERT INTO public.server_roles (id, server_id, name, position, permissions) VALUES
+  ('f2760000-0000-0000-0000-0000000000c6', 'f2760000-0000-0000-0000-0000000000a3', 'Mgr276', 2, 128);
+INSERT INTO public.user_roles (user_id, role_id, server_id) VALUES
+  ('22222222-0000-0000-0000-000000000002', 'f2760000-0000-0000-0000-0000000000c6', 'f2760000-0000-0000-0000-0000000000a3');
 UPDATE public.discord_migrations SET sync_requested_at = now() WHERE server_id = 'f2760000-0000-0000-0000-0000000000a3';
 SELECT ok(EXISTS (SELECT 1 FROM public.discord_migration_due(100) d WHERE d ->> 'server_id' = 'f2760000-0000-0000-0000-0000000000a3'),
   'brake: s3 is due before it is paused');
@@ -340,6 +373,16 @@ SELECT is((SELECT count(*)::int FROM public.server_audit_log WHERE server_id = '
   1, 'brake: the pause is audited');
 SELECT ok(NOT EXISTS (SELECT 1 FROM public.discord_migration_due(100) d WHERE d ->> 'server_id' = 'f2760000-0000-0000-0000-0000000000a3'),
   'brake: a paused migration is no longer due');
+-- the pause tells the people who can resume it
+SELECT is((SELECT array_agg(n.user_id ORDER BY n.user_id) FROM public.notifications n
+            WHERE n.type = 'discord_migration_paused' AND n.data #>> '{server,id}' = 'f2760000-0000-0000-0000-0000000000a3'),
+  ARRAY['11111111-0000-0000-0000-000000000001', '22222222-0000-0000-0000-000000000002']::uuid[],
+  'pause: the owner (once) and the MANAGE_SERVER holder are notified, a plain member is not');
+SELECT is((SELECT n.data FROM public.notifications n
+            WHERE n.type = 'discord_migration_paused' AND n.user_id = '11111111-0000-0000-0000-000000000001'
+              AND n.data #>> '{server,id}' = 'f2760000-0000-0000-0000-0000000000a3'),
+  '{"server": {"id": "f2760000-0000-0000-0000-0000000000a3", "name": "S3 276"}, "reason": "removal_brake"}'::jsonb,
+  'pause: the notification names the server and the reason');
 
 -- due_ordering + record_sync --------------------------------------------------------------------------
 UPDATE public.discord_migrations SET state = 'finished', sync_requested_at = now() WHERE server_id = 'f2760000-0000-0000-0000-0000000000a2';
@@ -415,6 +458,56 @@ SELECT is((SELECT v -> 'skipped' -> 0 ->> 'reason' FROM out WHERE k = 'ab'), 'er
 SELECT is((SELECT v ->> 'applied' FROM out WHERE k = 'ab'), '2', 'isolation: the others still apply');
 SELECT is((SELECT status FROM public.discord_migration_links WHERE server_id = 'f2760000-0000-0000-0000-0000000000a2'
               AND user_id = 'f2760000-0000-0000-0000-000000001005'), 'left', 'isolation: the later candidate was removed');
+
+-- brake_override: resuming a removal_brake pause approves those removals, once (s3: paused above) ---------
+SELECT is((SELECT brake_override FROM public.discord_migrations WHERE server_id = 'f2760000-0000-0000-0000-0000000000a3'), false,
+  'override: off while the brake is tripped');
+SELECT tests.authenticate_as('aaaaaaaa-0000-0000-0000-000000000001');
+SELECT public.discord_migration_set_state('f2760000-0000-0000-0000-0000000000a3', 'open');
+SELECT tests.clear_authentication();
+SELECT results_eq($q$SELECT sync_paused_reason IS NULL, brake_override, sync_requested_at IS NOT NULL
+                       FROM public.discord_migrations WHERE server_id = 'f2760000-0000-0000-0000-0000000000a3'$q$,
+  $q$VALUES (true, true, true)$q$, 'override: resuming a removal_brake pause clears it, sets the override and asks for a sync');
+SET LOCAL role service_role;
+INSERT INTO out VALUES ('ov', public.discord_migration_apply_removals('f2760000-0000-0000-0000-0000000000a3',
+  '[{"user_id": "f2760000-0000-0000-0000-000000001011", "kind": "left"}, {"user_id": "f2760000-0000-0000-0000-000000001012", "kind": "left"},
+    {"user_id": "f2760000-0000-0000-0000-000000001013", "kind": "banned"}, {"user_id": "f2760000-0000-0000-0000-000000001014", "kind": "left"}]'));
+RESET role;
+SELECT is((SELECT v ->> 'applied' FROM out WHERE k = 'ov'), '4', 'override: the same four removals now apply');
+SELECT is((SELECT count(*)::int FROM public.user_servers WHERE server_id = 'f2760000-0000-0000-0000-0000000000a3'
+              AND user_id IN ('f2760000-0000-0000-0000-000000001011', 'f2760000-0000-0000-0000-000000001012',
+                              'f2760000-0000-0000-0000-000000001013', 'f2760000-0000-0000-0000-000000001014')),
+  0, 'override: and the four are gone');
+SELECT is((SELECT brake_override FROM public.discord_migrations WHERE server_id = 'f2760000-0000-0000-0000-0000000000a3'), false,
+  'override: cleared after the pass that used it');
+SET LOCAL role service_role;
+INSERT INTO out VALUES ('ov2', public.discord_migration_apply_removals('f2760000-0000-0000-0000-0000000000a3',
+  '[{"user_id": "f2760000-0000-0000-0000-000000001021", "kind": "left"}, {"user_id": "f2760000-0000-0000-0000-000000001022", "kind": "left"},
+    {"user_id": "f2760000-0000-0000-0000-000000001023", "kind": "left"}]'));
+RESET role;
+SELECT is((SELECT v FROM out WHERE k = 'ov2'), '{"paused": true}'::jsonb, 'override: a later big batch trips the brake again');
+SELECT is((SELECT sync_paused_reason FROM public.discord_migrations WHERE server_id = 'f2760000-0000-0000-0000-0000000000a3'),
+  'removal_brake', 'override: and the pause is recorded');
+-- a pause for another reason leaves the override off; a pass that finds nothing to remove also spends it
+SET LOCAL role service_role;
+SELECT public.discord_migration_pause('f2760000-0000-0000-0000-0000000000a3', 'token_invalid');
+RESET role;
+SELECT tests.authenticate_as('aaaaaaaa-0000-0000-0000-000000000001');
+SELECT public.discord_migration_set_state('f2760000-0000-0000-0000-0000000000a3', 'open');
+SELECT tests.clear_authentication();
+SELECT is((SELECT brake_override FROM public.discord_migrations WHERE server_id = 'f2760000-0000-0000-0000-0000000000a3'), false,
+  'override: resuming any other pause reason does not set it');
+SET LOCAL role service_role;
+SELECT public.discord_migration_pause('f2760000-0000-0000-0000-0000000000a3', 'removal_brake');
+RESET role;
+SELECT tests.authenticate_as('aaaaaaaa-0000-0000-0000-000000000001');
+SELECT public.discord_migration_set_state('f2760000-0000-0000-0000-0000000000a3', 'open');
+SELECT tests.clear_authentication();
+SET LOCAL role service_role;
+SELECT public.discord_migration_record_sync('f2760000-0000-0000-0000-0000000000a3', '{"checked": 1}', NULL, NULL, true);
+RESET role;
+SELECT is((SELECT brake_override FROM public.discord_migrations WHERE server_id = 'f2760000-0000-0000-0000-0000000000a3'), false,
+  'override: a completed pass with nothing to remove spends it too');
 
 -- a claim records what it granted, so a remap takes it back (s4) -------------------------------------------
 INSERT INTO public.servers (id, name, owner) VALUES

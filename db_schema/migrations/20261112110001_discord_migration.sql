@@ -65,6 +65,10 @@ CREATE TABLE IF NOT EXISTS public.discord_migrations (
     CONSTRAINT discord_migrations_token_key UNIQUE (link_token)
 );
 
+-- Set when a manager resumes a removal_brake pause: the one pass after it applies those removals without
+-- the brake. apply_removals and a completed record_sync spend it; a new pause resets it.
+ALTER TABLE public.discord_migrations ADD COLUMN IF NOT EXISTS brake_override boolean NOT NULL DEFAULT false;
+
 CREATE TABLE IF NOT EXISTS public.discord_migration_secrets (
     server_id uuid PRIMARY KEY REFERENCES public.discord_migrations(server_id) ON DELETE CASCADE,
     client_id text,
@@ -779,19 +783,23 @@ SET search_path = public, extensions, pg_temp
 AS $$
 DECLARE
     v_cur text;
+    v_reason text;
 BEGIN
     PERFORM public.discord_migration_assert_manager(p_server_id);
-    SELECT m.state INTO v_cur FROM public.discord_migrations m WHERE m.server_id = p_server_id FOR UPDATE;
+    SELECT m.state, m.sync_paused_reason INTO v_cur, v_reason
+      FROM public.discord_migrations m WHERE m.server_id = p_server_id FOR UPDATE;
     IF NOT FOUND THEN
         RAISE EXCEPTION 'migration_not_configured' USING ERRCODE = 'P0002';
     END IF;
 
     IF p_state = 'open' THEN
         -- An open migration that sync paused resumes: the pause is cleared and a sync asked for.
-        IF v_cur = 'open' AND EXISTS (SELECT 1 FROM public.discord_migrations m
-                                       WHERE m.server_id = p_server_id AND m.sync_paused_reason IS NOT NULL) THEN
+        -- Resuming from a removal_brake pause is the manager's approval of the removals that tripped it: the
+        -- next pass applies them once without the brake (brake_override).
+        IF v_cur = 'open' AND v_reason IS NOT NULL THEN
             UPDATE public.discord_migrations
-               SET sync_paused_reason = NULL, sync_requested_at = now(), updated_at = now()
+               SET sync_paused_reason = NULL, sync_requested_at = now(), updated_at = now(),
+                   brake_override = (v_reason = 'removal_brake')
              WHERE server_id = p_server_id;
             RETURN public.discord_migration_get(p_server_id);
         END IF;
@@ -1361,13 +1369,16 @@ BEGIN
     END IF;
 
     BEGIN
+        -- last_synced_at = NULL puts the link first in the next sync batch: the roles recorded at sign-in may be
+        -- stale, and a fresh Discord read corrects them.
         INSERT INTO public.discord_migration_links
-            (server_id, user_id, discord_user_id, status, discord_role_ids, discord_joined_at)
+            (server_id, user_id, discord_user_id, status, discord_role_ids, discord_joined_at, last_synced_at)
         VALUES (v_claim.server_id, v_me, v_claim.discord_user_id, 'active',
-                v_claim.discord_role_ids, v_claim.discord_joined_at)
+                v_claim.discord_role_ids, v_claim.discord_joined_at, NULL)
         ON CONFLICT (server_id, user_id) DO UPDATE
            SET status = 'active', discord_role_ids = EXCLUDED.discord_role_ids,
-               discord_joined_at = COALESCE(EXCLUDED.discord_joined_at, discord_migration_links.discord_joined_at);
+               discord_joined_at = COALESCE(EXCLUDED.discord_joined_at, discord_migration_links.discord_joined_at),
+               last_synced_at = NULL;
     EXCEPTION WHEN unique_violation THEN
         RAISE EXCEPTION 'DISCORD_ACCOUNT_TAKEN';
     END;
@@ -1385,6 +1396,11 @@ BEGIN
     END IF;
 
     PERFORM public.discord_migration_apply_roles(v_claim.server_id, v_me, v_claim.discord_role_ids);
+
+    -- A ticket that sat for more than 15 minutes asks for a sync now.
+    IF v_claim.created_at < now() - interval '15 minutes' THEN
+        UPDATE public.discord_migrations SET sync_requested_at = now() WHERE server_id = v_claim.server_id;
+    END IF;
 
     SELECT COALESCE(array_agg(DISTINCT sr.name), '{}') INTO v_names
       FROM public.discord_migration_role_map m
@@ -1954,19 +1970,31 @@ AS $$
      LIMIT GREATEST(COALESCE(p_limit, 0), 0)
 $$;
 
--- Stops syncing the server until a manager resumes it, and says so in the audit log.
+-- Stops syncing the server until a manager resumes it, says so in the audit log and notifies the owner and
+-- every accepted member who holds MANAGE_SERVER (discord_migration_paused: {server: {id, name}, reason}).
 CREATE OR REPLACE FUNCTION public.discord_migration_pause(p_server_id uuid, p_reason text)
 RETURNS void
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = public, extensions, pg_temp
 AS $$
+DECLARE
+    v_name text;
 BEGIN
-    UPDATE public.discord_migrations SET sync_paused_reason = p_reason, updated_at = now()
+    UPDATE public.discord_migrations SET sync_paused_reason = p_reason, brake_override = false, updated_at = now()
      WHERE server_id = p_server_id;
     IF NOT FOUND THEN
         RAISE EXCEPTION 'migration_not_configured' USING ERRCODE = 'P0002';
     END IF;
+    SELECT s.name INTO v_name FROM public.servers s WHERE s.id = p_server_id;
+    INSERT INTO public.notifications (user_id, type, data)
+    SELECT r.user_id, 'discord_migration_paused',
+           jsonb_build_object('server', jsonb_build_object('id', p_server_id, 'name', v_name), 'reason', p_reason)
+      FROM (SELECT s.owner AS user_id FROM public.servers s WHERE s.id = p_server_id AND s.owner IS NOT NULL
+            UNION
+            SELECT us.user_id FROM public.user_servers us
+             WHERE us.server_id = p_server_id AND us.status = 'accepted'
+               AND public.has_permission(us.user_id, p_server_id, 'MANAGE_SERVER')) r;
     PERFORM public.server_audit_write(p_server_id, 'discord_migration.paused', 'server', p_server_id::text, NULL, NULL,
         jsonb_build_object('reason', p_reason, 'via', 'discord_migration'), NULL, NULL, 'system');
 END;
@@ -1991,6 +2019,7 @@ BEGIN
     UPDATE public.discord_migrations
        SET last_sync_at = CASE WHEN COALESCE(p_complete, true) THEN now() ELSE last_sync_at END,
            last_sync_result = p_result, sync_cursor = p_cursor,
+           brake_override = CASE WHEN COALESCE(p_complete, true) THEN false ELSE brake_override END,
            sync_requested_at = CASE WHEN NOT COALESCE(p_complete, true) THEN now()
                                     WHEN p_started_at IS NULL OR sync_requested_at <= p_started_at
                                     THEN NULL ELSE sync_requested_at END,
@@ -2004,7 +2033,8 @@ $$;
 
 -- Syncs one member from what the gateway read. Returns {skipped: 'not_member'|'no_link'} for anyone who is
 -- not an accepted member with an active link (nothing changes), {candidate: 'left'|'banned'} when the member
--- is gone from Discord (nothing is removed here), otherwise {present: true, roles: {added, removed}}.
+-- is gone from Discord (nothing is removed here), otherwise {present: true, roles: {added, removed}}, plus
+-- profile_error: true when the profile writes failed (the roles and the timeout are still applied).
 -- A key missing from p_member (role_ids, joined_at, timed_out_until, a profile field) was not fetched and
 -- leaves that part alone.
 CREATE OR REPLACE FUNCTION public.discord_migration_sync_member(
@@ -2027,6 +2057,7 @@ DECLARE
     v_until timestamptz;
     v_timeout public.server_member_timeouts;
     v_username text;
+    v_profile_error boolean := false;
 BEGIN
     IF p_member IS NULL OR jsonb_typeof(p_member) <> 'object' THEN
         RAISE EXCEPTION 'p_member must be a JSON object' USING ERRCODE = '22023';
@@ -2071,32 +2102,38 @@ BEGIN
     END IF;
 
     -- Profile: only what the member opted into. A global value that is null leaves the profile alone.
-    IF 'avatar' = ANY (v_fields) AND jsonb_typeof(v_profile -> 'avatar_url') = 'string' THEN
-        UPDATE public.profiles SET avatar_url = v_profile ->> 'avatar_url' WHERE id = p_user_id;
-    END IF;
-    IF 'display_name' = ANY (v_fields) AND jsonb_typeof(v_profile -> 'display_name') = 'string' THEN
-        UPDATE public.profiles SET display_name = v_profile ->> 'display_name' WHERE id = p_user_id;
-    END IF;
-    IF 'banner' = ANY (v_fields) AND jsonb_typeof(v_profile -> 'banner_url') = 'string' THEN
-        UPDATE public.profiles SET banner_url = v_profile ->> 'banner_url' WHERE id = p_user_id;
-    END IF;
-    IF 'accent_color' = ANY (v_fields) AND jsonb_typeof(v_profile -> 'accent_color') = 'number'
-       AND (v_profile ->> 'accent_color') ~ '^[0-9]{1,8}$' AND (v_profile ->> 'accent_color')::bigint <= 16777215 THEN
-        v_color := (v_profile ->> 'accent_color')::integer;
-        UPDATE public.profiles SET color = '#' || lpad(to_hex(v_color & 16777215), 6, '0') WHERE id = p_user_id;
-    END IF;
-    IF 'server_nickname' = ANY (v_fields) AND v_profile ? 'server_nickname' THEN
-        v_server := v_server || jsonb_build_object('nickname', v_profile -> 'server_nickname');
-    END IF;
-    IF 'server_avatar' = ANY (v_fields) AND v_profile ? 'server_avatar_url' THEN
-        v_server := v_server || jsonb_build_object('avatar_url', v_profile -> 'server_avatar_url');
-    END IF;
-    IF 'server_banner' = ANY (v_fields) AND v_profile ? 'server_banner_url' THEN
-        v_server := v_server || jsonb_build_object('banner_url', v_profile -> 'server_banner_url');
-    END IF;
-    IF v_server <> '{}'::jsonb THEN
-        PERFORM public.service_set_member_server_profile(p_server_id, p_user_id, v_server);
-    END IF;
+    -- A write that fails (a value over its limit, say) skips the profile part and nothing else: the roles
+    -- above stay applied. The result carries profile_error.
+    BEGIN
+        IF 'avatar' = ANY (v_fields) AND jsonb_typeof(v_profile -> 'avatar_url') = 'string' THEN
+            UPDATE public.profiles SET avatar_url = v_profile ->> 'avatar_url' WHERE id = p_user_id;
+        END IF;
+        IF 'display_name' = ANY (v_fields) AND jsonb_typeof(v_profile -> 'display_name') = 'string' THEN
+            UPDATE public.profiles SET display_name = v_profile ->> 'display_name' WHERE id = p_user_id;
+        END IF;
+        IF 'banner' = ANY (v_fields) AND jsonb_typeof(v_profile -> 'banner_url') = 'string' THEN
+            UPDATE public.profiles SET banner_url = v_profile ->> 'banner_url' WHERE id = p_user_id;
+        END IF;
+        IF 'accent_color' = ANY (v_fields) AND jsonb_typeof(v_profile -> 'accent_color') = 'number'
+           AND (v_profile ->> 'accent_color') ~ '^[0-9]{1,8}$' AND (v_profile ->> 'accent_color')::bigint <= 16777215 THEN
+            v_color := (v_profile ->> 'accent_color')::integer;
+            UPDATE public.profiles SET color = '#' || lpad(to_hex(v_color & 16777215), 6, '0') WHERE id = p_user_id;
+        END IF;
+        IF 'server_nickname' = ANY (v_fields) AND v_profile ? 'server_nickname' THEN
+            v_server := v_server || jsonb_build_object('nickname', v_profile -> 'server_nickname');
+        END IF;
+        IF 'server_avatar' = ANY (v_fields) AND v_profile ? 'server_avatar_url' THEN
+            v_server := v_server || jsonb_build_object('avatar_url', v_profile -> 'server_avatar_url');
+        END IF;
+        IF 'server_banner' = ANY (v_fields) AND v_profile ? 'server_banner_url' THEN
+            v_server := v_server || jsonb_build_object('banner_url', v_profile -> 'server_banner_url');
+        END IF;
+        IF v_server <> '{}'::jsonb THEN
+            PERFORM public.service_set_member_server_profile(p_server_id, p_user_id, v_server);
+        END IF;
+    EXCEPTION WHEN OTHERS THEN
+        v_profile_error := true;
+    END;
 
     -- Timeouts: Harmony's own (moderator, automod) are never replaced or lifted. The owner and
     -- Administrator holders cannot be timed out.
@@ -2137,13 +2174,15 @@ BEGIN
 
     UPDATE public.discord_migration_links SET last_synced_at = now()
      WHERE server_id = p_server_id AND user_id = p_user_id;
-    RETURN jsonb_build_object('present', true, 'roles', v_role_result);
+    RETURN jsonb_build_object('present', true, 'roles', v_role_result)
+        || CASE WHEN v_profile_error THEN jsonb_build_object('profile_error', true) ELSE '{}'::jsonb END;
 END;
 $$;
 
 -- Removes members the gateway saw leave or get banned on Discord. p_candidates is [{user_id, kind}] with
 -- kind left or banned. The removal brake pauses the whole batch instead when it would remove at least 3
--- members and more than removal_brake_pct of the active links. The owner and Administrator holders are
+-- members and more than removal_brake_pct of the active links, unless brake_override is set (a manager
+-- resumed a removal_brake pause): then this call applies the batch and spends the override. The owner and Administrator holders are
 -- skipped. Returns {paused: true} or {applied, skipped: [{user_id, reason}]}.
 CREATE OR REPLACE FUNCTION public.discord_migration_apply_removals(p_server_id uuid, p_candidates jsonb)
 RETURNS jsonb
@@ -2183,7 +2222,7 @@ BEGIN
     v_count := jsonb_array_length(p_candidates);
     SELECT count(*)::integer INTO v_active FROM public.discord_migration_links l
      WHERE l.server_id = p_server_id AND l.status = 'active';
-    IF v_count >= 3 AND v_count * 100 > v_mig.removal_brake_pct * v_active THEN
+    IF NOT v_mig.brake_override AND v_count >= 3 AND v_count * 100 > v_mig.removal_brake_pct * v_active THEN
         PERFORM public.discord_migration_pause(p_server_id, 'removal_brake');
         RETURN jsonb_build_object('paused', true);
     END IF;
@@ -2248,6 +2287,9 @@ BEGIN
     END LOOP;
 
     PERFORM set_config('harmony.via', COALESCE(v_prev_via, ''), true);
+    IF v_mig.brake_override THEN
+        UPDATE public.discord_migrations SET brake_override = false WHERE server_id = p_server_id;
+    END IF;
     RETURN jsonb_build_object('applied', v_applied, 'skipped', v_skipped);
 END;
 $$;

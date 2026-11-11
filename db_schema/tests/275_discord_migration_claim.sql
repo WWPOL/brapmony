@@ -10,7 +10,7 @@
 --              map D1 -> Mod, D2 -> Adm
 BEGIN;
 SET LOCAL search_path = tests, public;
-SELECT plan(83);
+SELECT plan(87);
 
 CREATE TEMP TABLE out (k text PRIMARY KEY, v jsonb) ON COMMIT DROP;
 GRANT ALL ON out TO PUBLIC;
@@ -113,6 +113,38 @@ SELECT is((SELECT count(*)::int FROM public.discord_migration_links WHERE server
               AND user_id = '22222222-0000-0000-0000-000000000002'), 1, 'and keeps one link');
 SELECT is((SELECT count(*)::int FROM public.user_roles ur JOIN public.server_roles sr ON sr.id = ur.role_id WHERE sr.name LIKE '%275' AND ur.server_id = 'f2750000-0000-0000-0000-0000000000a2'
               AND user_id = '22222222-0000-0000-0000-000000000002'), 1, 'and one role');
+
+-- A claim asks for a fresh Discord check: the link is marked unsynced, and a ticket older than 15 minutes also
+-- asks for a sync now (its recorded roles may be stale).
+UPDATE public.discord_migration_links SET last_synced_at = now()
+ WHERE server_id = 'f2750000-0000-0000-0000-0000000000a2' AND user_id = '22222222-0000-0000-0000-000000000002';
+SET LOCAL role service_role;
+INSERT INTO out VALUES ('t1c', public.discord_migration_create_claim('f2750000-0000-0000-0000-0000000000a2',
+  '{"id":"600000000000000001","username":"bobd"}'::jsonb, ARRAY['700000000000000001'], NULL));
+RESET role;
+SELECT tests.authenticate_as('bbbbbbbb-0000-0000-0000-000000000002');
+SELECT public.discord_migration_claim(v ->> 'ticket') FROM out WHERE k = 't1c';
+SELECT tests.clear_authentication();
+SELECT ok((SELECT last_synced_at IS NULL FROM public.discord_migration_links
+            WHERE server_id = 'f2750000-0000-0000-0000-0000000000a2' AND user_id = '22222222-0000-0000-0000-000000000002'),
+  'a claim clears last_synced_at so the link is synced first');
+SELECT ok((SELECT sync_requested_at IS NULL FROM public.discord_migrations WHERE server_id = 'f2750000-0000-0000-0000-0000000000a2'),
+  'a fresh ticket does not ask for a sync');
+SET LOCAL role service_role;
+INSERT INTO out VALUES ('t1d', public.discord_migration_create_claim('f2750000-0000-0000-0000-0000000000a2',
+  '{"id":"600000000000000001","username":"bobd"}'::jsonb, ARRAY['700000000000000001'], NULL));
+RESET role;
+UPDATE public.discord_migration_claims SET created_at = now() - interval '16 minutes'
+ WHERE ticket = (SELECT v ->> 'ticket' FROM out WHERE k = 't1d');
+SELECT tests.authenticate_as('bbbbbbbb-0000-0000-0000-000000000002');
+SELECT public.discord_migration_claim(v ->> 'ticket') FROM out WHERE k = 't1d';
+SELECT tests.clear_authentication();
+SELECT ok((SELECT sync_requested_at > now() - interval '1 minute' FROM public.discord_migrations
+            WHERE server_id = 'f2750000-0000-0000-0000-0000000000a2'), 'a ticket older than 15 minutes asks for a sync now');
+SELECT ok((SELECT last_synced_at IS NULL FROM public.discord_migration_links
+            WHERE server_id = 'f2750000-0000-0000-0000-0000000000a2' AND user_id = '22222222-0000-0000-0000-000000000002'),
+  'and the link stays unsynced');
+UPDATE public.discord_migrations SET sync_requested_at = NULL WHERE server_id = 'f2750000-0000-0000-0000-0000000000a2';
 
 -- Administrator mapping notifies the owner ---------------------------------------------------------
 SET LOCAL role service_role;

@@ -67,6 +67,7 @@ export interface MigrationSyncDeps {
   }
   /** Copies a Discord CDN image into Harmony storage and returns the value to store; throws on failure. */
   mirror?: (url: string, target: MirrorTarget) => Promise<string>
+  /** The migration row, null when there is none; throws on a database error. */
   loadMigration?: (serverId: string) => Promise<MigrationInfo | null>
   loadLink?: (serverId: string, userId: string) => Promise<MigrationLink | null>
   now?: () => number
@@ -201,7 +202,13 @@ export class MigrationSyncRunner {
     const creds = await this.credentials(serverId)
     if (creds === null) return pauseWith('credentials_missing')
     if (creds === 'error') return transient()
-    const info = await this.loadMigration(serverId)
+    let info: MigrationInfo | null
+    try {
+      info = await this.loadMigration(serverId)
+    } catch {
+      // A DB error says nothing about the credentials: try again later instead of pausing.
+      return transient()
+    }
     const guildId = info?.discord_guild_id ?? m.discord_guild_id
     if (!info || !guildId) return pauseWith('credentials_missing')
 
@@ -513,7 +520,7 @@ async function defaultLoadMigration(serverId: string): Promise<MigrationInfo | n
     .maybeSingle()
   if (error) {
     console.error('discord_migrations lookup failed:', error.code, error.message)
-    return null
+    throw new Error('migration_lookup_failed')
   }
   return (data as MigrationInfo | null) ?? null
 }

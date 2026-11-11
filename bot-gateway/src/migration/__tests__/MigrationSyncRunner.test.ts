@@ -72,6 +72,8 @@ interface Setup {
   budgetMs?: number
   batch?: number
   realMirror?: boolean
+  loadMigrationFails?: boolean
+  noMigrationRow?: boolean
 }
 
 function build(s: Setup = {}) {
@@ -106,12 +108,16 @@ function build(s: Setup = {}) {
     fetchBan: vi.fn(async () => ok(s.bans ?? false)),
   }
   const mirror = vi.fn(async (_url: string, t: { bucket: string; folder: string; stem: string }) => `${t.folder}/${t.stem}-1.png`)
-  const loadMigration = vi.fn(async () => ({
+  const loadMigration = vi.fn(async () => {
+    if (s.loadMigrationFails) throw new Error('connection reset')
+    if (s.noMigrationRow) return null
+    return {
     discord_guild_id: GUILD,
     bot_can_ban: s.canBan ?? false,
     state: 'open',
     sync_paused_reason: null,
-  }))
+    }
+  })
   const loadLink = vi.fn(async (_s: string, userId: string) => links.find((l) => l.user_id === userId) ?? null)
   const runner = new MigrationSyncRunner({
     rpc: rpc as any,
@@ -128,6 +134,21 @@ function build(s: Setup = {}) {
 }
 
 describe('MigrationSyncRunner.syncServer', () => {
+  it('backs off, without pausing, when the migration row cannot be read (a DB error)', async () => {
+    const t = build({ loadMigrationFails: true, links: [link(1)] })
+    const r = await t.runner.syncServer(due)
+    expect(t.of('discord_migration_pause')).toHaveLength(0)
+    expect(r.paused).toBeUndefined()
+    expect(r.errors).toBe(1)
+    expect(t.of('discord_migration_sync_member')).toHaveLength(0)
+  })
+
+  it('still pauses with credentials_missing when the migration row is gone', async () => {
+    const t = build({ noMigrationRow: true })
+    await t.runner.syncServer(due)
+    expect(t.of('discord_migration_pause')[0].args).toEqual({ p_server_id: SERVER, p_reason: 'credentials_missing' })
+  })
+
   it('pauses with credentials_missing', async () => {
     const t = build({ credsError: 'MIGRATION_CREDENTIALS_MISSING' })
     await t.runner.syncServer(due)
