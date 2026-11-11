@@ -5743,7 +5743,17 @@
       "grantedTitle": "通过 Discord 迁移，{user} 在 {server} 获得了管理员角色 {role}",
       "removedTitle": "通过 Discord 迁移，{user} 在 {server} 失去了管理员角色 {role}",
       "message": "迁移开放期间，{server} 中已映射角色由 Discord 决定归属。",
-      "short": "Discord 迁移更改了管理员角色"
+      "short": "Discord 迁移更改了管理员角色",
+      "pausedTitle": "{server} 的 Discord 迁移已暂停",
+      "pausedShort": "Discord 迁移已暂停",
+      "paused": {
+        "removal_brake": "{server} 的 Discord 迁移已自动暂停：大量成员同时离开 Discord 或在 Discord 被封禁。请在服务器设置中检查后恢复。",
+        "credentials_missing": "{server} 的 Discord 迁移已暂停：缺少 Discord 凭据。请在服务器设置中补充后恢复。",
+        "token_invalid": "{server} 的 Discord 迁移已暂停：Discord 拒绝了机器人令牌。请在服务器设置中更换令牌后恢复。",
+        "bot_not_in_guild": "{server} 的 Discord 迁移已暂停：机器人已不在该 Discord 服务器中。请重新添加机器人后恢复迁移。",
+        "discord_errors": "{server} 的 Discord 迁移已暂停：Discord 持续返回错误。待 Discord 恢复可用后，请在服务器设置中恢复。",
+        "generic": "{server} 的 Discord 迁移已暂停。请在服务器设置中恢复。"
+      }
     },
     "sync": {
       "title": "从 Discord 同步",
@@ -5768,6 +5778,8 @@
       "lead": "将你的 Discord 账号关联到 Harmony，社区迁移后即可保留你的角色，也可以选择保留资料。",
       "linkTo": "你将关联到 @{username}。",
       "notYou": "不是你？退出登录",
+      "signInInstead": "改为登录",
+      "signInInsteadHint": "然后再次选择“使用 Discord 登录”。",
       "signInWithDiscord": "使用 Discord 登录",
       "haveAccount": "我有 Harmony 账号",
       "newHere": "我是新用户：继续使用 Discord",
@@ -5892,6 +5904,7 @@
       "generic": "操作未成功。请重试。"
     },
     "adminConfirm": {
+      "holdersFailed": "无法加载拥有此角色的成员，请重试。",
       "title": "授予管理员权限?",
       "lead": "你正在把带有管理员权限的角色对应到一个 Harmony 角色。",
       "holders": "以下成员将成为本服务器的管理员:",
@@ -5920,6 +5933,9 @@
       "regenerateConfirmTitle": "重新生成链接?",
       "regenerateConfirmMessage": "已分享的链接将失效。",
       "pausedTitle": "同步已暂停。",
+      "resumeBrakeConfirmTitle": "移除已离开 Discord 的成员？",
+      "resumeBrakeConfirmMessage": "由于大量成员同时离开 Discord 或在 Discord 被封禁，同步已停止。恢复后，这些成员会立即从本服务器移除。此批准仅对这一轮有效；之后如再出现大批量移除，同步会再次暂停。",
+      "resumeBrakeConfirm": "移除并恢复",
       "pausedReasons": {
         "removal_brake": "一次性移除的成员比平时多,为方便你检查,同步已停止。"
       },

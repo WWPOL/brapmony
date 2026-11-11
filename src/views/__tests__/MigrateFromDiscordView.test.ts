@@ -21,6 +21,7 @@ const h = vi.hoisted(() => {
       saveSyncChoice: vi.fn(),
       myLink: vi.fn(),
       setMySync: vi.fn(async () => {}),
+      requestMySync: vi.fn(),
     },
     route: { params: { token: 'tok' } as Record<string, string>, query: {} as Record<string, string>, fullPath: '/migrate/tok' },
     router: { push: vi.fn(), replace: vi.fn() },
@@ -123,6 +124,69 @@ describe('MigrateFromDiscordView', () => {
     expect(wrapper.get('[data-testid="migrate-roles"]').text()).toContain('Mod')
     expect(wrapper.get('[data-testid="migrate-roles"]').text()).toContain('Artist')
     expect(wrapper.find('[data-testid="sync-avatar"]').exists()).toBe(true)
+  })
+
+  it('asks the gateway for a fresh sync after a successful claim, whatever the toggles', async () => {
+    h.auth.isLoggedIn = true
+    h.profile.profile = { username: 'alice', is_local: true }
+    h.svc.claim.mockResolvedValue({ serverId: 'srv', rolesGranted: [] })
+    await open({ ticket: 'tkt' })
+    expect(h.svc.requestMySync).toHaveBeenCalledTimes(1)
+    expect(h.svc.requestMySync).toHaveBeenCalledWith('srv')
+  })
+
+  it('does not ask for a sync when the claim is refused', async () => {
+    h.auth.isLoggedIn = true
+    h.profile.profile = { username: 'alice', is_local: true }
+    h.svc.claim.mockRejectedValue(new h.DiscordMigrationError('kicked_on_harmony'))
+    await open({ ticket: 'tkt' })
+    expect(h.svc.requestMySync).not.toHaveBeenCalled()
+  })
+
+  it('takes the ticket and username out of the address but keeps them for the form', async () => {
+    const wrapper = await open({ ticket: 'tkt', username: 'dave_d' })
+    expect(h.router.replace).toHaveBeenCalledWith({ path: '/migrate/tok', query: {} })
+    expect((wrapper.get('[data-testid="migrate-username"]').element as HTMLInputElement).value).toBe('dave_d')
+    expect(wrapper.find('[data-testid="migrate-form"]').exists()).toBe(true)
+  })
+
+  it('still claims the ticket it took out of the address', async () => {
+    h.auth.isLoggedIn = true
+    h.profile.profile = { username: 'alice', is_local: true }
+    h.svc.claim.mockResolvedValue({ serverId: 'srv', rolesGranted: [] })
+    await open({ ticket: 'tkt' })
+    expect(h.router.replace).toHaveBeenCalledWith({ path: '/migrate/tok', query: {} })
+    expect(h.svc.claim).toHaveBeenCalledWith('tkt')
+  })
+
+  it('leaves the address alone when it holds no ticket or username', async () => {
+    await open({ error: 'denied' })
+    expect(h.router.replace).not.toHaveBeenCalled()
+  })
+
+  it('email_exists offers to sign in instead and says to choose Discord again afterwards', async () => {
+    h.svc.createAccount.mockRejectedValue(new h.DiscordMigrationError('email_exists'))
+    const wrapper = await open({ ticket: 'tkt' })
+    await wrapper.get('[data-testid="migrate-username"]').setValue('newbie')
+    await wrapper.get('[data-testid="migrate-email"]').setValue('n@example.com')
+    await wrapper.get('[data-testid="migrate-password"]').setValue('correct horse battery')
+    await wrapper.get('[data-testid="migrate-form"]').trigger('submit')
+    await flushPromises()
+    const link = wrapper.get('[data-testid="migrate-signin-instead"]')
+    expect(link.attributes('href')).toBe('/login?redirect=%2Fmigrate%2Ftok')
+    expect(link.text()).toContain('discordMigration.migrate.signInInstead')
+    expect(wrapper.get('[data-testid="migrate-signin-hint"]').text()).toContain('discordMigration.migrate.signInInsteadHint')
+  })
+
+  it('other form errors do not offer the sign-in link', async () => {
+    h.svc.createAccount.mockRejectedValue(new h.DiscordMigrationError('username_taken'))
+    const wrapper = await open({ ticket: 'tkt' })
+    await wrapper.get('[data-testid="migrate-username"]').setValue('newbie')
+    await wrapper.get('[data-testid="migrate-email"]').setValue('n@example.com')
+    await wrapper.get('[data-testid="migrate-password"]').setValue('correct horse battery')
+    await wrapper.get('[data-testid="migrate-form"]').trigger('submit')
+    await flushPromises()
+    expect(wrapper.find('[data-testid="migrate-signin-instead"]').exists()).toBe(false)
   })
 
   it('a claim refusal shows its message', async () => {

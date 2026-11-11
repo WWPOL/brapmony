@@ -253,6 +253,7 @@ const TYPE_ICONS: Record<string, { icon: string; tone: string }> = {
   server_instance_removed: { icon: 'shield', tone: 'system' },
   outgoing_webhook_disabled: { icon: 'alert-triangle', tone: 'system' },
   discord_migration_admin_change: { icon: 'shield', tone: 'system' },
+  discord_migration_paused: { icon: 'pause', tone: 'system' },
   server_invite: { icon: 'server', tone: 'system' },
   voice_channel_activity: { icon: 'headphones', tone: 'system' },
 }

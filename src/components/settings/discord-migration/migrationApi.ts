@@ -61,6 +61,8 @@ export interface MigrationConfig {
   last_sync_result?: SyncResultSummary | null
   sync_requested_at?: string | null
   sync_paused_reason?: string | null
+  /** Set by resuming a removal_brake pause: the next pass applies those removals once. */
+  brake_override?: boolean
   bot_can_ban?: boolean | null
   readiness_warnings?: { unpaired_channels?: string[]; member_overrides?: number } | null
   has_own_credentials: boolean

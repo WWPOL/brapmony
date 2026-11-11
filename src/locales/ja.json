@@ -5743,7 +5743,17 @@
       "grantedTitle": "Discord移行により、{user}さんが{server}で管理者ロール「{role}」を付与されました",
       "removedTitle": "Discord移行により、{user}さんが{server}で管理者ロール「{role}」を失いました",
       "message": "移行が開いている間は、{server}の対応付けられたロールの付与はDiscordに従います。",
-      "short": "Discord移行で管理者ロールが変更されました"
+      "short": "Discord移行で管理者ロールが変更されました",
+      "pausedTitle": "{server}のDiscord移行が一時停止しました",
+      "pausedShort": "Discord移行が一時停止しました",
+      "paused": {
+        "removal_brake": "{server}のDiscord移行は自動で一時停止しました。多くのメンバーが同時にDiscordを退出またはBANされたためです。サーバー設定で内容を確認して再開してください。",
+        "credentials_missing": "{server}のDiscord移行は一時停止中です。Discordの認証情報がありません。サーバー設定で追加すると再開できます。",
+        "token_invalid": "{server}のDiscord移行は一時停止中です。Discordがボットトークンを拒否しました。サーバー設定でトークンを差し替えると再開できます。",
+        "bot_not_in_guild": "{server}のDiscord移行は一時停止中です。ボットがDiscordサーバーにいません。ボットを再度追加してから再開してください。",
+        "discord_errors": "{server}のDiscord移行は一時停止中です。Discordからのエラーが続きました。Discordに接続できるようになったら、サーバー設定で再開してください。",
+        "generic": "{server}のDiscord移行が一時停止しました。サーバー設定で再開してください。"
+      }
     },
     "sync": {
       "title": "Discordから同期",
@@ -5768,6 +5778,8 @@
       "lead": "DiscordアカウントをHarmonyにリンクすると、このコミュニティの移行後もロールを引き継げます。プロフィールも任意で引き継げます。",
       "linkTo": "@{username}にリンクします。",
       "notYou": "あなたではありませんか？ サインアウト",
+      "signInInstead": "代わりにサインイン",
+      "signInInsteadHint": "その後、もう一度「Discordでサインイン」を選んでください。",
       "signInWithDiscord": "Discordでサインイン",
       "haveAccount": "Harmonyアカウントを持っています",
       "newHere": "初めての方：Discordで続ける",
@@ -5892,6 +5904,7 @@
       "generic": "うまくいきませんでした。もう一度お試しください。"
     },
     "adminConfirm": {
+      "holdersFailed": "このロールを持つメンバーを読み込めませんでした。もう一度お試しください。",
       "title": "管理者権限を付与しますか?",
       "lead": "管理者権限を持つロールをHarmonyのロールに対応付けようとしています。",
       "holders": "次のメンバーがこのサーバーの管理者になります:",
@@ -5920,6 +5933,9 @@
       "regenerateConfirmTitle": "リンクを再生成しますか?",
       "regenerateConfirmMessage": "すでに共有したリンクは使えなくなります。",
       "pausedTitle": "同期は一時停止中です。",
+      "resumeBrakeConfirmTitle": "Discordを離れたメンバーを削除しますか？",
+      "resumeBrakeConfirmMessage": "多くのメンバーが同時にDiscordを退出またはBANされたため、同期が停止しました。再開すると、それらのメンバーはこのサーバーからただちに削除されます。この承認は今回の1回分のみで、後で再び大量の削除候補が出た場合は同期が再度一時停止します。",
+      "resumeBrakeConfirm": "削除して再開",
       "pausedReasons": {
         "removal_brake": "通常より多くのメンバーが一度に削除されるところだったため、確認のために同期を停止しました。"
       },

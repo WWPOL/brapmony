@@ -5743,7 +5743,17 @@
       "grantedTitle": "{user} a reçu le rôle d’administrateur {role} dans {server} via la migration Discord",
       "removedTitle": "{user} a perdu le rôle d’administrateur {role} dans {server} via la migration Discord",
       "message": "Tant que la migration est ouverte, Discord décide qui détient les rôles associés dans {server}.",
-      "short": "Rôle d’administrateur modifié par la migration Discord"
+      "short": "Rôle d’administrateur modifié par la migration Discord",
+      "pausedTitle": "Migration Discord suspendue dans {server}",
+      "pausedShort": "Migration Discord suspendue",
+      "paused": {
+        "removal_brake": "La migration Discord dans {server} s’est suspendue d’elle-même : trop de membres ont quitté Discord ou y ont été bannis en même temps. Vérifiez puis reprenez-la dans les paramètres du serveur.",
+        "credentials_missing": "La migration Discord dans {server} est suspendue : ses identifiants Discord sont manquants. Ajoutez-les dans les paramètres du serveur pour la reprendre.",
+        "token_invalid": "La migration Discord dans {server} est suspendue : Discord a refusé le jeton du bot. Remplacez le jeton dans les paramètres du serveur pour la reprendre.",
+        "bot_not_in_guild": "La migration Discord dans {server} est suspendue : son bot n’est plus sur le serveur Discord. Ajoutez de nouveau le bot, puis reprenez la migration.",
+        "discord_errors": "La migration Discord dans {server} est suspendue : Discord a renvoyé des erreurs en continu. Reprenez-la dans les paramètres du serveur quand Discord sera de nouveau joignable.",
+        "generic": "La migration Discord dans {server} a été suspendue. Reprenez-la dans les paramètres du serveur."
+      }
     },
     "sync": {
       "title": "Synchroniser depuis Discord",
@@ -5768,6 +5778,8 @@
       "lead": "Liez votre compte Discord à Harmony pour garder vos rôles et, si vous le souhaitez, votre profil quand cette communauté déménage.",
       "linkTo": "Vous allez lier ceci à @{username}.",
       "notYou": "Ce n’est pas vous ? Se déconnecter",
+      "signInInstead": "Se connecter à la place",
+      "signInInsteadHint": "Choisissez ensuite de nouveau « Se connecter avec Discord ».",
       "signInWithDiscord": "Se connecter avec Discord",
       "haveAccount": "J’ai un compte Harmony",
       "newHere": "Je suis nouveau : continuer avec Discord",
@@ -5892,6 +5904,7 @@
       "generic": "Ça n'a pas fonctionné. Réessayez."
     },
     "adminConfirm": {
+      "holdersFailed": "Impossible de charger les membres qui ont ce rôle. Réessayez.",
       "title": "Donner l'accès administrateur ?",
       "lead": "Un rôle avec l'accès administrateur est en cours d'association à un rôle Harmony.",
       "holders": "Ces membres deviendront administrateurs de ce serveur :",
@@ -5920,6 +5933,9 @@
       "regenerateConfirmTitle": "Régénérer le lien ?",
       "regenerateConfirmMessage": "Les liens déjà partagés cesseront de fonctionner.",
       "pausedTitle": "La synchronisation est en pause.",
+      "resumeBrakeConfirmTitle": "Retirer les membres qui ont quitté Discord ?",
+      "resumeBrakeConfirmMessage": "La synchronisation s’est arrêtée parce que de nombreux membres ont quitté Discord ou y ont été bannis en même temps. Si vous la reprenez, ces membres seront retirés de ce serveur maintenant. Cette approbation ne vaut que pour ce passage ; si un autre gros lot apparaît plus tard, la synchronisation sera de nouveau suspendue.",
+      "resumeBrakeConfirm": "Les retirer et reprendre",
       "pausedReasons": {
         "removal_brake": "Plus de membres que d'habitude auraient été retirés en une seule passe ; la synchronisation s'est donc arrêtée pour vérification."
       },

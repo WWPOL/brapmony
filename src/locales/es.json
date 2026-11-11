@@ -5743,7 +5743,17 @@
       "grantedTitle": "{user} recibió el rol de administrador {role} en {server} por la migración de Discord",
       "removedTitle": "{user} perdió el rol de administrador {role} en {server} por la migración de Discord",
       "message": "Mientras la migración esté abierta, Discord decide quién tiene los roles asignados en {server}.",
-      "short": "Rol de administrador cambiado por la migración de Discord"
+      "short": "Rol de administrador cambiado por la migración de Discord",
+      "pausedTitle": "Migración de Discord en pausa en {server}",
+      "pausedShort": "Migración de Discord en pausa",
+      "paused": {
+        "removal_brake": "La migración de Discord en {server} se pausó sola: demasiados miembros se fueron o fueron expulsados de Discord a la vez. Revísalo y reanúdala en los ajustes del servidor.",
+        "credentials_missing": "La migración de Discord en {server} está en pausa: faltan sus credenciales de Discord. Añádelas en los ajustes del servidor para reanudarla.",
+        "token_invalid": "La migración de Discord en {server} está en pausa: Discord rechazó el token del bot. Sustituye el token en los ajustes del servidor para reanudarla.",
+        "bot_not_in_guild": "La migración de Discord en {server} está en pausa: su bot ya no está en el servidor de Discord. Vuelve a añadir el bot y reanuda la migración.",
+        "discord_errors": "La migración de Discord en {server} está en pausa: Discord devolvió errores repetidos. Reanúdala en los ajustes del servidor cuando Discord vuelva a estar disponible.",
+        "generic": "La migración de Discord en {server} se pausó. Reanúdala en los ajustes del servidor."
+      }
     },
     "sync": {
       "title": "Sincronizar desde Discord",
@@ -5768,6 +5778,8 @@
       "lead": "Vincula tu cuenta de Discord con Harmony para conservar tus roles y, si quieres, tu perfil cuando esta comunidad se mude.",
       "linkTo": "Lo vincularás con @{username}.",
       "notYou": "¿No eres tú? Cerrar sesión",
+      "signInInstead": "Iniciar sesión",
+      "signInInsteadHint": "Después, elige de nuevo «Iniciar sesión con Discord».",
       "signInWithDiscord": "Iniciar sesión con Discord",
       "haveAccount": "Tengo una cuenta de Harmony",
       "newHere": "Soy nuevo: continuar con Discord",
@@ -5892,6 +5904,7 @@
       "generic": "No funcionó. Inténtalo de nuevo."
     },
     "adminConfirm": {
+      "holdersFailed": "No se pudieron cargar los miembros que tienen este rol. Inténtalo de nuevo.",
       "title": "¿Dar acceso de administrador?",
       "lead": "Se está asignando un rol con acceso de administrador a un rol de Harmony.",
       "holders": "Estos miembros pasarán a ser administradores de este servidor:",
@@ -5920,6 +5933,9 @@
       "regenerateConfirmTitle": "¿Regenerar el enlace?",
       "regenerateConfirmMessage": "Los enlaces que ya compartiste dejarán de funcionar.",
       "pausedTitle": "La sincronización está en pausa.",
+      "resumeBrakeConfirmTitle": "¿Quitar a los miembros que dejaron Discord?",
+      "resumeBrakeConfirmMessage": "La sincronización se detuvo porque muchos miembros se fueron o fueron expulsados de Discord a la vez. Si la reanudas, esos miembros se eliminarán de este servidor ahora. Esta aprobación vale solo para este ciclo; si más adelante aparece otro lote grande, la sincronización se pausará de nuevo.",
+      "resumeBrakeConfirm": "Quitarlos y reanudar",
       "pausedReasons": {
         "removal_brake": "Se habrían eliminado más miembros de lo habitual de una sola vez, así que la sincronización se detuvo para que lo revises."
       },

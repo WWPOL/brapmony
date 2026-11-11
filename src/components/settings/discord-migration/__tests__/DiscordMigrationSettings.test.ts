@@ -200,6 +200,43 @@ describe('role map', () => {
     expect(w.find('[data-testid="admin-confirm"]').exists()).toBe(false)
   })
 
+  it('refuses to confirm when the holders cannot be loaded, and retries', async () => {
+    api.saveRoleMap.mockRejectedValueOnce(new MigrationError('ADMIN_ROLE_NEEDS_CONFIRM', 'ADMIN_ROLE_NEEDS_CONFIRM'))
+    api.adminImpact.mockRejectedValueOnce(new Error('boom'))
+    const w = await mountPanel(config())
+
+    await w.find('[data-testid="map-D2"]').setValue('H3')
+    await flushPromises()
+    const dialog = w.find('[data-testid="admin-confirm"]')
+    expect(dialog.exists()).toBe(true)
+    expect(dialog.text()).toContain("Couldn't load the members who hold this role. Try again.")
+    expect(dialog.text()).not.toContain('No one holds this role')
+    expect(w.find('[data-testid="admin-confirm-ok"]').attributes('disabled')).toBeDefined()
+
+    api.adminImpact.mockResolvedValue({ holders: [{ user_id: 'u1', username: 'carol', display_name: 'Carol' }] })
+    await w.find('[data-testid="admin-confirm-retry"]').trigger('click')
+    await flushPromises()
+    expect(w.find('[data-testid="admin-confirm-error"]').exists()).toBe(false)
+    expect(w.find('[data-testid="admin-confirm"]').text()).toContain('Carol')
+    expect(w.find('[data-testid="admin-confirm-ok"]').attributes('disabled')).toBeUndefined()
+  })
+
+  it('reloads the config when the admin confirmation is cancelled, so no unsaved pick stays', async () => {
+    api.saveRoleMap.mockRejectedValueOnce(new MigrationError('ADMIN_ROLE_NEEDS_CONFIRM', 'ADMIN_ROLE_NEEDS_CONFIRM'))
+    const w = await mountPanel(config())
+    // the name-match prefill is off: D2 starts empty
+    expect((w.find('[data-testid="map-D2"]').element as HTMLSelectElement).value).toBe('')
+    const loadsBefore = api.getMigration.mock.calls.length
+
+    await w.find('[data-testid="map-D2"]').setValue('H3')
+    await flushPromises()
+    await w.find('[data-testid="admin-confirm-cancel"]').trigger('click')
+    await flushPromises()
+    expect(api.getMigration.mock.calls.length).toBeGreaterThan(loadsBefore)
+    expect(w.find('[data-testid="admin-confirm"]').exists()).toBe(false)
+    expect((w.find('[data-testid="map-D2"]').element as HTMLSelectElement).value).toBe('')
+  })
+
   it('locks an Administrator row for a caller who is not the owner', async () => {
     const cfg = config({ caller_is_owner: false })
     cfg.discord_roles[1].harmony_permissions = '1'
@@ -319,6 +356,33 @@ describe('open and finished', () => {
     expect(api.requestSync).toHaveBeenCalledWith(SERVER)
     await w.find('[data-testid="resume"]').trigger('click')
     await flushPromises()
+    expect(api.setState).toHaveBeenCalledWith(SERVER, 'open')
+  })
+
+  it('asks before resuming a removal brake pause, naming the removals it approves', async () => {
+    const w = await mountPanel({ ...OPEN(), sync_paused_reason: 'removal_brake' })
+    await w.find('[data-testid="resume"]').trigger('click')
+    await flushPromises()
+    expect(confirmMock).toHaveBeenCalledTimes(1)
+    const args = confirmMock.mock.calls[0][0]
+    expect(args.message).toContain('left or were banned on Discord')
+    expect(args.message).toContain('will be removed')
+    expect(api.setState).toHaveBeenCalledWith(SERVER, 'open')
+  })
+
+  it('does not resume a removal brake pause when the confirmation is declined', async () => {
+    confirmMock.mockResolvedValue(false)
+    const w = await mountPanel({ ...OPEN(), sync_paused_reason: 'removal_brake' })
+    await w.find('[data-testid="resume"]').trigger('click')
+    await flushPromises()
+    expect(api.setState).not.toHaveBeenCalled()
+  })
+
+  it('resumes any other pause without a confirmation', async () => {
+    const w = await mountPanel({ ...OPEN(), sync_paused_reason: 'token_invalid' })
+    await w.find('[data-testid="resume"]').trigger('click')
+    await flushPromises()
+    expect(confirmMock).not.toHaveBeenCalled()
     expect(api.setState).toHaveBeenCalledWith(SERVER, 'open')
   })
 

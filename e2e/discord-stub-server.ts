@@ -1,6 +1,6 @@
 // A stand-in for Discord, for the "Migrate from Discord" journey: the identify-only user OAuth
 // (authorize, token, @me) and the bot-token reads the gateway makes (guild roles, members, bans,
-// channels, the bot's application). Started in-process by e2e/specs/discordStub.ts; the bot
+// channels, the bot's application). Started in-process by e2e/specs/discord-migration.spec.ts; the bot
 // gateway points DISCORD_OAUTH_BASE at `url` and DISCORD_API_BASE at `apiUrl`.
 //
 // The state is a plain object the spec edits between steps (drop a role from a member, ...).

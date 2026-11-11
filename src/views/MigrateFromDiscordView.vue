@@ -111,6 +111,12 @@
             <input v-model="password" type="password" data-testid="migrate-password" autocomplete="new-password" required />
           </label>
           <p v-if="formError" class="mg-error" role="alert" data-testid="migrate-field-error">{{ errorMessage(formError) }}</p>
+          <p v-if="formError === 'email_exists'" class="mg-muted" data-testid="migrate-signin-hint">
+            <RouterLink class="mg-link" data-testid="migrate-signin-instead" :to="loginTarget">
+              {{ t('discordMigration.migrate.signInInstead') }}
+            </RouterLink>
+            {{ t('discordMigration.migrate.signInInsteadHint') }}
+          </p>
           <h2 class="mg-sub">{{ t('discordMigration.sync.title') }}</h2>
           <DiscordSyncFields v-model="syncFields" :server-id="null" />
           <button class="mg-btn mg-btn-primary" type="submit" data-testid="migrate-submit" :disabled="submitting">
@@ -140,6 +146,7 @@ import {
   createAccount,
   myLink,
   preview,
+  requestMySync,
   saveSyncChoice,
   startDiscordSignIn,
   type MigrationPreview,
@@ -174,6 +181,7 @@ const queryValue = (key: string) => {
 }
 const ticket = queryValue('ticket')
 const errorParam = queryValue('error').toLowerCase()
+const usernameParam = queryValue('username')
 
 const state = ref<ViewState>('loading')
 const server = ref<MigrationPreview | null>(null)
@@ -183,7 +191,7 @@ const claimedServerId = ref<string | null>(null)
 const syncFields = ref<SyncField[]>([])
 
 // The gateway adds the Discord username to the return address.
-const username = ref(normalizeUsernameInput(queryValue('username')))
+const username = ref(normalizeUsernameInput(usernameParam))
 const email = ref('')
 const password = ref('')
 const formError = ref('')
@@ -230,6 +238,8 @@ async function runClaim() {
     rolesGranted.value = result.rolesGranted
     claimedServerId.value = result.serverId || null
     if (result.serverId) {
+      // The roles on the ticket may be old: have the gateway read Discord now (best effort).
+      void requestMySync(result.serverId)
       const link = await myLink(result.serverId).catch(() => null)
       syncFields.value = link?.syncFields ?? []
     }
@@ -322,7 +332,17 @@ async function init() {
   state.value = ticket ? 'form' : 'landing'
 }
 
-onMounted(init)
+/** The ticket is a bearer secret: keep it out of the address bar, history and referrers. It stays in this component. */
+function hideTicketFromAddress() {
+  if (!ticket && !usernameParam) return
+  const { ticket: _ticket, username: _username, ...rest } = route.query
+  void router.replace({ path: `/migrate/${token}`, query: rest })
+}
+
+onMounted(() => {
+  hideTicketFromAddress()
+  void init()
+})
 </script>
 
 <style scoped>

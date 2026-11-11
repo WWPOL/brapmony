@@ -145,7 +145,11 @@ export async function completePendingClaims(): Promise<ClaimResult[]> {
       results.push(result)
       const chosen = takeSyncChoice(pending.ticket)
       if (chosen && chosen.length > 0) {
+        // Saving the fields also asks for the sync.
         await setMySync(result.serverId, chosen).catch(() => {})
+      } else {
+        // The roles on the ticket may be days old: have the gateway read Discord now.
+        void requestMySync(result.serverId)
       }
     } catch (err) {
       // A refusal of the claim (expired, banned, closed, ...) is final for this ticket: its saved
@@ -188,6 +192,14 @@ export async function setMySync(serverId: string, fields: SyncField[]): Promise<
   const { error } = await supabase.rpc('discord_migration_set_my_sync', { p_server_id: serverId, p_fields: fields })
   if (error) throw new DiscordMigrationError(rpcCode(error))
   if (fields.length === 0) return
+  await requestMySync(serverId)
+}
+
+/**
+ * Asks the gateway to sync the signed-in member's link now (roles and the chosen fields). Best
+ * effort: a failure is ignored, the next scheduled pass does the same work.
+ */
+export async function requestMySync(serverId: string): Promise<void> {
   try {
     const { data } = await supabase.auth.getSession()
     const jwt = data.session?.access_token
@@ -197,7 +209,7 @@ export async function setMySync(serverId: string, fields: SyncField[]): Promise<
       headers: { Authorization: `Bearer ${jwt}` },
     })
   } catch {
-    /* the scheduled sync copies the fields later */
+    /* the scheduled sync does it later */
   }
 }
 

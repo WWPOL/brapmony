@@ -592,6 +592,7 @@ migration_account_creation() {
 		*) die "usage: harmony migration account-creation [on | off]" ;;
 	esac
 	if [[ -n "${value:-}" ]]; then
+		# $value is only ever the literal true or false (set by the case above), so interpolating it into the SQL is safe.
 		db_sql -c "INSERT INTO public.instance_config (config_key, config_value, updated_at) VALUES ('discord_migration_account_creation', '$value'::jsonb, now()) ON CONFLICT (config_key) DO UPDATE SET config_value = EXCLUDED.config_value, updated_at = now()" >/dev/null ||
 			die "could not update instance_config.discord_migration_account_creation"
 	fi

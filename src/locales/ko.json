@@ -5743,7 +5743,17 @@
       "grantedTitle": "Discord 마이그레이션으로 {user} 님이 {server}에서 관리자 역할 {role}을(를) 받았습니다",
       "removedTitle": "Discord 마이그레이션으로 {user} 님이 {server}에서 관리자 역할 {role}을(를) 잃었습니다",
       "message": "마이그레이션이 열려 있는 동안 {server}의 연결된 역할은 Discord가 결정합니다.",
-      "short": "Discord 마이그레이션으로 관리자 역할이 변경되었습니다"
+      "short": "Discord 마이그레이션으로 관리자 역할이 변경되었습니다",
+      "pausedTitle": "{server}의 Discord 마이그레이션이 일시 중지됨",
+      "pausedShort": "Discord 마이그레이션 일시 중지됨",
+      "paused": {
+        "removal_brake": "{server}의 Discord 마이그레이션이 스스로 일시 중지되었습니다. 너무 많은 멤버가 동시에 Discord를 나갔거나 차단되었습니다. 서버 설정에서 확인한 뒤 다시 시작하세요.",
+        "credentials_missing": "{server}의 Discord 마이그레이션이 일시 중지되었습니다. Discord 자격 증명이 없습니다. 서버 설정에서 추가하면 다시 시작할 수 있습니다.",
+        "token_invalid": "{server}의 Discord 마이그레이션이 일시 중지되었습니다. Discord가 봇 토큰을 거부했습니다. 서버 설정에서 토큰을 교체하면 다시 시작할 수 있습니다.",
+        "bot_not_in_guild": "{server}의 Discord 마이그레이션이 일시 중지되었습니다. 봇이 더 이상 Discord 서버에 없습니다. 봇을 다시 추가한 뒤 재개하세요.",
+        "discord_errors": "{server}의 Discord 마이그레이션이 일시 중지되었습니다. Discord에서 오류가 계속 반환되었습니다. Discord에 다시 연결할 수 있게 되면 서버 설정에서 재개하세요.",
+        "generic": "{server}의 Discord 마이그레이션이 일시 중지되었습니다. 서버 설정에서 다시 시작하세요."
+      }
     },
     "sync": {
       "title": "Discord에서 동기화",
@@ -5768,6 +5778,8 @@
       "lead": "Discord 계정을 Harmony에 연결하면 이 커뮤니티가 옮겨 온 뒤에도 역할을 유지하고, 원하면 프로필도 가져올 수 있습니다.",
       "linkTo": "@{username}에 연결합니다.",
       "notYou": "본인이 아닌가요? 로그아웃",
+      "signInInstead": "대신 로그인",
+      "signInInsteadHint": "그런 다음 'Discord로 로그인'을 다시 선택하세요.",
       "signInWithDiscord": "Discord로 로그인",
       "haveAccount": "Harmony 계정이 있습니다",
       "newHere": "처음입니다: Discord로 계속",
@@ -5892,6 +5904,7 @@
       "generic": "실패했습니다. 다시 시도하세요."
     },
     "adminConfirm": {
+      "holdersFailed": "이 역할을 가진 멤버를 불러오지 못했습니다. 다시 시도하세요.",
       "title": "관리자 권한을 부여할까요?",
       "lead": "관리자 권한이 있는 역할을 Harmony 역할에 연결하려고 합니다.",
       "holders": "다음 멤버가 이 서버의 관리자가 됩니다:",
@@ -5920,6 +5933,9 @@
       "regenerateConfirmTitle": "링크를 다시 만들까요?",
       "regenerateConfirmMessage": "이미 공유한 링크는 더 이상 작동하지 않습니다.",
       "pausedTitle": "동기화가 일시 중지되었습니다.",
+      "resumeBrakeConfirmTitle": "Discord를 떠난 멤버를 제거할까요?",
+      "resumeBrakeConfirmMessage": "많은 멤버가 동시에 Discord를 나갔거나 차단되어 동기화가 중지되었습니다. 다시 시작하면 해당 멤버가 지금 이 서버에서 제거됩니다. 이 승인은 이번 한 번에만 적용되며, 나중에 다시 대량의 제거 대상이 나타나면 동기화가 다시 일시 중지됩니다.",
+      "resumeBrakeConfirm": "제거하고 다시 시작",
       "pausedReasons": {
         "removal_brake": "평소보다 많은 멤버가 한 번에 제거될 뻔해서, 확인할 수 있도록 동기화를 멈췄습니다."
       },

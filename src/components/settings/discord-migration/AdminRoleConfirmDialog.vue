@@ -7,14 +7,22 @@
     @close="emit('cancel')"
   >
     <div data-testid="admin-confirm">
-      <p class="dm-text">{{ t('discordMigration.adminConfirm.holders') }}</p>
-      <ul v-if="holders.length" class="dm-holders" data-testid="admin-confirm-holders">
-        <li v-for="holder in holders" :key="holder.user_id">
-          {{ holder.display_name || holder.username || holder.user_id }}
-          <span v-if="holder.display_name && holder.username" class="dm-muted">@{{ holder.username }}</span>
-        </li>
-      </ul>
-      <p v-else class="dm-muted" data-testid="admin-confirm-none">{{ t('discordMigration.adminConfirm.noHolders') }}</p>
+      <div v-if="loadFailed">
+        <p class="dm-error" role="alert" data-testid="admin-confirm-error">{{ t('discordMigration.adminConfirm.holdersFailed') }}</p>
+        <button type="button" class="btn btn-secondary btn-sm" data-testid="admin-confirm-retry" @click="emit('retry')">
+          {{ t('discordMigration.retry') }}
+        </button>
+      </div>
+      <template v-else>
+        <p class="dm-text">{{ t('discordMigration.adminConfirm.holders') }}</p>
+        <ul v-if="holders.length" class="dm-holders" data-testid="admin-confirm-holders">
+          <li v-for="holder in holders" :key="holder.user_id">
+            {{ holder.display_name || holder.username || holder.user_id }}
+            <span v-if="holder.display_name && holder.username" class="dm-muted">@{{ holder.username }}</span>
+          </li>
+        </ul>
+        <p v-else class="dm-muted" data-testid="admin-confirm-none">{{ t('discordMigration.adminConfirm.noHolders') }}</p>
+      </template>
       <p class="dm-text">{{ t('discordMigration.adminConfirm.future') }}</p>
     </div>
     <template #footer>
@@ -25,7 +33,7 @@
         type="button"
         class="btn btn-danger"
         data-testid="admin-confirm-ok"
-        :disabled="busy"
+        :disabled="busy || loadFailed"
         @click="emit('confirm')"
       >
         {{ t('discordMigration.adminConfirm.confirm') }}
@@ -43,9 +51,11 @@ defineProps<{
   show: boolean
   holders: AdminHolder[]
   busy?: boolean
+  /** The holders could not be loaded: Confirm stays disabled until a retry works. */
+  loadFailed?: boolean
 }>()
 
-const emit = defineEmits<{ confirm: []; cancel: [] }>()
+const emit = defineEmits<{ confirm: []; cancel: []; retry: [] }>()
 const { t } = useI18n()
 </script>
 
@@ -55,6 +65,12 @@ const { t } = useI18n()
   font-size: 14px;
   line-height: 1.55;
   color: var(--text-primary);
+}
+
+.dm-error {
+  margin: 0 0 12px;
+  font-size: 14px;
+  color: var(--error);
 }
 
 .dm-muted {

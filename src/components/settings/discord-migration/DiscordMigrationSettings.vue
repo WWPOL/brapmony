@@ -311,8 +311,10 @@
       :show="adminDialog !== null"
       :holders="adminDialog?.holders ?? []"
       :busy="adminBusy"
+      :load-failed="adminDialog?.loadFailed ?? false"
       @confirm="confirmAdmin"
-      @cancel="adminDialog = null"
+      @cancel="cancelAdmin"
+      @retry="retryHolders"
     />
   </div>
 </template>
@@ -388,6 +390,10 @@ const gapErrors = ref<Record<string, string>>({})
 
 interface AdminDialog {
   holders: AdminHolder[]
+  /** The list of holders could not be loaded: the dialog cannot be confirmed. */
+  loadFailed: boolean
+  /** The Discord roles the confirmation is about. */
+  roleIds: string[]
   run: () => Promise<void>
 }
 const adminDialog = ref<AdminDialog | null>(null)
@@ -606,21 +612,46 @@ function mapWith(changes: Record<string, string>): RoleMapRow[] {
 }
 
 /** The members who would become admins: the holders of each Administrator-bearing role in `discordRoleIds`. */
-async function holdersFor(discordRoleIds: string[]): Promise<AdminHolder[]> {
+async function holdersFor(discordRoleIds: string[]): Promise<{ holders: AdminHolder[]; failed: boolean }> {
   const unique = new Map<string, AdminHolder>()
+  let failed = false
   for (const did of discordRoleIds) {
     try {
       const impact = await adminImpact(props.serverId, did)
       for (const h of impact.holders) unique.set(h.user_id, h)
     } catch {
-      // The list is informative; the confirmation still stands without it.
+      // Never confirm an admin grant without naming who gets it.
+      failed = true
     }
   }
-  return [...unique.values()]
+  return { holders: [...unique.values()], failed }
 }
 
 async function openAdminDialog(discordRoleIds: string[], run: () => Promise<void>) {
-  adminDialog.value = { holders: await holdersFor(discordRoleIds), run }
+  const { holders, failed } = await holdersFor(discordRoleIds)
+  adminDialog.value = { holders, loadFailed: failed, roleIds: discordRoleIds, run }
+}
+
+async function retryHolders() {
+  const dialog = adminDialog.value
+  if (!dialog) return
+  const { holders, failed } = await holdersFor(dialog.roleIds)
+  if (adminDialog.value === dialog) adminDialog.value = { ...dialog, holders, loadFailed: failed }
+}
+
+/** A cancelled confirmation saved nothing: drop the unsaved pick so the select shows what is stored. */
+async function cancelAdmin() {
+  const ids = adminDialog.value?.roleIds ?? []
+  adminDialog.value = null
+  const next = { ...selection.value }
+  for (const id of ids) delete next[id]
+  selection.value = next
+  try {
+    await reloadConfig()
+    await prefillMatches()
+  } catch {
+    // The panel keeps what it has; the next action reloads it.
+  }
 }
 
 async function confirmAdmin() {
@@ -782,6 +813,16 @@ async function reopen() {
 }
 
 async function resume() {
+  // Resuming a removal brake pause approves the removals that tripped it: ask first.
+  if (config.value?.sync_paused_reason === 'removal_brake') {
+    const ok = await confirm({
+      title: t('discordMigration.open.resumeBrakeConfirmTitle'),
+      message: t('discordMigration.open.resumeBrakeConfirmMessage'),
+      confirmButtonText: t('discordMigration.open.resumeBrakeConfirm'),
+      dangerAction: true,
+    })
+    if (!ok) return
+  }
   await changeState('open')
 }
 

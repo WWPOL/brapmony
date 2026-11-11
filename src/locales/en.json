@@ -5739,7 +5739,17 @@
       "grantedTitle": "{user} was given the admin role {role} in {server} by the Discord migration",
       "removedTitle": "{user} lost the admin role {role} in {server} by the Discord migration",
       "message": "While the migration is open, Discord decides who holds mapped roles in {server}.",
-      "short": "Admin role changed by the Discord migration"
+      "short": "Admin role changed by the Discord migration",
+      "pausedTitle": "Discord migration paused in {server}",
+      "pausedShort": "Discord migration paused",
+      "paused": {
+        "removal_brake": "The Discord migration in {server} paused itself: too many members left or were banned on Discord at once. Review and resume it in the server settings.",
+        "credentials_missing": "The Discord migration in {server} paused: its Discord credentials are missing. Add them in the server settings to resume.",
+        "token_invalid": "The Discord migration in {server} paused: Discord rejected its bot token. Replace the token in the server settings to resume.",
+        "bot_not_in_guild": "The Discord migration in {server} paused: its bot is no longer in the Discord server. Add the bot back, then resume.",
+        "discord_errors": "The Discord migration in {server} paused: Discord kept returning errors. Resume it in the server settings once Discord is reachable.",
+        "generic": "The Discord migration in {server} paused. Check the server settings to resume it."
+      }
     },
     "sync": {
       "title": "Sync from Discord",
@@ -5764,6 +5774,8 @@
       "lead": "Link your Discord account to Harmony to keep your roles, and optionally your profile, when this community moves.",
       "linkTo": "You'll link this to @{username}.",
       "notYou": "Not you? Sign out",
+      "signInInstead": "Sign in instead",
+      "signInInsteadHint": "Then choose Sign in with Discord again.",
       "signInWithDiscord": "Sign in with Discord",
       "haveAccount": "I have a Harmony account",
       "newHere": "I'm new: continue with Discord",
@@ -5888,6 +5900,7 @@
       "generic": "That didn't work. Try again."
     },
     "adminConfirm": {
+      "holdersFailed": "Couldn't load the members who hold this role. Try again.",
       "title": "Give administrator access?",
       "lead": "A role with Administrator access is being mapped to a Harmony role.",
       "holders": "These members will become admins of this server:",
@@ -5916,6 +5929,9 @@
       "regenerateConfirmTitle": "Regenerate the link?",
       "regenerateConfirmMessage": "Links you already shared stop working.",
       "pausedTitle": "Syncing is paused.",
+      "resumeBrakeConfirmTitle": "Remove the members who left Discord?",
+      "resumeBrakeConfirmMessage": "Syncing stopped because many members left or were banned on Discord at once. If you resume, those members will be removed from this server now. This approval covers this one pass; if another large batch turns up later, syncing pauses again.",
+      "resumeBrakeConfirm": "Remove them and resume",
       "pausedReasons": {
         "removal_brake": "More members than usual would have been removed in one pass, so syncing stopped for you to check."
       },

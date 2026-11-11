@@ -13,6 +13,7 @@ vi.mock('@/utils/discordBridgeSetup', () => ({
 
 import {
   completePendingClaims,
+  requestMySync,
   setMySync,
   claim,
   createAccount,
@@ -23,6 +24,7 @@ import {
 beforeEach(() => {
   rpc.mockReset()
   vi.unstubAllGlobals()
+  vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => ({}) })))
   localStorage.clear()
 })
 
@@ -54,6 +56,55 @@ describe('completePendingClaims', () => {
     await completePendingClaims()
     expect(rpc).toHaveBeenCalledWith('discord_migration_set_my_sync', { p_server_id: 's1', p_fields: ['avatar'] })
     expect(localStorage.getItem('discord-migration-sync:a')).toBeNull()
+  })
+})
+
+describe('completePendingClaims fresh sync', () => {
+  const pending = (ticket: string, server: string) => async (name: string) => {
+    if (name === 'discord_migration_my_pending_claims') return { data: [{ ticket, server_id: server }], error: null }
+    if (name === 'discord_migration_claim') return { data: { server_id: server, roles_granted: [] }, error: null }
+    return { data: null, error: null }
+  }
+
+  it('asks the gateway to sync after a claim even when no fields were chosen', async () => {
+    const fetchMock = vi.fn(async () => ({ ok: true, json: async () => ({ ok: true }) }))
+    vi.stubGlobal('fetch', fetchMock)
+    rpc.mockImplementation(pending('a', 's1'))
+    await completePendingClaims()
+    await Promise.resolve()
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://harmony.test/bot-gateway/bridge/v2/migrate/me/s1/sync',
+      expect.objectContaining({ method: 'POST' }),
+    )
+  })
+
+  it('does not ask for a sync when the claim is refused', async () => {
+    const fetchMock = vi.fn(async () => ({ ok: true }))
+    vi.stubGlobal('fetch', fetchMock)
+    rpc.mockImplementation(async (name: string) => {
+      if (name === 'discord_migration_my_pending_claims') return { data: [{ ticket: 'a' }], error: null }
+      return { data: null, error: { message: 'TICKET_EXPIRED' } }
+    })
+    await completePendingClaims()
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('ignores a failing sync request', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('offline') }))
+    rpc.mockImplementation(pending('a', 's1'))
+    await expect(completePendingClaims()).resolves.toHaveLength(1)
+  })
+})
+
+describe('requestMySync', () => {
+  it('posts to the gateway with the session token and never throws', async () => {
+    const fetchMock = vi.fn(async () => { throw new Error('offline') })
+    vi.stubGlobal('fetch', fetchMock)
+    await expect(requestMySync('srv')).resolves.toBeUndefined()
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://harmony.test/bot-gateway/bridge/v2/migrate/me/srv/sync',
+      expect.objectContaining({ method: 'POST', headers: expect.objectContaining({ Authorization: 'Bearer jwt' }) }),
+    )
   })
 })
 
