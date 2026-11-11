@@ -214,8 +214,6 @@ function setRead(n: Notification, isRead: boolean): void {
 }
 
 const DM_TYPES = new Set(['dm', 'chat_message'])
-// A server on another instance refused a join or removed the user, or this instance's staff
-// removed the user from it: it leaves the list.
 /**
  * Re-read a thread the account was just mentioned in and mark it joined in
  * the threads store. Imported late: both modules pull in the stores.
@@ -227,13 +225,18 @@ async function refreshMentionedThread(threadId: string): Promise<void> {
       import('@/stores/useThreads'),
     ])
     const thread = await threadService.getThread(threadId, true)
-    if (thread?.is_member) useThreadsStore().patch(threadId, { is_member: true, left: false })
+    if (!thread?.is_member) return
+    const store = useThreadsStore()
+    if (store.byId[threadId]) store.patch(threadId, { is_member: true, left: false })
+    else store.upsert({ ...thread, is_member: true, left: false })
   } catch (error) {
     debug.error('Failed to refresh a mentioned thread:', error)
   }
 }
 
-const SERVER_GONE_TYPES =new Set(['server_join_rejected', 'server_federation_closed', 'server_member_removed', 'server_instance_removed'])
+// A server on another instance refused a join or removed the user, or this instance's staff
+// removed the user from it: it leaves the list.
+const SERVER_GONE_TYPES = new Set(['server_join_rejected', 'server_federation_closed', 'server_member_removed', 'server_instance_removed'])
 
 type DismissCriteria = {
   notificationIds?: string[]
