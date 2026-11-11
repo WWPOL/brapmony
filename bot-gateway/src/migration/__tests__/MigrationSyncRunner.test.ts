@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { MigrationSyncRunner, type DueMigration } from '../MigrationSyncRunner'
+import { mirrorExternalMediaToStorage } from '../../utils/mirrorExternalMedia.js'
 
 vi.mock('../../config/supabase.js', () => ({
   supabase: {},
@@ -62,6 +63,7 @@ interface Setup {
   now?: () => number
   budgetMs?: number
   batch?: number
+  realMirror?: boolean
 }
 
 function build(s: Setup = {}) {
@@ -106,7 +108,7 @@ function build(s: Setup = {}) {
   const runner = new MigrationSyncRunner({
     rpc: rpc as any,
     discord: discord as any,
-    mirror,
+    mirror: s.realMirror ? undefined : mirror,
     loadMigration,
     loadLink,
     now: s.now,
@@ -190,6 +192,22 @@ describe('MigrationSyncRunner.syncServer', () => {
     expect(profile.accent_color).toBe(255)
     expect(profile.banner_url).toBe('u1/banner-1.png')
     expect(JSON.stringify(profile)).not.toContain('discordapp')
+  })
+
+  it('stores public URLs for avatars and paths for banners, as the web app does', async () => {
+    process.env.SUPABASE_URL = 'http://kong:8000'
+    process.env.PUBLIC_URL = 'https://chat.example'
+    vi.mocked(mirrorExternalMediaToStorage).mockImplementation(async (_u, o) => {
+      const t = o.target!
+      const path = `${t.folder}/${t.stem}-1.png`
+      return { path, url: `http://kong:8000/storage/v1/object/public/${t.bucket}/${path}`, contentType: 'image/png' }
+    })
+    const t = build({ realMirror: true, links: [link(1, ['avatar', 'server_avatar', 'server_banner'])], members: () => member({ guild_banner_url: 'https://cdn.discordapp.com/gb.png' }) })
+    await t.runner.syncServer(due)
+    const profile = t.of('discord_migration_sync_member')[0].args.p_member.profile
+    expect(profile.avatar_url).toBe('https://chat.example/storage/v1/object/public/avatars/u1/avatar-1.png')
+    expect(profile.server_avatar_url).toBe(`https://chat.example/storage/v1/object/public/avatars/u1/servers/${SERVER}/avatar-1.png`)
+    expect(profile.server_banner_url).toBe(`u1/servers/${SERVER}/banner-1.png`)
   })
 
   it('omits a profile key when mirroring fails', async () => {

@@ -6,6 +6,7 @@
  */
 
 import { config, supabase } from '../config/supabase.js'
+import { publicStorageUrl } from '../utils/messageMedia.js'
 import { mirrorExternalMediaToStorage } from '../utils/mirrorExternalMedia.js'
 import {
   type DiscordMember,
@@ -64,7 +65,7 @@ export interface MigrationSyncDeps {
     fetchUser: typeof fetchUser
     fetchBan: typeof fetchBan
   }
-  /** Copies a Discord CDN image into Harmony storage and returns its object path; throws on failure. */
+  /** Copies a Discord CDN image into Harmony storage and returns the value to store; throws on failure. */
   mirror?: (url: string, target: MirrorTarget) => Promise<string>
   loadMigration?: (serverId: string) => Promise<MigrationInfo | null>
   loadLink?: (serverId: string, userId: string) => Promise<MigrationLink | null>
@@ -470,9 +471,13 @@ export class MigrationSyncRunner {
   }
 }
 
+/**
+ * The value the web app stores: avatars hold the bucket's public URL (uploadAvatar, uploadServerAvatar),
+ * banners hold the object path (uploadBanner, uploadServerBanner).
+ */
 async function defaultMirror(url: string, target: MirrorTarget): Promise<string> {
   const mirrored = await mirrorExternalMediaToStorage(url, { target })
-  return mirrored.path
+  return target.bucket === 'avatars' ? publicStorageUrl(mirrored.url) : mirrored.path
 }
 
 async function defaultLoadMigration(serverId: string): Promise<MigrationInfo | null> {
