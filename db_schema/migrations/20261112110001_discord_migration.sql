@@ -26,8 +26,10 @@
 --
 -- Clients reach the tables only through the RPCs, which are gated by can_manage_discord_bridge
 -- (owner or MANAGE_SERVER). Errors: 42501 caller lacks MANAGE_SERVER or authentication; P0002 server
--- or migration absent; 22023 invalid argument; 23514 check violation; 55000 guild_locked (the
--- guild of an open migration cannot change); 0A000 Vault absent; P0001 MIGRATION_CREDENTIALS_MISSING.
+-- or migration absent; 22023 invalid argument; 23514 check violation; 55000 guild_locked (only a
+-- draft can change its guild) and state changes the current state does not allow; 0A000 Vault absent;
+-- P0001 MIGRATION_CREDENTIALS_MISSING, MIGRATION_NOT_READY, ADMIN_ROLE_NEEDS_CONFIRM; 42501 also
+-- ADMIN_ROLE_OWNER_ONLY.
 BEGIN;
 
 SET LOCAL lock_timeout = '3s';
@@ -263,8 +265,9 @@ $$;
 -- ---------------------------------------------------------------------------
 
 -- The configuration row without secrets, plus has_own_credentials, bridge_available (the server has
--- a hosted bridge), instance_bot_available, caller_is_owner, discord_roles (the snapshot), role_map
--- and link_counts by status. A server without a migration yields state null.
+-- a hosted bridge that also holds its token), instance_bot_available, caller_is_owner, discord_roles
+-- (the snapshot), role_map, link_counts by status, readiness (discord_migration_readiness) and
+-- permission_gaps (discord_migration_permission_gaps). A server without a migration yields state null.
 CREATE OR REPLACE FUNCTION public.discord_migration_get(p_server_id uuid)
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -286,6 +289,7 @@ BEGIN
                                               AND s.client_secret_secret IS NOT NULL
                                               AND s.bot_token_secret IS NOT NULL),
             'bridge_available', EXISTS (SELECT 1 FROM public.discord_bridges b
+                                          JOIN public.discord_bridge_secrets bs ON bs.bridge_id = b.id
                                          WHERE b.server_id = p_server_id AND b.mode = 'hosted'),
             'instance_bot_available', public.discord_bridge_instance_bot_enabled()
                                       AND public.discord_bridge_instance_bot_configured(),
@@ -312,14 +316,16 @@ BEGIN
                            'banned', count(*) FILTER (WHERE l.status = 'banned'),
                            'kicked_on_harmony', count(*) FILTER (WHERE l.status = 'kicked_on_harmony'))
                   FROM public.discord_migration_links l
-                 WHERE l.server_id = p_server_id));
+                 WHERE l.server_id = p_server_id),
+            'readiness', public.discord_migration_readiness(p_server_id),
+            'permission_gaps', public.discord_migration_permission_gaps(p_server_id));
 END;
 $$;
 
 -- Upsert. A null guild id keeps the stored one, else takes the server's bridge's. A null source keeps
--- the stored one. The guild of an open migration cannot change (55000 guild_locked); a draft that
--- moves to another guild drops the role snapshot, the map and the readiness warnings. Returns
--- discord_migration_get().
+-- the stored one. Only a draft can change its guild (55000 guild_locked; an open or finished migration
+-- keeps it, since a finished one can be reopened); a draft that moves to another guild drops the role
+-- snapshot, the map and the readiness warnings. Returns discord_migration_get().
 CREATE OR REPLACE FUNCTION public.discord_migration_save(
     p_server_id uuid,
     p_discord_guild_id text,
@@ -343,7 +349,7 @@ BEGIN
     v_source := COALESCE(NULLIF(btrim(p_credential_source), ''), v_cur.credential_source);
 
     IF v_cur.server_id IS NOT NULL THEN
-        IF v_cur.state = 'open' AND v_guild IS DISTINCT FROM v_cur.discord_guild_id THEN
+        IF v_cur.state <> 'draft' AND v_guild IS DISTINCT FROM v_cur.discord_guild_id THEN
             RAISE EXCEPTION 'guild_locked' USING ERRCODE = '55000',
                 DETAIL = 'The Discord server of an open migration cannot change.';
         END IF;
@@ -456,6 +462,399 @@ BEGIN
         RAISE EXCEPTION 'migration_not_configured' USING ERRCODE = 'P0002';
     END IF;
     RETURN v_token;
+END;
+$$;
+
+-- ---------------------------------------------------------------------------
+-- Role map, permission gaps, lifecycle
+-- ---------------------------------------------------------------------------
+
+-- True when mapping the Discord role to the Harmony role gives Administrator: the snapshot's
+-- harmony_permissions has bit 0, the Harmony role's permissions has bit 0, or the Harmony role is_admin.
+CREATE OR REPLACE FUNCTION public.discord_migration_admin_bearing(
+    p_server_id uuid, p_discord_role_id text, p_harmony_role_id uuid)
+RETURNS boolean
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public, extensions, pg_temp
+AS $$
+    SELECT COALESCE((SELECT (r.harmony_permissions & 1) <> 0
+                       FROM public.discord_migration_discord_roles r
+                      WHERE r.server_id = p_server_id AND r.discord_role_id = p_discord_role_id), false)
+        OR COALESCE((SELECT (COALESCE(sr.permissions, 0) & 1) <> 0 OR sr.is_admin
+                       FROM public.server_roles sr
+                      WHERE sr.id = p_harmony_role_id), false)
+$$;
+
+-- {ready, unmapped_roles: [{discord_role_id, name}], has_credentials, has_guild, roles_fetched}.
+-- has_credentials mirrors what discord_migration_credentials needs, without reading Vault. ready =
+-- credentials + guild + a role snapshot + no unmapped role. Permission gaps are warnings, never part
+-- of ready.
+CREATE OR REPLACE FUNCTION public.discord_migration_readiness(p_server_id uuid)
+RETURNS jsonb
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path = public, extensions, pg_temp
+AS $$
+DECLARE
+    v_m public.discord_migrations;
+    v_creds boolean := false;
+    v_guild boolean;
+    v_fetched boolean;
+    v_unmapped jsonb;
+BEGIN
+    PERFORM public.discord_migration_assert_manager(p_server_id);
+    SELECT * INTO v_m FROM public.discord_migrations WHERE server_id = p_server_id;
+
+    IF v_m.server_id IS NOT NULL THEN
+        IF v_m.credential_source = 'instance_bot' THEN
+            v_creds := public.discord_bridge_instance_bot_enabled()
+                AND EXISTS (SELECT 1 FROM public.discord_bridge_instance_bot ib
+                             WHERE ib.id AND ib.application_id IS NOT NULL
+                               AND ib.client_secret_secret IS NOT NULL AND ib.bot_token_secret IS NOT NULL);
+        ELSIF v_m.credential_source = 'bridge' THEN
+            v_creds := EXISTS (SELECT 1 FROM public.discord_migration_secrets s
+                                 JOIN public.discord_bridges b ON b.server_id = s.server_id AND b.mode = 'hosted'
+                                 JOIN public.discord_bridge_secrets bs ON bs.bridge_id = b.id
+                                WHERE s.server_id = p_server_id AND s.client_id IS NOT NULL
+                                  AND s.client_secret_secret IS NOT NULL);
+        ELSIF v_m.credential_source = 'own' THEN
+            v_creds := EXISTS (SELECT 1 FROM public.discord_migration_secrets s
+                                WHERE s.server_id = p_server_id AND s.client_id IS NOT NULL
+                                  AND s.client_secret_secret IS NOT NULL AND s.bot_token_secret IS NOT NULL);
+        END IF;
+    END IF;
+
+    v_guild := v_m.discord_guild_id IS NOT NULL;
+    v_fetched := EXISTS (SELECT 1 FROM public.discord_migration_discord_roles r WHERE r.server_id = p_server_id);
+    SELECT COALESCE(jsonb_agg(jsonb_build_object('discord_role_id', r.discord_role_id, 'name', r.name)
+                              ORDER BY r.position DESC, r.discord_role_id), '[]'::jsonb)
+      INTO v_unmapped
+      FROM public.discord_migration_discord_roles r
+     WHERE r.server_id = p_server_id
+       AND NOT EXISTS (SELECT 1 FROM public.discord_migration_role_map m
+                        WHERE m.server_id = r.server_id AND m.discord_role_id = r.discord_role_id);
+
+    RETURN jsonb_build_object(
+        'ready', v_creds AND v_guild AND v_fetched AND v_unmapped = '[]'::jsonb,
+        'unmapped_roles', v_unmapped,
+        'has_credentials', v_creds,
+        'has_guild', v_guild,
+        'roles_fetched', v_fetched);
+END;
+$$;
+
+-- [{discord_role_id, harmony_role_id, missing: text[]}]: for each mapped role, the permission names
+-- (bit order) in the Discord role's snapshot that the Harmony role lacks. Rows with nothing missing
+-- are omitted.
+CREATE OR REPLACE FUNCTION public.discord_migration_permission_gaps(p_server_id uuid)
+RETURNS jsonb
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path = public, extensions, pg_temp
+AS $$
+DECLARE
+    v_names text[] := public.permission_bit_names();
+BEGIN
+    PERFORM public.discord_migration_assert_manager(p_server_id);
+    RETURN COALESCE((
+        SELECT jsonb_agg(jsonb_build_object('discord_role_id', g.discord_role_id,
+                                            'harmony_role_id', g.harmony_role_id,
+                                            'missing', to_jsonb(g.missing))
+                         ORDER BY g.position DESC, g.discord_role_id)
+          FROM (SELECT r.discord_role_id, m.harmony_role_id, r.position,
+                       ARRAY(SELECT v_names[i]
+                               FROM generate_series(1, array_length(v_names, 1)) i
+                              WHERE (r.harmony_permissions & ~COALESCE(sr.permissions, 0) & (1::bigint << (i - 1))) <> 0
+                              ORDER BY i) AS missing
+                  FROM public.discord_migration_role_map m
+                  JOIN public.discord_migration_discord_roles r
+                    ON r.server_id = m.server_id AND r.discord_role_id = m.discord_role_id
+                  JOIN public.server_roles sr ON sr.id = m.harmony_role_id
+                 WHERE m.server_id = p_server_id) g
+         WHERE cardinality(g.missing) > 0), '[]'::jsonb);
+END;
+$$;
+
+-- Replaces the Discord role to Harmony role map. p_map is [{discord_role_id, harmony_role_id}]. Each
+-- Discord role must be in the snapshot; each Harmony role must belong to the server and not be its
+-- @everyone role (22023). A caller who is not the owner may not add, change or remove a row whose
+-- Harmony role ranks at or above their top role (42501). A new or changed row that is
+-- Administrator-bearing is owner-only (42501 ADMIN_ROLE_OWNER_ONLY) and needs p_confirm_admin
+-- (P0001 ADMIN_ROLE_NEEDS_CONFIRM). Nothing is written when a row is refused. Returns readiness.
+CREATE OR REPLACE FUNCTION public.discord_migration_save_role_map(
+    p_server_id uuid,
+    p_map jsonb,
+    p_confirm_admin boolean DEFAULT false)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, extensions, pg_temp
+AS $$
+DECLARE
+    v_me uuid := public.discord_migration_assert_manager(p_server_id);
+    v_owner boolean;
+    v_rank integer;
+    v_item jsonb;
+    v_did text;
+    v_hid uuid;
+    v_role public.server_roles;
+    v_old uuid;
+    v_dids text[] := '{}';
+    v_hids uuid[] := '{}';
+    v_gone record;
+BEGIN
+    PERFORM 1 FROM public.discord_migrations WHERE server_id = p_server_id FOR UPDATE;
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'migration_not_configured' USING ERRCODE = 'P0002';
+    END IF;
+    IF p_map IS NULL OR jsonb_typeof(p_map) <> 'array' THEN
+        RAISE EXCEPTION 'map must be an array' USING ERRCODE = '22023';
+    END IF;
+
+    v_owner := EXISTS (SELECT 1 FROM public.servers s WHERE s.id = p_server_id AND s.owner = v_me);
+    v_rank := public.get_user_highest_role_position(v_me, p_server_id);
+
+    FOR v_item IN SELECT e FROM jsonb_array_elements(p_map) e LOOP
+        IF jsonb_typeof(v_item) <> 'object'
+           OR v_item ->> 'discord_role_id' !~ '^[0-9]{1,20}$'
+           OR v_item ->> 'harmony_role_id' !~ '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$' THEN
+            RAISE EXCEPTION 'invalid map row' USING ERRCODE = '22023';
+        END IF;
+        v_did := v_item ->> 'discord_role_id';
+        v_hid := (v_item ->> 'harmony_role_id')::uuid;
+        IF v_did = ANY (v_dids) THEN
+            RAISE EXCEPTION 'duplicate Discord role in the map' USING ERRCODE = '22023';
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM public.discord_migration_discord_roles r
+                        WHERE r.server_id = p_server_id AND r.discord_role_id = v_did) THEN
+            RAISE EXCEPTION 'unknown Discord role' USING ERRCODE = '22023';
+        END IF;
+        SELECT * INTO v_role FROM public.server_roles sr WHERE sr.id = v_hid;
+        IF NOT FOUND OR v_role.server_id <> p_server_id THEN
+            RAISE EXCEPTION 'Harmony role not in this server' USING ERRCODE = '22023';
+        END IF;
+        IF v_role.is_default THEN
+            RAISE EXCEPTION 'the default role cannot be mapped' USING ERRCODE = '22023';
+        END IF;
+        v_dids := v_dids || v_did;
+        v_hids := v_hids || v_hid;
+
+        SELECT m.harmony_role_id INTO v_old FROM public.discord_migration_role_map m
+         WHERE m.server_id = p_server_id AND m.discord_role_id = v_did;
+        IF v_old IS NOT DISTINCT FROM v_hid THEN
+            CONTINUE;
+        END IF;
+
+        IF public.discord_migration_admin_bearing(p_server_id, v_did, v_hid) THEN
+            IF NOT v_owner THEN
+                RAISE EXCEPTION 'ADMIN_ROLE_OWNER_ONLY' USING ERRCODE = '42501';
+            END IF;
+            IF NOT COALESCE(p_confirm_admin, false) THEN
+                RAISE EXCEPTION 'ADMIN_ROLE_NEEDS_CONFIRM';
+            END IF;
+        END IF;
+        IF NOT v_owner AND v_role.position >= v_rank THEN
+            RAISE EXCEPTION 'Cannot map a role ranked at or above your highest role' USING ERRCODE = '42501';
+        END IF;
+    END LOOP;
+
+    -- Removing a row changes who holds the Harmony role, so it follows the same rank rule.
+    IF NOT v_owner THEN
+        FOR v_gone IN
+            SELECT m.discord_role_id, sr.position
+              FROM public.discord_migration_role_map m
+              JOIN public.server_roles sr ON sr.id = m.harmony_role_id
+             WHERE m.server_id = p_server_id AND NOT (m.discord_role_id = ANY (v_dids))
+        LOOP
+            IF v_gone.position >= v_rank THEN
+                RAISE EXCEPTION 'Cannot unmap a role ranked at or above your highest role' USING ERRCODE = '42501';
+            END IF;
+        END LOOP;
+    END IF;
+
+    DELETE FROM public.discord_migration_role_map m
+     WHERE m.server_id = p_server_id AND NOT (m.discord_role_id = ANY (v_dids));
+    INSERT INTO public.discord_migration_role_map (server_id, discord_role_id, harmony_role_id)
+    SELECT p_server_id, t.d, t.h FROM unnest(v_dids, v_hids) AS t(d, h)
+    ON CONFLICT (server_id, discord_role_id) DO UPDATE SET harmony_role_id = EXCLUDED.harmony_role_id;
+
+    RETURN public.discord_migration_readiness(p_server_id);
+END;
+$$;
+
+-- {holders: [{user_id, username, display_name}]}: the active links that hold the Discord role, for the
+-- confirm dialog of an Administrator mapping.
+CREATE OR REPLACE FUNCTION public.discord_migration_admin_impact(p_server_id uuid, p_discord_role_id text)
+RETURNS jsonb
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path = public, extensions, pg_temp
+AS $$
+BEGIN
+    PERFORM public.discord_migration_assert_manager(p_server_id);
+    RETURN jsonb_build_object('holders', COALESCE((
+        SELECT jsonb_agg(jsonb_build_object('user_id', l.user_id, 'username', p.username,
+                                            'display_name', p.display_name)
+                         ORDER BY p.username, l.user_id)
+          FROM public.discord_migration_links l
+          JOIN public.profiles p ON p.id = l.user_id
+         WHERE l.server_id = p_server_id AND l.status = 'active'
+           AND p_discord_role_id = ANY (l.discord_role_ids)), '[]'::jsonb));
+END;
+$$;
+
+-- Adds the missing bits of the mapped roles (p_discord_role_ids, null for all) to their Harmony roles:
+-- {updated: [{harmony_role_id, added: text[]}]}. SECURITY INVOKER on purpose: the role UPDATE runs as
+-- the caller, so RLS (MANAGE_ROLES) and the server_roles write guard (rank, and only bits the caller
+-- holds) decide what is allowed. The gaps come from the definer discord_migration_permission_gaps,
+-- which also requires MANAGE_SERVER. Add-only; never clears a bit. A gap with ADMINISTRATOR is
+-- owner-only (42501 ADMIN_ROLE_OWNER_ONLY) and needs p_confirm_admin (P0001 ADMIN_ROLE_NEEDS_CONFIRM).
+CREATE OR REPLACE FUNCTION public.discord_migration_apply_permissions(
+    p_server_id uuid,
+    p_discord_role_ids text[],
+    p_confirm_admin boolean DEFAULT false)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY INVOKER
+SET search_path = public, extensions, pg_temp
+AS $$
+DECLARE
+    v_names text[] := public.permission_bit_names();
+    v_gaps jsonb := public.discord_migration_permission_gaps(p_server_id);
+    v_sel jsonb;
+    v_gap jsonb;
+    v_hid uuid;
+    v_bits bigint;
+    v_rows integer;
+    v_updated jsonb := '[]'::jsonb;
+BEGIN
+    SELECT COALESCE(jsonb_agg(e), '[]'::jsonb) INTO v_sel
+      FROM jsonb_array_elements(v_gaps) e
+     WHERE p_discord_role_ids IS NULL OR (e ->> 'discord_role_id') = ANY (p_discord_role_ids);
+
+    IF EXISTS (SELECT 1 FROM jsonb_array_elements(v_sel) e WHERE e -> 'missing' ? 'ADMINISTRATOR') THEN
+        IF NOT EXISTS (SELECT 1 FROM public.servers s
+                        WHERE s.id = p_server_id AND s.owner = public.get_current_profile_id()) THEN
+            RAISE EXCEPTION 'ADMIN_ROLE_OWNER_ONLY' USING ERRCODE = '42501';
+        END IF;
+        IF NOT COALESCE(p_confirm_admin, false) THEN
+            RAISE EXCEPTION 'ADMIN_ROLE_NEEDS_CONFIRM';
+        END IF;
+    END IF;
+
+    FOR v_gap IN SELECT e FROM jsonb_array_elements(v_sel) e LOOP
+        v_hid := (v_gap ->> 'harmony_role_id')::uuid;
+        SELECT COALESCE(bit_or(1::bigint << (array_position(v_names, n) - 1)), 0) INTO v_bits
+          FROM jsonb_array_elements_text(v_gap -> 'missing') n;
+
+        UPDATE public.server_roles sr
+           SET permissions = COALESCE(sr.permissions, 0) | v_bits
+         WHERE sr.id = v_hid AND sr.server_id = p_server_id;
+        GET DIAGNOSTICS v_rows = ROW_COUNT;
+        IF v_rows = 0 THEN
+            -- RLS hides the role from a caller without MANAGE_ROLES.
+            RAISE EXCEPTION 'Missing permission: MANAGE_ROLES' USING ERRCODE = '42501';
+        END IF;
+        v_updated := v_updated || jsonb_build_object('harmony_role_id', v_hid, 'added', v_gap -> 'missing');
+    END LOOP;
+
+    RETURN jsonb_build_object('updated', v_updated);
+END;
+$$;
+
+-- draft|finished to open needs readiness (P0001 MIGRATION_NOT_READY) and asks for a sync; open to
+-- finished stamps finished_at. Any other change raises: 22023 for a state that cannot be set, 55000 for
+-- a change the current state does not allow. Returns discord_migration_get().
+CREATE OR REPLACE FUNCTION public.discord_migration_set_state(p_server_id uuid, p_state text)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, extensions, pg_temp
+AS $$
+DECLARE
+    v_cur text;
+BEGIN
+    PERFORM public.discord_migration_assert_manager(p_server_id);
+    SELECT m.state INTO v_cur FROM public.discord_migrations m WHERE m.server_id = p_server_id FOR UPDATE;
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'migration_not_configured' USING ERRCODE = 'P0002';
+    END IF;
+
+    IF p_state = 'open' THEN
+        IF v_cur NOT IN ('draft', 'finished') THEN
+            RAISE EXCEPTION 'invalid_state_change' USING ERRCODE = '55000';
+        END IF;
+        IF NOT (public.discord_migration_readiness(p_server_id) ->> 'ready')::boolean THEN
+            RAISE EXCEPTION 'MIGRATION_NOT_READY';
+        END IF;
+        UPDATE public.discord_migrations
+           SET state = 'open', opened_at = now(), finished_at = NULL, sync_paused_reason = NULL,
+               sync_requested_at = now(), updated_at = now()
+         WHERE server_id = p_server_id;
+    ELSIF p_state = 'finished' THEN
+        IF v_cur <> 'open' THEN
+            RAISE EXCEPTION 'invalid_state_change' USING ERRCODE = '55000';
+        END IF;
+        UPDATE public.discord_migrations
+           SET state = 'finished', finished_at = now(), updated_at = now()
+         WHERE server_id = p_server_id;
+    ELSE
+        RAISE EXCEPTION 'invalid_state' USING ERRCODE = '22023';
+    END IF;
+
+    RETURN public.discord_migration_get(p_server_id);
+END;
+$$;
+
+-- Asks the gateway for a sync now. Only while the migration is open (55000).
+CREATE OR REPLACE FUNCTION public.discord_migration_request_sync(p_server_id uuid)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, extensions, pg_temp
+AS $$
+DECLARE
+    v_cur text;
+BEGIN
+    PERFORM public.discord_migration_assert_manager(p_server_id);
+    SELECT m.state INTO v_cur FROM public.discord_migrations m WHERE m.server_id = p_server_id FOR UPDATE;
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'migration_not_configured' USING ERRCODE = 'P0002';
+    END IF;
+    IF v_cur <> 'open' THEN
+        RAISE EXCEPTION 'migration_not_open' USING ERRCODE = '55000';
+    END IF;
+    UPDATE public.discord_migrations SET sync_requested_at = now() WHERE server_id = p_server_id;
+END;
+$$;
+
+-- [{discord_role_id, harmony_role_id | null}] for every role in the snapshot: the Harmony role with the
+-- same name, ignoring case and surrounding spaces. No match, several matches and the @everyone role
+-- give null. Writes nothing.
+CREATE OR REPLACE FUNCTION public.discord_migration_auto_match(p_server_id uuid)
+RETURNS jsonb
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path = public, extensions, pg_temp
+AS $$
+BEGIN
+    PERFORM public.discord_migration_assert_manager(p_server_id);
+    RETURN COALESCE((
+        SELECT jsonb_agg(jsonb_build_object(
+                   'discord_role_id', r.discord_role_id,
+                   'harmony_role_id', (SELECT CASE WHEN count(*) = 1 THEN (array_agg(sr.id))[1] END
+                                         FROM public.server_roles sr
+                                        WHERE sr.server_id = p_server_id AND NOT sr.is_default
+                                          AND lower(btrim(sr.name)) = lower(btrim(r.name))))
+                   ORDER BY r.position DESC, r.discord_role_id)
+          FROM public.discord_migration_discord_roles r
+         WHERE r.server_id = p_server_id), '[]'::jsonb);
 END;
 $$;
 
@@ -604,7 +1003,15 @@ BEGIN
         'public.discord_migration_get(uuid)',
         'public.discord_migration_save(uuid, text, text)',
         'public.discord_migration_set_own_credentials(uuid, text, text, text)',
-        'public.discord_migration_regenerate_token(uuid)'
+        'public.discord_migration_regenerate_token(uuid)',
+        'public.discord_migration_readiness(uuid)',
+        'public.discord_migration_permission_gaps(uuid)',
+        'public.discord_migration_save_role_map(uuid, jsonb, boolean)',
+        'public.discord_migration_admin_impact(uuid, text)',
+        'public.discord_migration_apply_permissions(uuid, text[], boolean)',
+        'public.discord_migration_set_state(uuid, text)',
+        'public.discord_migration_request_sync(uuid)',
+        'public.discord_migration_auto_match(uuid)'
     ]::regprocedure[] LOOP
         EXECUTE format('REVOKE ALL ON FUNCTION %s FROM PUBLIC, anon, authenticated, service_role', fn);
         EXECUTE format('GRANT EXECUTE ON FUNCTION %s TO authenticated', fn);
@@ -622,6 +1029,7 @@ BEGIN
     -- Reached only from the definers above and from triggers, which run as the owner.
     FOREACH fn IN ARRAY ARRAY[
         'public.discord_migration_assert_manager(uuid)',
+        'public.discord_migration_admin_bearing(uuid, text, uuid)',
         'public.discord_migration_secrets_purge()'
     ]::regprocedure[] LOOP
         EXECUTE format('REVOKE ALL ON FUNCTION %s FROM PUBLIC, anon, authenticated, service_role', fn);

@@ -8,7 +8,7 @@
 --   s3                  source 'instance_bot'
 BEGIN;
 SET LOCAL search_path = tests, public;
-SELECT plan(52);
+SELECT plan(110);
 
 CREATE TEMP TABLE out (k text PRIMARY KEY, v jsonb) ON COMMIT DROP;
 GRANT ALL ON out TO PUBLIC;
@@ -85,9 +85,9 @@ SELECT is((SELECT v ->> 'discord_guild_id' || '/' || (v ->> 'credential_source')
 SELECT is((SELECT v ->> 'state' FROM out WHERE k = 'save1'), 'draft', 'save returns the configuration');
 SELECT ok((SELECT v ->> 'caller_is_owner' = 'true' AND v ->> 'has_own_credentials' = 'false'
                   AND v ->> 'bridge_available' = 'false' AND v ->> 'instance_bot_available' = 'false'
-                  AND NOT v ? 'readiness' AND NOT v ? 'permission_gaps'
+                  AND v -> 'readiness' ->> 'ready' = 'false' AND v -> 'permission_gaps' = '[]'::jsonb
              FROM out WHERE k = 'get1'),
-  'get reports owner, no own credentials, no bridge, no instance bot, and leaves readiness to a later function');
+  'get reports owner, no own credentials, no bridge, no instance bot, readiness and no permission gaps');
 SELECT is((SELECT v -> 'link_counts' FROM out WHERE k = 'get1'),
   '{"active":0,"left":0,"banned":0,"kicked_on_harmony":0}'::jsonb, 'get counts links by status');
 SELECT is((SELECT v -> 'discord_roles' FROM out WHERE k = 'get1'), '[]'::jsonb, 'get lists the (empty) role snapshot');
@@ -151,7 +151,8 @@ INSERT INTO out VALUES ('get2', public.discord_migration_get('f2740000-0000-0000
 SELECT tests.clear_authentication();
 SELECT is((SELECT v ->> 'discord_guild_id' FROM out WHERE k = 'save2'), '900000000000000274',
   'save with a null guild id copies the hosted bridge''s guild');
-SELECT is((SELECT v ->> 'bridge_available' FROM out WHERE k = 'get2'), 'true', 'a hosted bridge makes the bridge available');
+SELECT is((SELECT v ->> 'bridge_available' FROM out WHERE k = 'get2'), 'false',
+  'a hosted bridge without its token is not an available bridge');
 
 SET LOCAL role service_role;
 SELECT throws_ok($q$SELECT public.discord_migration_credentials('f2740000-0000-0000-0000-0000000000a2')$q$,
@@ -161,6 +162,10 @@ RESET role;
 SELECT vault.create_secret('hosted-bot-token-274', NULL, 'test 274') AS hosted_tok \gset
 INSERT INTO public.discord_bridge_secrets (bridge_id, discord_token_secret)
 VALUES ('f2740000-0000-0000-0000-0000000000b2', :'hosted_tok');
+SELECT tests.authenticate_as('aaaaaaaa-0000-0000-0000-000000000001');
+SELECT is(public.discord_migration_get('f2740000-0000-0000-0000-0000000000a2') ->> 'bridge_available', 'true',
+  'a hosted bridge that holds its token makes the bridge available');
+SELECT tests.clear_authentication();
 SELECT tests.authenticate_as('aaaaaaaa-0000-0000-0000-000000000001');
 SELECT public.discord_migration_set_own_credentials('f2740000-0000-0000-0000-0000000000a2',
   '300000000000000275', 'abcdefghijklmnopqrstuvwxyz274002', NULL);
@@ -284,6 +289,310 @@ SELECT tests.clear_authentication();
 SELECT is((SELECT (SELECT count(*) FROM public.discord_migration_discord_roles WHERE server_id = '55555555-0000-0000-0000-000000000005')
               + (SELECT count(*) FROM public.discord_migration_role_map WHERE server_id = '55555555-0000-0000-0000-000000000005')),
   0::bigint, 'a draft that moves to another guild drops the role snapshot and map');
+
+-- Role map, permission gaps, lifecycle ---------------------------------------------------------------
+-- Server s4 (alice owns it):
+--   mgr  role mgr (position 10): MANAGE_SERVER, MANAGE_ROLES, KICK_MEMBERS (648); no BAN_MEMBERS
+--   srv  role srv (position 10): MANAGE_SERVER only (128): configures, cannot edit roles
+--   adm  role adm (position 50): ADMINISTRATOR (1)
+--   Harmony roles   h1 'moderator ' (5) VIEW_CHANNEL, h2 Helper (4), h3 Elite (20), h4 Boss (3, is_admin),
+--                   h5 Gappy (6) VIEW_CHANNEL|PIN_MESSAGES, h6 Target (2)
+--   Discord roles   d1 Moderator, d2 Helpers, d3 Elite, d4 Boss (snapshot ADMINISTRATOR), d5 Gappy
+--                   (KICK|BAN|VIEW), d6 Admin gap (ADMINISTRATOR|VIEW), d7 everyone, d8 Chief
+CREATE FUNCTION pg_temp.d(n int) RETURNS text LANGUAGE sql IMMUTABLE AS $f$ SELECT '4100000000000000' || lpad(n::text, 2, '0') $f$;
+CREATE FUNCTION pg_temp.h(n int) RETURNS uuid LANGUAGE sql IMMUTABLE AS $f$ SELECT ('f2740000-0000-0000-0000-0000000000d' || n)::uuid $f$;
+CREATE FUNCTION pg_temp.e(dn int, hn int) RETURNS jsonb LANGUAGE sql IMMUTABLE AS $f$
+  SELECT jsonb_build_object('discord_role_id', pg_temp.d(dn), 'harmony_role_id', pg_temp.h(hn)) $f$;
+CREATE FUNCTION pg_temp.map4() RETURNS jsonb LANGUAGE sql STABLE AS $f$
+  SELECT COALESCE(jsonb_agg(jsonb_build_array(m.discord_role_id, m.harmony_role_id) ORDER BY m.discord_role_id), '[]'::jsonb)
+    FROM public.discord_migration_role_map m WHERE m.server_id = 'f2740000-0000-0000-0000-0000000000a4' $f$;
+CREATE FUNCTION pg_temp.perm(n int) RETURNS bigint LANGUAGE sql STABLE AS $f$
+  SELECT permissions FROM public.server_roles WHERE id = pg_temp.h(n) $f$;
+
+INSERT INTO auth.users (id, instance_id, aud, role, email) VALUES
+  ('a2740000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'dm-mgr@test.local'),
+  ('a2740000-0000-0000-0000-000000000002', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'dm-srv@test.local'),
+  ('a2740000-0000-0000-0000-000000000003', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'dm-adm@test.local');
+INSERT INTO public.profiles (id, auth_user_id, username, display_name, is_local) VALUES
+  ('e2740000-0000-0000-0000-000000000001', 'a2740000-0000-0000-0000-000000000001', 'dmmgr', 'Mgr', true),
+  ('e2740000-0000-0000-0000-000000000002', 'a2740000-0000-0000-0000-000000000002', 'dmsrv', 'Srv', true),
+  ('e2740000-0000-0000-0000-000000000003', 'a2740000-0000-0000-0000-000000000003', 'dmadm', 'Adm', true);
+INSERT INTO public.servers (id, name, owner)
+VALUES ('f2740000-0000-0000-0000-0000000000a4', 'S4 274', '11111111-0000-0000-0000-000000000001');
+INSERT INTO public.user_servers (user_id, server_id, status) VALUES
+  ('e2740000-0000-0000-0000-000000000001', 'f2740000-0000-0000-0000-0000000000a4', 'accepted'),
+  ('e2740000-0000-0000-0000-000000000002', 'f2740000-0000-0000-0000-0000000000a4', 'accepted'),
+  ('e2740000-0000-0000-0000-000000000003', 'f2740000-0000-0000-0000-0000000000a4', 'accepted')
+ON CONFLICT DO NOTHING;
+INSERT INTO public.server_roles (id, server_id, name, position, permissions, is_admin) VALUES
+  ('f2740000-0000-0000-0000-0000000000e1', 'f2740000-0000-0000-0000-0000000000a4', 'mgr', 10, 648, false),
+  ('f2740000-0000-0000-0000-0000000000e2', 'f2740000-0000-0000-0000-0000000000a4', 'srv', 10, 128, false),
+  ('f2740000-0000-0000-0000-0000000000e3', 'f2740000-0000-0000-0000-0000000000a4', 'adm', 50, 1, false),
+  (pg_temp.h(1), 'f2740000-0000-0000-0000-0000000000a4', 'moderator ', 5, 2, false),
+  (pg_temp.h(2), 'f2740000-0000-0000-0000-0000000000a4', 'Helper', 4, 0, false),
+  (pg_temp.h(3), 'f2740000-0000-0000-0000-0000000000a4', 'Elite', 20, 0, false),
+  (pg_temp.h(4), 'f2740000-0000-0000-0000-0000000000a4', 'Boss', 3, 0, true),
+  (pg_temp.h(5), 'f2740000-0000-0000-0000-0000000000a4', 'Gappy', 6, 2 | 8388608, false),
+  (pg_temp.h(6), 'f2740000-0000-0000-0000-0000000000a4', 'Target', 2, 0, false);
+INSERT INTO public.user_roles (user_id, role_id, server_id) VALUES
+  ('e2740000-0000-0000-0000-000000000001', 'f2740000-0000-0000-0000-0000000000e1', 'f2740000-0000-0000-0000-0000000000a4'),
+  ('e2740000-0000-0000-0000-000000000002', 'f2740000-0000-0000-0000-0000000000e2', 'f2740000-0000-0000-0000-0000000000a4'),
+  ('e2740000-0000-0000-0000-000000000003', 'f2740000-0000-0000-0000-0000000000e3', 'f2740000-0000-0000-0000-0000000000a4');
+
+SELECT tests.authenticate_as('aaaaaaaa-0000-0000-0000-000000000001');
+SELECT public.discord_migration_save('f2740000-0000-0000-0000-0000000000a4', '900000000000000401', 'own');
+SELECT public.discord_migration_set_own_credentials('f2740000-0000-0000-0000-0000000000a4',
+  '300000000000000278', 'abcdefghijklmnopqrstuvwxyz274003',
+  ('MTAxMDEwMTAxMDEwMTAxMDEw' || '.GabcDE.' || 'abcdefghijklmnopqrstuvwxyz0123456789AB'));
+SELECT tests.clear_authentication();
+INSERT INTO public.discord_migration_discord_roles (server_id, discord_role_id, name, position, harmony_permissions) VALUES
+  ('f2740000-0000-0000-0000-0000000000a4', pg_temp.d(1), 'Moderator', 5, 0);
+
+-- Readiness: one unmapped role, then mapped
+SELECT tests.authenticate_as('aaaaaaaa-0000-0000-0000-000000000001');
+INSERT INTO out VALUES ('ready1', public.discord_migration_readiness('f2740000-0000-0000-0000-0000000000a4'));
+INSERT INTO out VALUES ('map1', public.discord_migration_save_role_map('f2740000-0000-0000-0000-0000000000a4',
+  jsonb_build_array(pg_temp.e(1, 1))));
+SELECT tests.clear_authentication();
+SELECT ok((SELECT v ->> 'ready' = 'false' AND v ->> 'has_credentials' = 'true' AND v ->> 'has_guild' = 'true'
+                  AND v ->> 'roles_fetched' = 'true'
+                  AND v -> 'unmapped_roles' = jsonb_build_array(jsonb_build_object('discord_role_id', pg_temp.d(1), 'name', 'Moderator'))
+             FROM out WHERE k = 'ready1'),
+  'readiness is false with one unmapped role and lists it');
+SELECT ok((SELECT v ->> 'ready' = 'true' AND v -> 'unmapped_roles' = '[]'::jsonb FROM out WHERE k = 'map1'),
+  'save_role_map returns readiness, ready once the role is mapped');
+
+INSERT INTO public.discord_migration_discord_roles (server_id, discord_role_id, name, position, harmony_permissions) VALUES
+  ('f2740000-0000-0000-0000-0000000000a4', pg_temp.d(2), 'Helpers', 4, 0),
+  ('f2740000-0000-0000-0000-0000000000a4', pg_temp.d(3), 'Elite', 20, 0),
+  ('f2740000-0000-0000-0000-0000000000a4', pg_temp.d(4), 'Boss', 3, 1),
+  ('f2740000-0000-0000-0000-0000000000a4', pg_temp.d(5), 'Gappy', 6, 2 | 512 | 1024),
+  ('f2740000-0000-0000-0000-0000000000a4', pg_temp.d(6), 'Admin gap', 2, 3),
+  ('f2740000-0000-0000-0000-0000000000a4', pg_temp.d(7), 'everyone', 1, 0),
+  ('f2740000-0000-0000-0000-0000000000a4', pg_temp.d(8), 'Chief', 1, 0);
+
+-- Auto match
+SELECT tests.authenticate_as('aaaaaaaa-0000-0000-0000-000000000001');
+INSERT INTO out VALUES ('match', public.discord_migration_auto_match('f2740000-0000-0000-0000-0000000000a4'));
+SELECT tests.clear_authentication();
+SELECT ok((SELECT v @> jsonb_build_array(jsonb_build_object('discord_role_id', pg_temp.d(1), 'harmony_role_id', pg_temp.h(1)))
+             FROM out WHERE k = 'match'),
+  'auto_match pairs Moderator with "moderator " by trimmed, case-insensitive name');
+SELECT ok((SELECT v @> jsonb_build_array(jsonb_build_object('discord_role_id', pg_temp.d(2), 'harmony_role_id', NULL))
+                  AND v @> jsonb_build_array(jsonb_build_object('discord_role_id', pg_temp.d(7), 'harmony_role_id', NULL))
+                  AND jsonb_array_length(v) = 8
+             FROM out WHERE k = 'match'),
+  'auto_match proposes nothing for inexact names or the default role, and lists every Discord role');
+SELECT is(pg_temp.map4(), jsonb_build_array(jsonb_build_array(pg_temp.d(1), pg_temp.h(1))), 'auto_match writes nothing');
+
+-- Hierarchy: a manager maps only roles below their own top role; the owner maps any
+SELECT tests.authenticate_as('a2740000-0000-0000-0000-000000000001');
+SELECT lives_ok($q$SELECT public.discord_migration_save_role_map('f2740000-0000-0000-0000-0000000000a4',
+  jsonb_build_array(pg_temp.e(1, 1), pg_temp.e(2, 2)))$q$,
+  'a MANAGE_SERVER manager maps a role below their own');
+SELECT throws_ok($q$SELECT public.discord_migration_save_role_map('f2740000-0000-0000-0000-0000000000a4',
+  jsonb_build_array(pg_temp.e(1, 1), pg_temp.e(2, 2), pg_temp.e(3, 3)))$q$,
+  '42501', NULL, 'a manager cannot map a role at or above their own top role');
+SELECT tests.clear_authentication();
+SELECT is(pg_temp.map4(), jsonb_build_array(jsonb_build_array(pg_temp.d(1), pg_temp.h(1)), jsonb_build_array(pg_temp.d(2), pg_temp.h(2))),
+  'the refused map left the map unchanged');
+SELECT tests.authenticate_as('aaaaaaaa-0000-0000-0000-000000000001');
+SELECT lives_ok($q$SELECT public.discord_migration_save_role_map('f2740000-0000-0000-0000-0000000000a4',
+  jsonb_build_array(pg_temp.e(1, 1), pg_temp.e(2, 2), pg_temp.e(3, 3)))$q$,
+  'the owner maps a role above any manager');
+SELECT tests.clear_authentication();
+SELECT tests.authenticate_as('a2740000-0000-0000-0000-000000000001');
+SELECT lives_ok($q$SELECT public.discord_migration_save_role_map('f2740000-0000-0000-0000-0000000000a4',
+  jsonb_build_array(pg_temp.e(1, 1), pg_temp.e(2, 2), pg_temp.e(3, 3)))$q$,
+  'a manager re-saving the map with an unchanged high row is not refused');
+SELECT throws_ok($q$SELECT public.discord_migration_save_role_map('f2740000-0000-0000-0000-0000000000a4',
+  jsonb_build_array(pg_temp.e(1, 1), pg_temp.e(2, 2)))$q$,
+  '42501', NULL, 'a manager cannot unmap a role at or above their own top role');
+SELECT tests.clear_authentication();
+
+-- Administrator-bearing rows are owner-only and need confirmation
+SELECT tests.authenticate_as('a2740000-0000-0000-0000-000000000001');
+SELECT throws_ok($q$SELECT public.discord_migration_save_role_map('f2740000-0000-0000-0000-0000000000a4',
+  jsonb_build_array(pg_temp.e(1, 1), pg_temp.e(2, 2), pg_temp.e(3, 3), pg_temp.e(4, 2)))$q$,
+  '42501', 'ADMIN_ROLE_OWNER_ONLY', 'a manager cannot map a Discord role that carries ADMINISTRATOR');
+SELECT tests.clear_authentication();
+SELECT is(jsonb_array_length(pg_temp.map4()), 3, 'the refused admin map wrote nothing');
+SELECT tests.authenticate_as('aaaaaaaa-0000-0000-0000-000000000001');
+SELECT throws_ok($q$SELECT public.discord_migration_save_role_map('f2740000-0000-0000-0000-0000000000a4',
+  jsonb_build_array(pg_temp.e(1, 1), pg_temp.e(2, 2), pg_temp.e(3, 3), pg_temp.e(4, 2)))$q$,
+  'P0001', 'ADMIN_ROLE_NEEDS_CONFIRM', 'the owner needs to confirm an administrator mapping');
+SELECT tests.clear_authentication();
+SELECT is(jsonb_array_length(pg_temp.map4()), 3, 'the unconfirmed admin map wrote nothing');
+SELECT tests.authenticate_as('aaaaaaaa-0000-0000-0000-000000000001');
+SELECT lives_ok($q$SELECT public.discord_migration_save_role_map('f2740000-0000-0000-0000-0000000000a4',
+  jsonb_build_array(pg_temp.e(1, 1), pg_temp.e(2, 2), pg_temp.e(3, 3), pg_temp.e(4, 2)), p_confirm_admin => true)$q$,
+  'the owner saves an administrator mapping with confirmation');
+SELECT lives_ok($q$SELECT public.discord_migration_save_role_map('f2740000-0000-0000-0000-0000000000a4',
+  jsonb_build_array(pg_temp.e(1, 1), pg_temp.e(2, 2), pg_temp.e(3, 3), pg_temp.e(4, 2)))$q$,
+  'saving the same map again needs no confirmation');
+SELECT tests.clear_authentication();
+SELECT is(jsonb_array_length(pg_temp.map4()), 4, 'the confirmed admin map was written');
+
+SELECT tests.authenticate_as('a2740000-0000-0000-0000-000000000001');
+SELECT throws_ok($q$SELECT public.discord_migration_save_role_map('f2740000-0000-0000-0000-0000000000a4',
+  jsonb_build_array(pg_temp.e(1, 1), pg_temp.e(2, 2), pg_temp.e(3, 3), pg_temp.e(4, 2), pg_temp.e(8, 4)))$q$,
+  '42501', 'ADMIN_ROLE_OWNER_ONLY', 'a manager cannot map onto a Harmony role with is_admin');
+SELECT tests.clear_authentication();
+SELECT tests.authenticate_as('aaaaaaaa-0000-0000-0000-000000000001');
+SELECT throws_ok($q$SELECT public.discord_migration_save_role_map('f2740000-0000-0000-0000-0000000000a4',
+  jsonb_build_array(pg_temp.e(1, 1), pg_temp.e(2, 2), pg_temp.e(3, 3), pg_temp.e(4, 2), pg_temp.e(8, 4)))$q$,
+  'P0001', 'ADMIN_ROLE_NEEDS_CONFIRM', 'the owner needs to confirm a mapping onto a Harmony role with is_admin');
+SELECT lives_ok($q$SELECT public.discord_migration_save_role_map('f2740000-0000-0000-0000-0000000000a4',
+  jsonb_build_array(pg_temp.e(1, 1), pg_temp.e(2, 2), pg_temp.e(3, 3), pg_temp.e(4, 2), pg_temp.e(8, 4)), true)$q$,
+  'the owner confirms it');
+
+-- Unmappable Harmony roles
+SELECT throws_ok($q$SELECT public.discord_migration_save_role_map('f2740000-0000-0000-0000-0000000000a4',
+  jsonb_build_array(pg_temp.e(1, 1), jsonb_build_object('discord_role_id', pg_temp.d(7), 'harmony_role_id',
+    (SELECT id FROM public.server_roles WHERE server_id = 'f2740000-0000-0000-0000-0000000000a4' AND is_default))))$q$,
+  '22023', NULL, 'the default role cannot be mapped');
+SELECT throws_ok($q$SELECT public.discord_migration_save_role_map('f2740000-0000-0000-0000-0000000000a4',
+  jsonb_build_array(pg_temp.e(1, 1), jsonb_build_object('discord_role_id', pg_temp.d(7), 'harmony_role_id',
+    'f2740000-0000-0000-0000-0000000000c1')))$q$,
+  '22023', NULL, 'a role of another server cannot be mapped');
+
+-- The map the later checks use
+SELECT lives_ok($q$SELECT public.discord_migration_save_role_map('f2740000-0000-0000-0000-0000000000a4',
+  jsonb_build_array(pg_temp.e(1, 1), pg_temp.e(2, 2), pg_temp.e(3, 3), pg_temp.e(4, 2), pg_temp.e(5, 5),
+                    pg_temp.e(6, 6), pg_temp.e(8, 4)), true)$q$,
+  'the owner saves the full map');
+SELECT tests.clear_authentication();
+
+-- Admin impact lists active holders only
+INSERT INTO public.discord_migration_links (server_id, user_id, discord_user_id, status, discord_role_ids) VALUES
+  ('f2740000-0000-0000-0000-0000000000a4', 'e2740000-0000-0000-0000-000000000001', '510000000000000001', 'active', ARRAY[pg_temp.d(4), pg_temp.d(1)]),
+  ('f2740000-0000-0000-0000-0000000000a4', 'e2740000-0000-0000-0000-000000000002', '510000000000000002', 'left', ARRAY[pg_temp.d(4)]),
+  ('f2740000-0000-0000-0000-0000000000a4', 'e2740000-0000-0000-0000-000000000003', '510000000000000003', 'active', ARRAY[pg_temp.d(1)]);
+SELECT tests.authenticate_as('aaaaaaaa-0000-0000-0000-000000000001');
+INSERT INTO out VALUES ('impact', public.discord_migration_admin_impact('f2740000-0000-0000-0000-0000000000a4', pg_temp.d(4)));
+SELECT tests.clear_authentication();
+SELECT is((SELECT v FROM out WHERE k = 'impact'),
+  jsonb_build_object('holders', jsonb_build_array(jsonb_build_object(
+    'user_id', 'e2740000-0000-0000-0000-000000000001', 'username', 'dmmgr', 'display_name', 'Mgr'))),
+  'admin_impact lists the active holder and not the member who left');
+
+-- Permission gaps
+SELECT tests.authenticate_as('aaaaaaaa-0000-0000-0000-000000000001');
+INSERT INTO out VALUES ('gaps', public.discord_migration_permission_gaps('f2740000-0000-0000-0000-0000000000a4'));
+SELECT tests.clear_authentication();
+SELECT is((SELECT e -> 'missing' FROM out, jsonb_array_elements(v) e WHERE k = 'gaps' AND e ->> 'discord_role_id' = pg_temp.d(5)),
+  '["KICK_MEMBERS","BAN_MEMBERS"]'::jsonb, 'permission_gaps names the bits the Discord role has and the Harmony role lacks, in bit order');
+SELECT ok((SELECT NOT EXISTS (SELECT 1 FROM jsonb_array_elements(v) e WHERE e ->> 'discord_role_id' IN (pg_temp.d(1), pg_temp.d(2), pg_temp.d(3)))
+                  AND (SELECT e ->> 'harmony_role_id' FROM jsonb_array_elements(v) e WHERE e ->> 'discord_role_id' = pg_temp.d(5)) = pg_temp.h(5)::text
+             FROM out WHERE k = 'gaps'),
+  'permission_gaps omits rows with nothing missing');
+SELECT tests.authenticate_as('aaaaaaaa-0000-0000-0000-000000000001');
+SELECT is(public.discord_migration_get('f2740000-0000-0000-0000-0000000000a4') -> 'permission_gaps',
+  (SELECT v FROM out WHERE k = 'gaps'), 'get carries the permission gaps');
+SELECT tests.clear_authentication();
+
+-- Applying permissions: the caller's own rights decide
+SELECT tests.authenticate_as('bbbbbbbb-0000-0000-0000-000000000002');
+SELECT throws_ok($q$SELECT public.discord_migration_apply_permissions('f2740000-0000-0000-0000-0000000000a4', ARRAY['4100000000000000'||'05'])$q$,
+  '42501', NULL, 'a non-manager cannot apply permissions');
+SELECT tests.clear_authentication();
+SELECT tests.authenticate_as('a2740000-0000-0000-0000-000000000002');
+SELECT throws_ok($q$SELECT public.discord_migration_apply_permissions('f2740000-0000-0000-0000-0000000000a4', ARRAY['4100000000000000'||'05'])$q$,
+  '42501', 'Missing permission: MANAGE_ROLES', 'a manager without MANAGE_ROLES cannot apply permissions');
+SELECT tests.clear_authentication();
+SELECT tests.authenticate_as('a2740000-0000-0000-0000-000000000001');
+SELECT throws_ok($q$SELECT public.discord_migration_apply_permissions('f2740000-0000-0000-0000-0000000000a4', ARRAY['4100000000000000'||'05'])$q$,
+  '42501', 'Cannot grant BAN_MEMBERS without holding it', 'a manager cannot grant BAN_MEMBERS without holding it');
+SELECT tests.clear_authentication();
+SELECT is(pg_temp.perm(5), 8388610::bigint, 'the refused applies left the Harmony role unchanged');
+
+SELECT tests.authenticate_as('aaaaaaaa-0000-0000-0000-000000000001');
+INSERT INTO out VALUES ('apply1', public.discord_migration_apply_permissions('f2740000-0000-0000-0000-0000000000a4', ARRAY['4100000000000000'||'05']));
+INSERT INTO out VALUES ('apply2', public.discord_migration_apply_permissions('f2740000-0000-0000-0000-0000000000a4', ARRAY['4100000000000000'||'05']));
+SELECT tests.clear_authentication();
+SELECT is((SELECT v FROM out WHERE k = 'apply1'),
+  jsonb_build_object('updated', jsonb_build_array(jsonb_build_object('harmony_role_id', pg_temp.h(5), 'added', jsonb_build_array('KICK_MEMBERS', 'BAN_MEMBERS')))),
+  'the owner applies the gap and gets the added bits');
+SELECT is(pg_temp.perm(5), (2 | 8388608 | 512 | 1024)::bigint, 'the Harmony role gained exactly the gap and kept its Harmony-only bit');
+SELECT is((SELECT v FROM out WHERE k = 'apply2'), '{"updated":[]}'::jsonb, 'applying again changes nothing');
+
+SELECT tests.authenticate_as('a2740000-0000-0000-0000-000000000003');
+SELECT throws_ok($q$SELECT public.discord_migration_apply_permissions('f2740000-0000-0000-0000-0000000000a4', ARRAY['4100000000000000'||'06'], true)$q$,
+  '42501', 'ADMIN_ROLE_OWNER_ONLY', 'a non-owner holding ADMINISTRATOR cannot apply an ADMINISTRATOR gap');
+SELECT tests.clear_authentication();
+SELECT tests.authenticate_as('aaaaaaaa-0000-0000-0000-000000000001');
+SELECT throws_ok($q$SELECT public.discord_migration_apply_permissions('f2740000-0000-0000-0000-0000000000a4', ARRAY['4100000000000000'||'06'])$q$,
+  'P0001', 'ADMIN_ROLE_NEEDS_CONFIRM', 'the owner needs to confirm an ADMINISTRATOR gap');
+SELECT tests.clear_authentication();
+SELECT is(pg_temp.perm(6), 0::bigint, 'the refused ADMINISTRATOR applies left the role unchanged');
+SELECT tests.authenticate_as('aaaaaaaa-0000-0000-0000-000000000001');
+SELECT lives_ok($q$SELECT public.discord_migration_apply_permissions('f2740000-0000-0000-0000-0000000000a4', ARRAY['4100000000000000'||'06'], true)$q$,
+  'the owner applies an ADMINISTRATOR gap with confirmation');
+SELECT tests.clear_authentication();
+SELECT is(pg_temp.perm(6), 3::bigint, 'and the role gained ADMINISTRATOR and VIEW_CHANNEL');
+
+-- Lifecycle (server s3: instance bot enabled, so credentials are present)
+INSERT INTO public.server_roles (id, server_id, name, position, permissions)
+VALUES ('f2740000-0000-0000-0000-0000000000f1', 'f2740000-0000-0000-0000-0000000000a3', 'S3Role', 1, 0);
+SELECT tests.authenticate_as('aaaaaaaa-0000-0000-0000-000000000001');
+SELECT throws_ok($q$SELECT public.discord_migration_set_state('f2740000-0000-0000-0000-0000000000a3', 'open')$q$,
+  'P0001', 'MIGRATION_NOT_READY', 'a migration without a role snapshot cannot open');
+SELECT tests.clear_authentication();
+INSERT INTO public.discord_migration_discord_roles (server_id, discord_role_id, name, position, harmony_permissions)
+VALUES ('f2740000-0000-0000-0000-0000000000a3', '420000000000000001', 'S3 Discord', 1, 0);
+SELECT tests.authenticate_as('aaaaaaaa-0000-0000-0000-000000000001');
+SELECT throws_ok($q$SELECT public.discord_migration_set_state('f2740000-0000-0000-0000-0000000000a3', 'open')$q$,
+  'P0001', 'MIGRATION_NOT_READY', 'a migration with an unmapped role cannot open');
+SELECT public.discord_migration_save_role_map('f2740000-0000-0000-0000-0000000000a3',
+  jsonb_build_array(jsonb_build_object('discord_role_id', '420000000000000001', 'harmony_role_id', 'f2740000-0000-0000-0000-0000000000f1')));
+SELECT throws_ok($q$SELECT public.discord_migration_request_sync('f2740000-0000-0000-0000-0000000000a3')$q$,
+  '55000', NULL, 'a sync can be requested only while open');
+SELECT tests.clear_authentication();
+
+SELECT tests.authenticate_as('bbbbbbbb-0000-0000-0000-000000000002');
+SELECT throws_ok($q$SELECT public.discord_migration_set_state('f2740000-0000-0000-0000-0000000000a3', 'open')$q$,
+  '42501', NULL, 'a non-manager cannot change the state');
+SELECT throws_ok($q$SELECT public.discord_migration_request_sync('f2740000-0000-0000-0000-0000000000a3')$q$,
+  '42501', NULL, 'a non-manager cannot request a sync');
+SELECT tests.clear_authentication();
+
+SELECT tests.authenticate_as('aaaaaaaa-0000-0000-0000-000000000001');
+INSERT INTO out VALUES ('open1', public.discord_migration_set_state('f2740000-0000-0000-0000-0000000000a3', 'open'));
+SELECT tests.clear_authentication();
+SELECT ok((SELECT state = 'open' AND opened_at IS NOT NULL AND finished_at IS NULL AND sync_requested_at IS NOT NULL
+             FROM public.discord_migrations WHERE server_id = 'f2740000-0000-0000-0000-0000000000a3'),
+  'opening sets opened_at and asks for a sync');
+SELECT is((SELECT v ->> 'state' FROM out WHERE k = 'open1'), 'open', 'set_state returns the configuration');
+
+UPDATE public.discord_migrations SET sync_requested_at = NULL WHERE server_id = 'f2740000-0000-0000-0000-0000000000a3';
+SELECT tests.authenticate_as('aaaaaaaa-0000-0000-0000-000000000001');
+SELECT lives_ok($q$SELECT public.discord_migration_request_sync('f2740000-0000-0000-0000-0000000000a3')$q$, 'a sync can be requested while open');
+SELECT throws_ok($q$SELECT public.discord_migration_set_state('f2740000-0000-0000-0000-0000000000a3', 'open')$q$,
+  '55000', NULL, 'an open migration cannot be opened again');
+SELECT throws_ok($q$SELECT public.discord_migration_set_state('f2740000-0000-0000-0000-0000000000a3', 'draft')$q$,
+  '22023', NULL, 'a migration cannot return to draft');
+SELECT lives_ok($q$SELECT public.discord_migration_set_state('f2740000-0000-0000-0000-0000000000a3', 'finished')$q$, 'an open migration finishes');
+SELECT tests.clear_authentication();
+SELECT ok((SELECT sync_requested_at IS NOT NULL FROM public.discord_migrations WHERE server_id = 'f2740000-0000-0000-0000-0000000000a3'),
+  'request_sync stored the time');
+SELECT ok((SELECT state = 'finished' AND finished_at IS NOT NULL FROM public.discord_migrations WHERE server_id = 'f2740000-0000-0000-0000-0000000000a3'),
+  'finishing sets finished_at');
+
+SELECT tests.authenticate_as('aaaaaaaa-0000-0000-0000-000000000001');
+SELECT throws_ok($q$SELECT public.discord_migration_request_sync('f2740000-0000-0000-0000-0000000000a3')$q$,
+  '55000', NULL, 'a finished migration takes no sync request');
+SELECT throws_ok($q$SELECT public.discord_migration_save('f2740000-0000-0000-0000-0000000000a3', '900000000000000299', 'instance_bot')$q$,
+  '55000', NULL, 'a finished migration keeps its guild');
+SELECT tests.clear_authentication();
+
+UPDATE public.discord_migrations SET sync_requested_at = NULL, sync_paused_reason = 'removal_brake'
+ WHERE server_id = 'f2740000-0000-0000-0000-0000000000a3';
+SELECT tests.authenticate_as('aaaaaaaa-0000-0000-0000-000000000001');
+SELECT lives_ok($q$SELECT public.discord_migration_set_state('f2740000-0000-0000-0000-0000000000a3', 'open')$q$, 'a finished migration reopens');
+SELECT tests.clear_authentication();
+SELECT ok((SELECT state = 'open' AND finished_at IS NULL AND sync_paused_reason IS NULL AND sync_requested_at IS NOT NULL
+             FROM public.discord_migrations WHERE server_id = 'f2740000-0000-0000-0000-0000000000a3'),
+  'reopening clears finished_at and the pause, and asks for a sync');
 
 -- Deleting the migration deletes its Vault secrets --------------------------------------------------
 SELECT bot_token_secret AS tok2, client_secret_secret AS cs2
