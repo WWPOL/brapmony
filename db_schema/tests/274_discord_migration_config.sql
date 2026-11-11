@@ -8,7 +8,7 @@
 --   s3                  source 'instance_bot'
 BEGIN;
 SET LOCAL search_path = tests, public;
-SELECT plan(110);
+SELECT plan(115);
 
 CREATE TEMP TABLE out (k text PRIMARY KEY, v jsonb) ON COMMIT DROP;
 GRANT ALL ON out TO PUBLIC;
@@ -268,6 +268,16 @@ SELECT throws_ok($q$INSERT INTO public.discord_migration_links (server_id, user_
 SELECT tests.authenticate_as('aaaaaaaa-0000-0000-0000-000000000001');
 SELECT is(public.discord_migration_get('55555555-0000-0000-0000-000000000005') -> 'link_counts' ->> 'active', '1',
   'get counts the active link');
+SELECT tests.clear_authentication();
+SELECT tests.authenticate_as('aaaaaaaa-0000-0000-0000-000000000001');
+SELECT is((public.discord_migration_members('55555555-0000-0000-0000-000000000005') -> 0) ->> 'discord_user_id', '500000000000000001',
+  'members lists the link with its Discord account');
+SELECT is((public.discord_migration_members('55555555-0000-0000-0000-000000000005') -> 0) ->> 'status', 'active',
+  'members lists the link status');
+SELECT tests.clear_authentication();
+SELECT tests.authenticate_as('bbbbbbbb-0000-0000-0000-000000000002');
+SELECT throws_ok($q$SELECT public.discord_migration_members('55555555-0000-0000-0000-000000000005')$q$,
+  '42501', NULL, 'a member without MANAGE_SERVER cannot list the linked members');
 SELECT tests.clear_authentication();
 
 -- Open migrations keep their guild -----------------------------------------------------------------
@@ -571,6 +581,17 @@ SELECT throws_ok($q$SELECT public.discord_migration_set_state('f2740000-0000-000
   '55000', NULL, 'an open migration cannot be opened again');
 SELECT throws_ok($q$SELECT public.discord_migration_set_state('f2740000-0000-0000-0000-0000000000a3', 'draft')$q$,
   '22023', NULL, 'a migration cannot return to draft');
+SELECT tests.clear_authentication();
+UPDATE public.discord_migrations SET sync_paused_reason = 'removal_brake', sync_requested_at = NULL
+ WHERE server_id = 'f2740000-0000-0000-0000-0000000000a3';
+SELECT tests.authenticate_as('aaaaaaaa-0000-0000-0000-000000000001');
+SELECT lives_ok($q$SELECT public.discord_migration_set_state('f2740000-0000-0000-0000-0000000000a3', 'open')$q$,
+  'a paused open migration resumes');
+SELECT tests.clear_authentication();
+SELECT ok((SELECT state = 'open' AND sync_paused_reason IS NULL AND sync_requested_at IS NOT NULL
+             FROM public.discord_migrations WHERE server_id = 'f2740000-0000-0000-0000-0000000000a3'),
+  'resuming clears the pause and asks for a sync');
+SELECT tests.authenticate_as('aaaaaaaa-0000-0000-0000-000000000001');
 SELECT lives_ok($q$SELECT public.discord_migration_set_state('f2740000-0000-0000-0000-0000000000a3', 'finished')$q$, 'an open migration finishes');
 SELECT tests.clear_authentication();
 SELECT ok((SELECT sync_requested_at IS NOT NULL FROM public.discord_migrations WHERE server_id = 'f2740000-0000-0000-0000-0000000000a3'),

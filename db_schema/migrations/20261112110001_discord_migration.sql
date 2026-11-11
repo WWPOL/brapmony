@@ -768,7 +768,7 @@ BEGIN
 END;
 $$;
 
--- draft|finished to open needs readiness (P0001 MIGRATION_NOT_READY) and asks for a sync; open to
+-- A paused open migration set to open resumes. draft|finished to open needs readiness (P0001 MIGRATION_NOT_READY) and asks for a sync; open to
 -- finished stamps finished_at. Any other change raises: 22023 for a state that cannot be set, 55000 for
 -- a change the current state does not allow. Returns discord_migration_get().
 CREATE OR REPLACE FUNCTION public.discord_migration_set_state(p_server_id uuid, p_state text)
@@ -787,6 +787,14 @@ BEGIN
     END IF;
 
     IF p_state = 'open' THEN
+        -- An open migration that sync paused resumes: the pause is cleared and a sync asked for.
+        IF v_cur = 'open' AND EXISTS (SELECT 1 FROM public.discord_migrations m
+                                       WHERE m.server_id = p_server_id AND m.sync_paused_reason IS NOT NULL) THEN
+            UPDATE public.discord_migrations
+               SET sync_paused_reason = NULL, sync_requested_at = now(), updated_at = now()
+             WHERE server_id = p_server_id;
+            RETURN public.discord_migration_get(p_server_id);
+        END IF;
         IF v_cur NOT IN ('draft', 'finished') THEN
             RAISE EXCEPTION 'invalid_state_change' USING ERRCODE = '55000';
         END IF;
@@ -1481,6 +1489,29 @@ BEGIN
     UPDATE public.discord_migration_links l
        SET status = 'left'
      WHERE l.server_id = p_server_id AND l.user_id = p_user_id AND l.status = 'kicked_on_harmony';
+END;
+$$;
+
+-- [{user_id, username, display_name, discord_user_id, status, last_synced_at}]: the migration's links,
+-- for the member list of the settings panel. Newest link first.
+CREATE OR REPLACE FUNCTION public.discord_migration_members(p_server_id uuid)
+RETURNS jsonb
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path = public, extensions, pg_temp
+AS $$
+BEGIN
+    PERFORM public.discord_migration_assert_manager(p_server_id);
+    RETURN COALESCE((
+        SELECT jsonb_agg(jsonb_build_object(
+                   'user_id', l.user_id, 'username', p.username, 'display_name', p.display_name,
+                   'discord_user_id', l.discord_user_id, 'status', l.status,
+                   'last_synced_at', l.last_synced_at)
+                   ORDER BY l.linked_at DESC, l.user_id)
+          FROM public.discord_migration_links l
+          JOIN public.profiles p ON p.id = l.user_id
+         WHERE l.server_id = p_server_id), '[]'::jsonb);
 END;
 $$;
 
@@ -2216,7 +2247,8 @@ BEGIN
         'public.discord_migration_set_my_sync(uuid, text[])',
         'public.discord_migration_my_link(uuid)',
         'public.discord_migration_member_joined_at(uuid, uuid)',
-        'public.discord_migration_allow_back(uuid, uuid)'
+        'public.discord_migration_allow_back(uuid, uuid)',
+        'public.discord_migration_members(uuid)'
     ]::regprocedure[] LOOP
         EXECUTE format('REVOKE ALL ON FUNCTION %s FROM PUBLIC, anon, authenticated, service_role', fn);
         EXECUTE format('GRANT EXECUTE ON FUNCTION %s TO authenticated', fn);
