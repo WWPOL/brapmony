@@ -159,6 +159,7 @@ DECLARE
     v_part jsonb;
     v_uid uuid;
     v_domain text;
+    v_domain_read boolean := false;
 BEGIN
     IF NEW.thread_id IS NOT NULL THEN
         -- A bot author has no profile to enrol.
@@ -172,11 +173,15 @@ BEGIN
         IF NEW.is_system IS NOT TRUE AND NEW.is_deleted IS NOT TRUE
            AND NOT public.is_history_import()
            AND jsonb_typeof(NEW.content) = 'array' THEN
-            SELECT trim(both '"' from config_value::text) INTO v_domain
-              FROM public.instance_config WHERE config_key = 'domain' LIMIT 1;
             FOR v_part IN SELECT jsonb_array_elements(NEW.content)
             LOOP
                 IF v_part->>'type' = 'mention' THEN
+                    -- The instance domain is read on the first mention only.
+                    IF NOT v_domain_read THEN
+                        SELECT trim(both '"' from config_value::text) INTO v_domain
+                          FROM public.instance_config WHERE config_key = 'domain' LIMIT 1;
+                        v_domain_read := true;
+                    END IF;
                     v_uid := public.resolve_mention_profile_id(v_part, NEW.user_id, v_domain);
                     IF v_uid IS NOT NULL
                        AND v_uid IS DISTINCT FROM NEW.user_id

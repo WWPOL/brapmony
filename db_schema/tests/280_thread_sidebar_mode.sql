@@ -3,7 +3,7 @@
 --   alice  owns S (MANAGE_SERVER)    bob  a member    carol  not a member
 BEGIN;
 SET LOCAL search_path = tests, public;
-SELECT plan(31);
+SELECT plan(35);
 
 INSERT INTO public.servers (id, name, owner, is_local_server) VALUES
   ('28000000-0000-0000-0000-000000000001', 'Sidebar', '11111111-0000-0000-0000-000000000001', true);
@@ -160,6 +160,29 @@ SELECT pg_temp.reply(NULL, pg_temp.mention('33333333-0000-0000-0000-000000000003
 SELECT is(pg_temp.joined('33333333-0000-0000-0000-000000000003'), 0, 'a system reply joins no one');
 SELECT pg_temp.reply('22222222-0000-0000-0000-000000000002', pg_temp.mention('22222222-0000-0000-0000-000000000002'));
 SELECT is(pg_temp.member_count(), pg_temp.members(), 'an author mentioning themselves changes nothing');
+
+-- A bot-authored reply (no user_id) mentioning a viewer joins them.
+DELETE FROM public.thread_members WHERE thread_id = '28000000-0000-0000-0000-000000000004' AND user_id = '33333333-0000-0000-0000-000000000003';
+INSERT INTO public.bots (id, username, display_name, owner_id, is_public) VALUES
+  ('28000000-0000-0000-0000-0000000000d1', 'relay280', 'Relay', '11111111-0000-0000-0000-000000000001', true);
+INSERT INTO public.messages (channel_id, thread_id, bot_id, content) VALUES
+  ('28000000-0000-0000-0000-000000000002', '28000000-0000-0000-0000-000000000004',
+   '28000000-0000-0000-0000-0000000000d1', pg_temp.mention('33333333-0000-0000-0000-000000000003'));
+SELECT is(pg_temp.joined('33333333-0000-0000-0000-000000000003'), 1, 'a bot-authored reply''s mention joins a viewer');
+
+-- Content that is not an array joins no one and does not fail the insert. The table refuses such
+-- content, and other triggers fail on it, so its checks are dropped and only the thread trigger is
+-- left on, for this test (rolled back with the rest).
+ALTER TABLE public.messages DROP CONSTRAINT messages_content_is_array;
+ALTER TABLE public.messages DROP CONSTRAINT messages_content_not_empty;
+ALTER TABLE public.messages DISABLE TRIGGER USER;
+ALTER TABLE public.messages ENABLE TRIGGER trigger_thread_message_insert;
+DELETE FROM public.thread_members WHERE thread_id = '28000000-0000-0000-0000-000000000004' AND user_id = '33333333-0000-0000-0000-000000000003';
+SELECT lives_ok($q$SELECT pg_temp.reply('22222222-0000-0000-0000-000000000002', '{"type":"mention","username":"carol"}'::jsonb)$q$,
+    'a reply whose content is not an array is accepted');
+SELECT is(pg_temp.joined('33333333-0000-0000-0000-000000000003'), 0, 'and joins no one');
+SELECT is(pg_temp.members(), 2, 'and nobody else is added (alice and bob only)');
+ALTER TABLE public.messages ENABLE TRIGGER USER;
 
 -- The mention notification names the thread.
 INSERT INTO public.messages (id, channel_id, thread_id, user_id, content) VALUES
