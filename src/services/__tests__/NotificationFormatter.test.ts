@@ -323,4 +323,25 @@ describe('NotificationFormatter', () => {
       expect(nav).toBeNull()
     })
   })
+
+  describe('discord_migration_admin_change', () => {
+    const data = (change: string) => ({
+      server: { id: 's1', name: 'Lobby' },
+      user: { id: 'u1', username: 'alice' },
+      role: { id: 'r1', name: 'Admins' },
+      change,
+    })
+
+    it('says who was given the admin role', () => {
+      const result = NotificationFormatter.formatNotification(
+        makeNotification('discord_migration_admin_change', { data: data('granted') }))
+      expect(result.title).toBe('alice was given the admin role Admins in Lobby by the Discord migration')
+    })
+
+    it('says who lost the admin role', () => {
+      const result = NotificationFormatter.formatNotification(
+        makeNotification('discord_migration_admin_change', { data: data('removed') }))
+      expect(result.title).toBe('alice lost the admin role Admins in Lobby by the Discord migration')
+    })
+  })
 })

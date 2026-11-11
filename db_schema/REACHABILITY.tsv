@@ -378,19 +378,20 @@ discord_migration_apply_roles	definer	jsonb	service_role	client	called by discor
 discord_migration_assert_manager	definer	uuid	-	client	called by discord_migration_admin_impact, discord_migration_allow_back, discord_migration_auto_match, +10
 discord_migration_auto_match	definer	jsonb	authenticated	client	named in src/components/settings/discord-migration/migrationApi.ts
 discord_migration_bind_claim	definer	void	service_role	client	rpc in bot-gateway/src/api/MigrationAPI.ts
-discord_migration_claim	definer	jsonb	authenticated	http authenticated	nothing references it
+discord_migration_claim	definer	jsonb	authenticated	client	rpc in src/services/discordMigrationService.ts
 discord_migration_create_claim	definer	jsonb	service_role	client	rpc in bot-gateway/src/api/MigrationAPI.ts
 discord_migration_credentials	definer	jsonb	service_role	client	rpc in bot-gateway/src/api/MigrationAPI.ts, bot-gateway/src/migration/MigrationSyncRunner.ts
 discord_migration_due	definer	SETOF jsonb	service_role	client	rpc in bot-gateway/src/migration/MigrationSyncRunner.ts
 discord_migration_get	definer	jsonb	authenticated	client	named in src/components/settings/discord-migration/migrationApi.ts
 discord_migration_links_batch	definer	SETOF jsonb	service_role	client	rpc in bot-gateway/src/migration/MigrationSyncRunner.ts
-discord_migration_member_joined_at	definer	timestamp with time zone	authenticated	http authenticated	nothing references it
+discord_migration_member_joined_at	definer	timestamp with time zone	authenticated	client	rpc in src/services/discordMigrationService.ts
 discord_migration_members	definer	jsonb	authenticated	client	named in src/components/settings/discord-migration/migrationApi.ts
-discord_migration_my_link	definer	jsonb	authenticated	http authenticated	nothing references it
-discord_migration_my_pending_claims	definer	jsonb	authenticated	http authenticated	nothing references it
+discord_migration_my_link	definer	jsonb	authenticated	client	rpc in src/services/discordMigrationService.ts
+discord_migration_my_pending_claims	definer	jsonb	authenticated	client	rpc in src/services/discordMigrationService.ts
 discord_migration_note_kick	definer	trigger	-	trigger	trigger public.server_membership_events AFTER INSERT (z_membership_events_discord_migration)
 discord_migration_pause	definer	void	service_role	client	rpc in bot-gateway/src/migration/MigrationSyncRunner.ts
 discord_migration_permission_gaps	definer	jsonb	authenticated	client	called by discord_migration_apply_permissions, discord_migration_get
+discord_migration_preview	definer	jsonb	anon+authenticated	client	rpc in src/services/discordMigrationService.ts
 discord_migration_readiness	definer	jsonb	authenticated	client	called by discord_migration_get, discord_migration_save_role_map, discord_migration_set_state
 discord_migration_record_sync	definer	void	service_role	client	rpc in bot-gateway/src/migration/MigrationSyncRunner.ts
 discord_migration_regenerate_token	definer	text	authenticated	client	named in src/components/settings/discord-migration/migrationApi.ts
@@ -398,7 +399,7 @@ discord_migration_request_sync	definer	void	authenticated	client	named in src/co
 discord_migration_save	definer	jsonb	authenticated	client	named in src/components/settings/discord-migration/migrationApi.ts
 discord_migration_save_role_map	definer	jsonb	authenticated	client	named in src/components/settings/discord-migration/migrationApi.ts
 discord_migration_secrets_purge	definer	trigger	-	trigger	trigger public.discord_migration_secrets AFTER DELETE (discord_migration_secrets_purge)
-discord_migration_set_my_sync	definer	void	authenticated	http authenticated	nothing references it
+discord_migration_set_my_sync	definer	void	authenticated	client	rpc in src/services/discordMigrationService.ts
 discord_migration_set_own_credentials	definer	void	authenticated	client	named in src/components/settings/discord-migration/migrationApi.ts
 discord_migration_set_state	definer	jsonb	authenticated	client	named in src/components/settings/discord-migration/migrationApi.ts
 discord_migration_store_discord_roles	definer	void	service_role	client	rpc in bot-gateway/src/api/MigrationAPI.ts, bot-gateway/src/migration/MigrationSyncRunner.ts

@@ -507,6 +507,16 @@ const MESSAGE_TEMPLATES = {
     shortTitle: () => i18n.global.t('federation.memberRemovedNotice.short')
   },
 
+  // discord_migration_apply_roles gave or took an administrator role from a member of a server the
+  // recipient manages (data.change 'granted' | 'removed').
+  discord_migration_admin_change: {
+    title: (data: any) => i18n.global.t(
+      data?.change === 'removed' ? 'discordMigration.notice.removedTitle' : 'discordMigration.notice.grantedTitle',
+      { user: data?.user?.username ?? '?', role: data?.role?.name ?? '?', server: data?.server?.name ?? '?' }),
+    message: (data: any) => i18n.global.t('discordMigration.notice.message', { server: data?.server?.name ?? '?' }),
+    shortTitle: () => i18n.global.t('discordMigration.notice.short')
+  },
+
   // record_outgoing_webhook_attempt turned a bot's or server's webhook off after three days of failures.
   outgoing_webhook_disabled: {
     title: (data: any) => i18n.global.t('outgoingWebhooks.notice.disabledTitle', { name: data?.webhook?.name ?? '' }),

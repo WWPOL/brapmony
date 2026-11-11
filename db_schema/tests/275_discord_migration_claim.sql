@@ -10,7 +10,7 @@
 --              map D1 -> Mod, D2 -> Adm
 BEGIN;
 SET LOCAL search_path = tests, public;
-SELECT plan(78);
+SELECT plan(82);
 
 CREATE TEMP TABLE out (k text PRIMARY KEY, v jsonb) ON COMMIT DROP;
 GRANT ALL ON out TO PUBLIC;
@@ -401,6 +401,14 @@ SELECT tests.clear_authentication();
 UPDATE public.instance_config SET config_value = config_value || '{"account_joins_per_hour": 0}'::jsonb WHERE config_key = 'antispam';
 
 -- claim_closed ------------------------------------------------------------------------------------------------
+-- preview: the public landing page reads the server's name and icon by link token, only while open.
+INSERT INTO out SELECT 'tok', to_jsonb(m.link_token) FROM public.discord_migrations m
+ WHERE m.server_id = 'f2750000-0000-0000-0000-0000000000a2';
+SET LOCAL role anon;
+SELECT is(public.discord_migration_preview((SELECT v #>> '{}' FROM out WHERE k = 'tok')) ->> 'server_name',
+  'S2 275', 'preview names the server of an open migration, for anon');
+SELECT is(public.discord_migration_preview('0000'), NULL, 'preview of an unknown token is null');
+RESET role;
 SELECT tests.authenticate_as('aaaaaaaa-0000-0000-0000-000000000001');
 SELECT lives_ok($q$SELECT public.discord_migration_set_state('f2750000-0000-0000-0000-0000000000a2', 'finished')$q$,
   'the owner finishes the migration');
@@ -414,6 +422,10 @@ SELECT tests.authenticate_as('bbbbbbbb-0000-0000-0000-000000000002');
 SELECT throws_ok(format($q$SELECT public.discord_migration_claim(%L)$q$, (SELECT v ->> 'ticket' FROM out WHERE k = 't12')),
   'P0001', 'MIGRATION_CLOSED', 'and a ticket issued earlier no longer claims');
 SELECT tests.clear_authentication();
+SELECT is((SELECT public.discord_migration_preview(m.link_token) FROM public.discord_migrations m
+             WHERE m.server_id = 'f2750000-0000-0000-0000-0000000000a2'), NULL, 'preview is null for a finished migration');
+SELECT is((SELECT public.discord_migration_preview(m.link_token) ->> 'server_name' FROM public.discord_migrations m
+             WHERE m.server_id = 'f2750000-0000-0000-0000-0000000000a2'), NULL, 'and carries no server name');
 
 SELECT * FROM finish();
 ROLLBACK;

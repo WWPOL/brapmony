@@ -1477,6 +1477,21 @@ AS $$
                     WHERE us.server_id = p_server_id AND us.status = 'accepted' AND us.user_id = p_user_id)
 $$;
 
+-- The public landing page of /migrate/<token>: {server_name, icon_url} while the migration is open, else null.
+-- Reachable signed out; it reveals nothing the link holder could not see by opening the migration.
+CREATE OR REPLACE FUNCTION public.discord_migration_preview(p_token text)
+RETURNS jsonb
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public, extensions, pg_temp
+AS $$
+    SELECT jsonb_build_object('server_name', s.name, 'icon_url', s.icon)
+      FROM public.discord_migrations m
+      JOIN public.servers s ON s.id = m.server_id
+     WHERE m.link_token = p_token AND m.state = 'open'
+$$;
+
 -- A manager lets a member kicked on Harmony claim again: kicked_on_harmony becomes left.
 CREATE OR REPLACE FUNCTION public.discord_migration_allow_back(p_server_id uuid, p_user_id uuid)
 RETURNS void
@@ -2253,6 +2268,9 @@ BEGIN
         EXECUTE format('REVOKE ALL ON FUNCTION %s FROM PUBLIC, anon, authenticated, service_role', fn);
         EXECUTE format('GRANT EXECUTE ON FUNCTION %s TO authenticated', fn);
     END LOOP;
+
+    REVOKE ALL ON FUNCTION public.discord_migration_preview(text) FROM PUBLIC, anon, authenticated, service_role;
+    GRANT EXECUTE ON FUNCTION public.discord_migration_preview(text) TO anon, authenticated;
 
     FOREACH fn IN ARRAY ARRAY[
         'public.discord_migration_create_claim(uuid, jsonb, text[], timestamptz)',
