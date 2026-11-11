@@ -3,7 +3,7 @@
  * and the return to Server Settings → Discord Bridge.
  */
 
-export const DISCORD_API_BASE = 'https://discord.com/api/v10'
+export const DISCORD_API_BASE = process.env.DISCORD_API_BASE ?? 'https://discord.com/api/v10'
 export const DISCORD_AUTHORIZE_URL = 'https://discord.com/oauth2/authorize'
 
 /**
