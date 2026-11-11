@@ -6,6 +6,8 @@
 # not unreachable.
 #
 # name	args	returns	security	search_path	grants	reached_by
+_ban_server_member_internal	p_server_id uuid, p_user_id uuid, p_reason text, p_actor uuid, p_delete_message_seconds integer	jsonb	definer	public, extensions, pg_temp		unreferenced
+_kick_server_member_internal	p_server_id uuid, p_user_id uuid, p_reason text, p_actor uuid, p_delete_message_seconds integer	jsonb	definer	public, extensions, pg_temp		unreferenced
 accept_pending_follows_on_unlock		trigger	definer	public, pg_temp	service_role	trigger
 accept_server_rules	p_server_id uuid	jsonb	definer	public, pg_temp	authenticated+service_role	client
 account_move_refusal	p_origin_id uuid, p_target_id uuid	text	invoker	pg_catalog, public, pg_temp	service_role	unreferenced
@@ -371,6 +373,7 @@ discord_migration_admin_bearing	p_server_id uuid, p_discord_role_id text, p_harm
 discord_migration_admin_impact	p_server_id uuid, p_discord_role_id text	jsonb	definer	public, extensions, pg_temp	authenticated	unreferenced
 discord_migration_allow_back	p_server_id uuid, p_user_id uuid	void	definer	public, extensions, pg_temp	authenticated	unreferenced
 discord_migration_apply_permissions	p_server_id uuid, p_discord_role_ids text[], p_confirm_admin boolean	jsonb	invoker	public, extensions, pg_temp	authenticated	unreferenced
+discord_migration_apply_removals	p_server_id uuid, p_candidates jsonb	jsonb	definer	public, extensions, pg_temp	service_role	unreferenced
 discord_migration_apply_roles	p_server_id uuid, p_user_id uuid, p_discord_role_ids text[]	jsonb	definer	public, extensions, pg_temp	service_role	unreferenced
 discord_migration_assert_manager	p_server_id uuid	uuid	definer	public, extensions, pg_temp		unreferenced
 discord_migration_auto_match	p_server_id uuid	jsonb	definer	public, extensions, pg_temp	authenticated	unreferenced
@@ -378,13 +381,17 @@ discord_migration_bind_claim	p_ticket text, p_auth_user_id uuid	void	definer	pub
 discord_migration_claim	p_ticket text	jsonb	definer	public, extensions, pg_temp	authenticated	unreferenced
 discord_migration_create_claim	p_server_id uuid, p_discord_user jsonb, p_discord_role_ids text[], p_discord_joined_at timestamp with time zone	jsonb	definer	public, extensions, pg_temp	service_role	unreferenced
 discord_migration_credentials	p_server_id uuid	jsonb	definer	public, extensions, pg_temp	service_role	unreferenced
+discord_migration_due	p_limit integer, p_interval interval	SETOF jsonb	definer	public, extensions, pg_temp	service_role	unreferenced
 discord_migration_get	p_server_id uuid	jsonb	definer	public, extensions, pg_temp	authenticated	unreferenced
+discord_migration_links_batch	p_server_id uuid, p_limit integer	SETOF jsonb	definer	public, extensions, pg_temp	service_role	unreferenced
 discord_migration_member_joined_at	p_server_id uuid, p_user_id uuid	timestamp with time zone	definer	public, extensions, pg_temp	authenticated	unreferenced
 discord_migration_my_link	p_server_id uuid	jsonb	definer	public, extensions, pg_temp	authenticated	unreferenced
 discord_migration_my_pending_claims		jsonb	definer	public, extensions, pg_temp	authenticated	unreferenced
 discord_migration_note_kick		trigger	definer	public, extensions, pg_temp		trigger
+discord_migration_pause	p_server_id uuid, p_reason text	void	definer	public, extensions, pg_temp	service_role	unreferenced
 discord_migration_permission_gaps	p_server_id uuid	jsonb	definer	public, extensions, pg_temp	authenticated	unreferenced
 discord_migration_readiness	p_server_id uuid	jsonb	definer	public, extensions, pg_temp	authenticated	unreferenced
+discord_migration_record_sync	p_server_id uuid, p_result jsonb, p_cursor timestamp with time zone	void	definer	public, extensions, pg_temp	service_role	unreferenced
 discord_migration_regenerate_token	p_server_id uuid	text	definer	public, extensions, pg_temp	authenticated	unreferenced
 discord_migration_request_sync	p_server_id uuid	void	definer	public, extensions, pg_temp	authenticated	unreferenced
 discord_migration_save	p_server_id uuid, p_discord_guild_id text, p_credential_source text	jsonb	definer	public, extensions, pg_temp	authenticated	unreferenced
@@ -395,6 +402,7 @@ discord_migration_set_own_credentials	p_server_id uuid, p_client_id text, p_clie
 discord_migration_set_state	p_server_id uuid, p_state text	jsonb	definer	public, extensions, pg_temp	authenticated	unreferenced
 discord_migration_store_discord_roles	p_server_id uuid, p_roles jsonb	void	definer	public, extensions, pg_temp	service_role	unreferenced
 discord_migration_store_warnings	p_server_id uuid, p_warnings jsonb	void	definer	public, extensions, pg_temp	service_role	unreferenced
+discord_migration_sync_member	p_server_id uuid, p_user_id uuid, p_member jsonb	jsonb	definer	public, extensions, pg_temp	service_role	unreferenced
 dismiss_server_automod_prompt	p_server_id uuid	jsonb	definer	public, pg_temp	authenticated+service_role	client
 dm_policy_allows	p_recipient uuid, p_relation text	boolean	definer	public, pg_temp	service_role	unreferenced
 dm_recipients_allowing	p_sender uuid, p_recipients uuid[]	uuid[]	definer	public, pg_temp	service_role	client

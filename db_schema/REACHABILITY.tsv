@@ -6,6 +6,8 @@
 # mean nothing reaches it and PostgREST publishes it anyway; `nothing` means dead.
 #
 # name	security	returns	grants	entry	detail
+_ban_server_member_internal	definer	jsonb	-	client	called by ban_server_member, discord_migration_apply_removals
+_kick_server_member_internal	definer	jsonb	-	client	called by discord_migration_apply_removals, kick_server_member
 accept_pending_follows_on_unlock	definer	trigger	service_role	trigger	trigger public.profiles AFTER UPDATE (accept_pending_follows_on_unlock_trigger)
 accept_server_rules	definer	jsonb	authenticated+service_role	client	rpc in src/services/ServerWelcomeService.ts
 account_move_refusal	invoker	text	service_role	client	called by begin_account_move, record_remote_account_move
@@ -371,20 +373,25 @@ discord_migration_admin_bearing	definer	boolean	-	nothing	called by discord_migr
 discord_migration_admin_impact	definer	jsonb	authenticated	http authenticated	nothing references it
 discord_migration_allow_back	definer	void	authenticated	http authenticated	nothing references it
 discord_migration_apply_permissions	invoker	jsonb	authenticated	http authenticated	nothing references it
-discord_migration_apply_roles	definer	jsonb	service_role	service key	called by discord_migration_claim
+discord_migration_apply_removals	definer	jsonb	service_role	service key	nothing references it
+discord_migration_apply_roles	definer	jsonb	service_role	service key	called by discord_migration_claim, discord_migration_sync_member
 discord_migration_assert_manager	definer	uuid	-	nothing	called by discord_migration_admin_impact, discord_migration_allow_back, discord_migration_auto_match, +9
 discord_migration_auto_match	definer	jsonb	authenticated	http authenticated	nothing references it
 discord_migration_bind_claim	definer	void	service_role	service key	nothing references it
 discord_migration_claim	definer	jsonb	authenticated	http authenticated	nothing references it
 discord_migration_create_claim	definer	jsonb	service_role	service key	nothing references it
 discord_migration_credentials	definer	jsonb	service_role	service key	nothing references it
+discord_migration_due	definer	SETOF jsonb	service_role	service key	nothing references it
 discord_migration_get	definer	jsonb	authenticated	http authenticated	called by discord_migration_save, discord_migration_set_state
+discord_migration_links_batch	definer	SETOF jsonb	service_role	service key	nothing references it
 discord_migration_member_joined_at	definer	timestamp with time zone	authenticated	http authenticated	nothing references it
 discord_migration_my_link	definer	jsonb	authenticated	http authenticated	nothing references it
 discord_migration_my_pending_claims	definer	jsonb	authenticated	http authenticated	nothing references it
 discord_migration_note_kick	definer	trigger	-	trigger	trigger public.server_membership_events AFTER INSERT (z_membership_events_discord_migration)
+discord_migration_pause	definer	void	service_role	service key	called by discord_migration_apply_removals
 discord_migration_permission_gaps	definer	jsonb	authenticated	http authenticated	called by discord_migration_apply_permissions, discord_migration_get
 discord_migration_readiness	definer	jsonb	authenticated	http authenticated	called by discord_migration_get, discord_migration_save_role_map, discord_migration_set_state
+discord_migration_record_sync	definer	void	service_role	service key	nothing references it
 discord_migration_regenerate_token	definer	text	authenticated	http authenticated	nothing references it
 discord_migration_request_sync	definer	void	authenticated	http authenticated	nothing references it
 discord_migration_save	definer	jsonb	authenticated	http authenticated	nothing references it
@@ -395,6 +402,7 @@ discord_migration_set_own_credentials	definer	void	authenticated	http authentica
 discord_migration_set_state	definer	jsonb	authenticated	http authenticated	nothing references it
 discord_migration_store_discord_roles	definer	void	service_role	service key	nothing references it
 discord_migration_store_warnings	definer	void	service_role	service key	nothing references it
+discord_migration_sync_member	definer	jsonb	service_role	service key	nothing references it
 dismiss_server_automod_prompt	definer	jsonb	authenticated+service_role	client	rpc in src/services/AutoModService.ts
 dm_policy_allows	definer	boolean	service_role	client	called by dm_recipients_allowing, dm_start_guard
 dm_recipients_allowing	definer	uuid[]	service_role	client	rpc in federation-backend/src/activitypub/ActivityProcessor.ts
@@ -546,7 +554,7 @@ get_current_user_profile_id	definer	uuid	anon+authenticated+service_role	client	
 get_custom_status	definer	jsonb	service_role	service key	nothing references it
 get_db_connection_count	definer	integer	anon+authenticated+service_role	client	rpc in src/services/AdminService.ts
 get_db_size	definer	text	anon+authenticated+service_role	client	rpc in src/services/AdminService.ts
-get_default_channel	definer	uuid	service_role	client, trigger	called by ban_server_member, handle_member_join_system_message, handle_member_leave_system_message, +2
+get_default_channel	definer	uuid	service_role	client, trigger	called by _ban_server_member_internal, _kick_server_member_internal, handle_member_join_system_message, +2
 get_device_signing_key	definer	TABLE(device_signing_public_key text, revoked_at timestamp with time zone)	anon+authenticated+service_role	client	rpc in src/services/encryption/DeviceIdentityService.ts
 get_emoji_metadata_bulk	invoker	TABLE(server_id uuid, last_modified timestamp with time zone, emoji_count integer)	anon+authenticated+service_role	client	rpc in src/stores/useEmojiCache.ts
 get_emoji_source	definer	jsonb	authenticated+service_role	client	named in src/services/__tests__/emojiSourceService.test.ts, src/services/emojiSourceService.ts
@@ -973,7 +981,7 @@ server_audit_stickers	definer	trigger	service_role	trigger	trigger public.sticke
 server_audit_timeouts	definer	trigger	service_role	trigger	trigger public.server_member_timeouts AFTER INSERT/DELETE/UPDATE (z_server_member_timeouts_audit)
 server_audit_user_roles	definer	trigger	service_role	trigger	trigger public.user_roles AFTER INSERT/DELETE (z_user_roles_audit)
 server_audit_value	invoker	jsonb	service_role	trigger	called by server_audit_diff
-server_audit_write	definer	uuid	service_role	client, trigger	called by discord_migration_apply_roles, moderate_server_profile, move_voice_member, +20
+server_audit_write	definer	uuid	service_role	client, trigger	called by discord_migration_apply_removals, discord_migration_apply_roles, discord_migration_pause, +23
 server_emoji_limit	invoker	integer	anon+authenticated+service_role	client	rpc in bot-gateway/src/api/BotRestAPI.ts
 server_has_remote_members	invoker	boolean	service_role	service key	nothing references it
 server_host_domain	invoker	text	service_role	client	called by apply_server_report_resolution, create_report, get_reports_with_details
@@ -987,7 +995,7 @@ server_template_int	invoker	integer	service_role	client	called by export_server_
 server_template_json	invoker	jsonb	service_role	client	called by server_template_canonical
 server_template_ref	invoker	text	service_role	client	called by server_template_canonical
 server_template_text	invoker	text	service_role	client	called by server_template_canonical
-service_set_member_server_profile	definer	jsonb	service_role	client	called by set_my_server_profile
+service_set_member_server_profile	definer	jsonb	service_role	client	called by discord_migration_sync_member, set_my_server_profile
 session_meets_aal	definer	boolean	anon+authenticated+service_role	client, policy	policy public.messages SELECT on messages_session_aal, realtime.messages ALL on realtime_messages_session_aal, storage.objects ALL on storage_objects_session_aal
 session_step_up_fresh	invoker	boolean	service_role	client	called by begin_account_move, delete_my_account, generate_mfa_recovery_codes
 set_bot_allowed_channels	definer	uuid[]	authenticated+service_role	client	rpc in src/components/settings/ServerBotsSettings.vue

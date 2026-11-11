@@ -106,6 +106,7 @@ CREATE TABLE IF NOT EXISTS public.discord_migration_links (
     status text NOT NULL DEFAULT 'active',
     sync_fields text[] NOT NULL DEFAULT '{}',
     discord_role_ids text[] NOT NULL DEFAULT '{}',
+    applied_roles jsonb NOT NULL DEFAULT '{}',
     discord_joined_at timestamptz,
     linked_at timestamptz NOT NULL DEFAULT now(),
     last_synced_at timestamptz,
@@ -118,6 +119,10 @@ CREATE TABLE IF NOT EXISTS public.discord_migration_links (
         CHECK (sync_fields <@ ARRAY['avatar', 'display_name', 'banner', 'accent_color',
                                     'server_nickname', 'server_avatar', 'server_banner']::text[])
 );
+
+-- applied_roles {discord role id: Harmony role id} is what the last role application granted, so a remap
+-- can take the old Harmony role back.
+ALTER TABLE public.discord_migration_links ADD COLUMN IF NOT EXISTS applied_roles jsonb NOT NULL DEFAULT '{}';
 
 CREATE TABLE IF NOT EXISTS public.discord_migration_claims (
     ticket text PRIMARY KEY,
@@ -1086,8 +1091,8 @@ END;
 $$;
 
 -- Makes the member's mapped Harmony roles match the Discord roles: adds the missing target roles and
--- removes every mapped Harmony role not in the target, hand-granted ones included. Unmapped roles and
--- the server owner are never touched. Returns {added: [role ids], removed: [role ids]}. An
+-- removes every mapped Harmony role not in the target, hand-granted ones included. Unmapped roles, the
+-- server owner and anyone who is not an accepted member are never touched. Returns {added: [role ids], removed: [role ids]}. An
 -- Administrator-bearing change is flagged in the audit row and notifies the owner.
 CREATE OR REPLACE FUNCTION public.discord_migration_apply_roles(
     p_server_id uuid, p_user_id uuid, p_discord_role_ids text[])
@@ -1103,6 +1108,8 @@ DECLARE
     v_prev_via text := current_setting('harmony.via', true);
     v_target uuid[];
     v_held uuid[];
+    v_stale uuid[];
+    v_stale_held uuid[];
     v_add uuid[];
     v_remove uuid[];
     v_role uuid;
@@ -1116,6 +1123,10 @@ BEGIN
     IF v_owner IS NOT DISTINCT FROM p_user_id THEN
         RETURN jsonb_build_object('added', '[]'::jsonb, 'removed', '[]'::jsonb);
     END IF;
+    IF NOT EXISTS (SELECT 1 FROM public.user_servers us
+                    WHERE us.server_id = p_server_id AND us.user_id = p_user_id AND us.status = 'accepted') THEN
+        RETURN jsonb_build_object('added', '[]'::jsonb, 'removed', '[]'::jsonb);
+    END IF;
     SELECT p.username INTO v_username FROM public.profiles p WHERE p.id = p_user_id;
 
     SELECT COALESCE(array_agg(DISTINCT m.harmony_role_id), '{}') INTO v_target
@@ -1126,8 +1137,21 @@ BEGIN
      WHERE ur.server_id = p_server_id AND ur.user_id = p_user_id
        AND ur.role_id IN (SELECT m.harmony_role_id FROM public.discord_migration_role_map m
                            WHERE m.server_id = p_server_id);
+    -- A role this function granted for a Discord role that is now mapped to a different Harmony role
+    -- is taken back too (a remap moves the role). Dropping a mapping leaves the role alone.
+    SELECT COALESCE(array_agg(DISTINCT (a.value #>> '{}')::uuid), '{}') INTO v_stale
+      FROM public.discord_migration_links l
+      CROSS JOIN LATERAL jsonb_each(l.applied_roles) a
+      JOIN public.discord_migration_role_map m
+        ON m.server_id = l.server_id AND m.discord_role_id = a.key
+       AND m.harmony_role_id <> (a.value #>> '{}')::uuid
+     WHERE l.server_id = p_server_id AND l.user_id = p_user_id;
+    SELECT COALESCE(array_agg(ur.role_id), '{}') INTO v_stale_held
+      FROM public.user_roles ur
+     WHERE ur.server_id = p_server_id AND ur.user_id = p_user_id AND ur.role_id = ANY (v_stale);
     SELECT COALESCE(array_agg(t), '{}') INTO v_add FROM unnest(v_target) t WHERE NOT (t = ANY (v_held));
-    SELECT COALESCE(array_agg(h), '{}') INTO v_remove FROM unnest(v_held) h WHERE NOT (h = ANY (v_target));
+    SELECT COALESCE(array_agg(DISTINCT h), '{}') INTO v_remove
+      FROM unnest(v_held || v_stale_held) h WHERE NOT (h = ANY (v_target));
 
     PERFORM set_config('harmony.via', 'discord_migration', true);
 
@@ -1137,6 +1161,7 @@ BEGIN
         ON CONFLICT (user_id, role_id) DO NOTHING;
         SELECT sr.name INTO v_role_name FROM public.server_roles sr WHERE sr.id = v_role;
         SELECT COALESCE(bool_or(public.discord_migration_admin_bearing(p_server_id, m.discord_role_id, m.harmony_role_id)), false)
+               OR public.discord_migration_admin_bearing(p_server_id, '', v_role)
           INTO v_admin
           FROM public.discord_migration_role_map m
          WHERE m.server_id = p_server_id AND m.harmony_role_id = v_role;
@@ -1159,6 +1184,7 @@ BEGIN
          WHERE ur.server_id = p_server_id AND ur.user_id = p_user_id AND ur.role_id = v_role;
         SELECT sr.name INTO v_role_name FROM public.server_roles sr WHERE sr.id = v_role;
         SELECT COALESCE(bool_or(public.discord_migration_admin_bearing(p_server_id, m.discord_role_id, m.harmony_role_id)), false)
+               OR public.discord_migration_admin_bearing(p_server_id, '', v_role)
           INTO v_admin
           FROM public.discord_migration_role_map m
          WHERE m.server_id = p_server_id AND m.harmony_role_id = v_role;
@@ -1175,6 +1201,13 @@ BEGIN
                 'change', 'removed'));
         END IF;
     END LOOP;
+
+    UPDATE public.discord_migration_links l
+       SET applied_roles = COALESCE((SELECT jsonb_object_agg(m.discord_role_id, m.harmony_role_id)
+                                       FROM public.discord_migration_role_map m
+                                      WHERE m.server_id = p_server_id
+                                        AND m.discord_role_id = ANY (COALESCE(p_discord_role_ids, '{}'))), '{}'::jsonb)
+     WHERE l.server_id = p_server_id AND l.user_id = p_user_id;
 
     PERFORM set_config('harmony.via', COALESCE(v_prev_via, ''), true);
     RETURN jsonb_build_object('added', to_jsonb(v_add), 'removed', to_jsonb(v_remove));
@@ -1480,6 +1513,673 @@ CREATE TRIGGER z_membership_events_discord_migration
     FOR EACH ROW WHEN (NEW.event_type = 'kick')
     EXECUTE FUNCTION public.discord_migration_note_kick();
 
+-- ---------------------------------------------------------------------------
+-- Sync: roles, profile fields, timeouts, removals and the removal brake
+-- ---------------------------------------------------------------------------
+-- The gateway reads the guild on a schedule and calls these with service_role. Sync never adds members
+-- and never touches the server owner; it never removes a holder of an ADMINISTRATOR role. Every write
+-- the migration makes sets harmony.via = discord_migration, which silences the generic audit triggers,
+-- and writes its own audit row (source system, details.via = discord_migration).
+
+ALTER TABLE public.server_member_timeouts DROP CONSTRAINT IF EXISTS server_member_timeouts_source_check;
+ALTER TABLE public.server_member_timeouts ADD CONSTRAINT server_member_timeouts_source_check
+    CHECK (source IN ('moderator', 'automod', 'discord_migration'));
+
+-- As 20261010600001, quiet while the migration writes its own row.
+CREATE OR REPLACE FUNCTION public.server_audit_membership_events()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $$
+DECLARE
+    v_payload jsonb := COALESCE(NEW.payload, '{}'::jsonb);
+    v_by text;
+    v_actor uuid;
+    v_deleted integer;
+BEGIN
+    IF current_setting('harmony.via', true) = 'discord_migration' THEN
+        RETURN NULL;
+    END IF;
+    v_by := COALESCE(v_payload ->> 'kicked_by', v_payload ->> 'banned_by', v_payload ->> 'unbanned_by');
+    IF v_by ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN
+        v_actor := v_by::uuid;
+    END IF;
+    IF v_payload ->> 'messages_deleted' ~ '^[0-9]+$' THEN
+        v_deleted := NULLIF((v_payload ->> 'messages_deleted')::integer, 0);
+    END IF;
+
+    PERFORM public.server_audit_write(
+        NEW.server_id, 'member.' || NEW.event_type, 'user', NEW.user_id::text,
+        (SELECT p.username FROM public.profiles p WHERE p.id = NEW.user_id),
+        NULL,
+        jsonb_build_object('messages_deleted', v_deleted),
+        v_payload ->> 'reason',
+        COALESCE(v_actor, NEW.initiated_by));
+    RETURN NULL;
+END;
+$$;
+
+-- As 20261010600001, quiet while the migration writes its own row.
+CREATE OR REPLACE FUNCTION public.server_audit_timeouts()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $$
+DECLARE
+    v_row public.server_member_timeouts := CASE WHEN TG_OP = 'DELETE' THEN OLD ELSE NEW END;
+    v_action text;
+    v_automod boolean := v_row.source = 'automod';
+BEGIN
+    IF current_setting('harmony.via', true) = 'discord_migration' THEN
+        RETURN NULL;
+    END IF;
+    IF TG_OP <> 'DELETE' AND NEW.until > now()
+       AND (TG_OP = 'INSERT' OR NEW.until IS DISTINCT FROM OLD.until OR OLD.until <= now()) THEN
+        v_action := 'member.timeout';
+    ELSIF TG_OP <> 'INSERT' AND OLD.until > now() AND (TG_OP = 'DELETE' OR NEW.until <= now()) THEN
+        v_action := 'member.timeout_remove';
+        v_automod := false;
+    ELSE
+        RETURN NULL;
+    END IF;
+
+    PERFORM public.server_audit_write(
+        v_row.server_id, v_action, 'user', v_row.user_id::text,
+        (SELECT p.username FROM public.profiles p WHERE p.id = v_row.user_id),
+        NULL,
+        CASE WHEN v_action = 'member.timeout'
+             THEN jsonb_build_object('until', NEW.until, 'automod', CASE WHEN v_automod THEN true END) END,
+        CASE WHEN v_action = 'member.timeout' THEN NEW.reason END,
+        CASE WHEN v_automod THEN NULL WHEN TG_OP <> 'DELETE' AND v_action = 'member.timeout' THEN NEW.created_by END,
+        CASE WHEN v_automod THEN 'system' END);
+    RETURN NULL;
+END;
+$$;
+
+-- The kick and ban bodies without the caller's checks, so the migration can remove members with no
+-- signed-in user. p_actor is the moderator (null for the migration). Not granted to any role.
+CREATE OR REPLACE FUNCTION public._kick_server_member_internal(
+    p_server_id uuid,
+    p_user_id uuid,
+    p_reason text DEFAULT NULL,
+    p_actor uuid DEFAULT NULL,
+    p_delete_message_seconds integer DEFAULT 0
+) RETURNS jsonb
+LANGUAGE plpgsql SECURITY DEFINER
+SET search_path = public, extensions, pg_temp
+AS $$
+DECLARE
+    v_deleted_count integer := 0;
+    v_system_channel_id uuid;
+    v_system_messages_enabled boolean;
+BEGIN
+    IF p_delete_message_seconds > 0 THEN
+        UPDATE public.messages
+        SET is_deleted = true, content = '[{"type":"text","content":"[message deleted]"}]'::jsonb
+        WHERE user_id = p_user_id
+          AND channel_id IN (SELECT id FROM public.channels WHERE server_id = p_server_id)
+          AND created_at > now() - (p_delete_message_seconds || ' seconds')::interval
+          AND is_deleted = false;
+        GET DIAGNOSTICS v_deleted_count = ROW_COUNT;
+    END IF;
+
+    -- Suppresses the "has left the server" trigger; "was kicked" is posted below.
+    PERFORM set_config('harmony.skip_leave_message', '1', true);
+
+    DELETE FROM public.user_servers
+    WHERE user_id = p_user_id AND server_id = p_server_id;
+
+    INSERT INTO public.server_membership_events (server_id, user_id, event_type, payload)
+    VALUES (p_server_id, p_user_id, 'kick', jsonb_build_object(
+        'kicked_by', p_actor,
+        'reason', COALESCE(p_reason, ''),
+        'messages_deleted', v_deleted_count
+    ));
+
+    SELECT system_channel_id, system_messages_enabled
+      INTO v_system_channel_id, v_system_messages_enabled
+    FROM public.server_settings WHERE server_id = p_server_id;
+    IF v_system_messages_enabled IS NOT FALSE THEN
+        IF v_system_channel_id IS NULL THEN
+            v_system_channel_id := public.get_default_channel(p_server_id);
+        END IF;
+        IF v_system_channel_id IS NOT NULL THEN
+            INSERT INTO public.messages (channel_id, content, is_system, metadata)
+            VALUES (
+                v_system_channel_id,
+                jsonb_build_array(jsonb_build_object('type', 'text', 'text', 'was kicked from the server')),
+                true,
+                jsonb_build_object('type', 'member_kick', 'subject_id', p_user_id, 'actor_id', p_actor,
+                                   'reason', COALESCE(p_reason, ''))
+            );
+        END IF;
+    END IF;
+
+    RETURN jsonb_build_object(
+        'success', true,
+        'messages_deleted', v_deleted_count
+    );
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public._ban_server_member_internal(
+    p_server_id uuid,
+    p_user_id uuid,
+    p_reason text DEFAULT NULL,
+    p_actor uuid DEFAULT NULL,
+    p_delete_message_seconds integer DEFAULT 0
+) RETURNS jsonb
+LANGUAGE plpgsql SECURITY DEFINER
+SET search_path = public, extensions, pg_temp
+AS $$
+DECLARE
+    v_deleted_count integer := 0;
+    v_already_banned boolean;
+    v_system_channel_id uuid;
+    v_system_messages_enabled boolean;
+BEGIN
+    SELECT EXISTS(
+        SELECT 1 FROM public.server_bans
+        WHERE server_id = p_server_id AND user_id = p_user_id
+    ) INTO v_already_banned;
+
+    IF v_already_banned THEN
+        RETURN jsonb_build_object('success', true, 'already_banned', true, 'messages_deleted', 0);
+    END IF;
+
+    IF p_delete_message_seconds > 0 THEN
+        UPDATE public.messages
+        SET is_deleted = true, content = '[{"type":"text","content":"[message deleted]"}]'::jsonb
+        WHERE user_id = p_user_id
+          AND channel_id IN (SELECT id FROM public.channels WHERE server_id = p_server_id)
+          AND created_at > now() - (p_delete_message_seconds || ' seconds')::interval
+          AND is_deleted = false;
+        GET DIAGNOSTICS v_deleted_count = ROW_COUNT;
+    END IF;
+
+    INSERT INTO public.server_bans (server_id, user_id, banned_by, reason, delete_message_seconds)
+    VALUES (p_server_id, p_user_id, p_actor, p_reason, p_delete_message_seconds);
+
+    -- Suppresses the "has left the server" trigger; "was banned" is posted below.
+    PERFORM set_config('harmony.skip_leave_message', '1', true);
+
+    DELETE FROM public.user_servers
+    WHERE user_id = p_user_id AND server_id = p_server_id;
+
+    DELETE FROM public.user_roles
+    WHERE user_id = p_user_id AND server_id = p_server_id;
+
+    INSERT INTO public.server_membership_events (server_id, user_id, event_type, payload)
+    VALUES (p_server_id, p_user_id, 'ban', jsonb_build_object(
+        'banned_by', p_actor,
+        'reason', COALESCE(p_reason, ''),
+        'messages_deleted', v_deleted_count
+    ));
+
+    SELECT system_channel_id, system_messages_enabled
+      INTO v_system_channel_id, v_system_messages_enabled
+    FROM public.server_settings WHERE server_id = p_server_id;
+    IF v_system_messages_enabled IS NOT FALSE THEN
+        IF v_system_channel_id IS NULL THEN
+            v_system_channel_id := public.get_default_channel(p_server_id);
+        END IF;
+        IF v_system_channel_id IS NOT NULL THEN
+            INSERT INTO public.messages (channel_id, content, is_system, metadata)
+            VALUES (
+                v_system_channel_id,
+                jsonb_build_array(jsonb_build_object('type', 'text', 'text', 'was banned from the server')),
+                true,
+                jsonb_build_object('type', 'member_ban', 'subject_id', p_user_id, 'actor_id', p_actor,
+                                   'reason', COALESCE(p_reason, ''))
+            );
+        END IF;
+    END IF;
+
+    RETURN jsonb_build_object(
+        'success', true,
+        'messages_deleted', v_deleted_count
+    );
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public._kick_server_member_internal(uuid, uuid, text, uuid, integer)
+    FROM PUBLIC, anon, authenticated, service_role;
+REVOKE ALL ON FUNCTION public._ban_server_member_internal(uuid, uuid, text, uuid, integer)
+    FROM PUBLIC, anon, authenticated, service_role;
+
+-- As 20261027200001; the work after the checks is _kick_server_member_internal.
+CREATE OR REPLACE FUNCTION public.kick_server_member(
+    p_server_id uuid,
+    p_user_id uuid,
+    p_reason text DEFAULT NULL,
+    p_delete_message_seconds integer DEFAULT 0
+) RETURNS jsonb
+LANGUAGE plpgsql SECURITY DEFINER
+SET search_path = public, extensions, pg_temp
+AS $$
+DECLARE
+    v_caller_id uuid;
+    v_is_owner boolean;
+    v_has_permission boolean;
+    v_caller_position integer;
+    v_target_position integer;
+    v_target_is_owner boolean;
+BEGIN
+    v_caller_id := public.get_current_profile_id();
+    IF v_caller_id IS NULL THEN
+        RAISE EXCEPTION 'Not authenticated';
+    END IF;
+
+    IF EXISTS (SELECT 1 FROM public.servers s WHERE s.id = p_server_id AND NOT s.is_local_server) THEN
+        RAISE EXCEPTION 'Members of this server are moderated on its home instance' USING ERRCODE = '42501';
+    END IF;
+
+    IF v_caller_id = p_user_id THEN
+        RAISE EXCEPTION 'Cannot kick yourself';
+    END IF;
+
+    SELECT (owner = p_user_id) INTO v_target_is_owner
+    FROM public.servers WHERE id = p_server_id;
+    IF v_target_is_owner THEN
+        RAISE EXCEPTION 'Cannot kick the server owner';
+    END IF;
+
+    SELECT (owner = v_caller_id) INTO v_is_owner
+    FROM public.servers WHERE id = p_server_id;
+    -- A server without an owner has no owner path: NOT NULL would skip the permission check.
+    v_is_owner := COALESCE(v_is_owner, false);
+
+    IF NOT v_is_owner THEN
+        SELECT COALESCE((public.get_user_permissions(v_caller_id, p_server_id)->>'KICK_MEMBERS')::boolean, false)
+        INTO v_has_permission;
+        IF NOT v_has_permission THEN
+            RAISE EXCEPTION 'Missing KICK_MEMBERS permission';
+        END IF;
+    END IF;
+
+    IF NOT v_is_owner THEN
+        v_caller_position := public.get_user_highest_role_position(v_caller_id, p_server_id);
+        v_target_position := public.get_user_highest_role_position(p_user_id, p_server_id);
+        IF v_caller_position <= v_target_position THEN
+            RAISE EXCEPTION 'Cannot kick a member with an equal or higher role';
+        END IF;
+    END IF;
+
+    RETURN public._kick_server_member_internal(p_server_id, p_user_id, p_reason, v_caller_id,
+                                               p_delete_message_seconds);
+END;
+$$;
+
+-- As 20261027200001; the work after the checks is _ban_server_member_internal.
+CREATE OR REPLACE FUNCTION public.ban_server_member(
+    p_server_id uuid,
+    p_user_id uuid,
+    p_reason text DEFAULT NULL,
+    p_delete_message_seconds integer DEFAULT 0
+) RETURNS jsonb
+LANGUAGE plpgsql SECURITY DEFINER
+SET search_path = public, extensions, pg_temp
+AS $$
+DECLARE
+    v_caller_id uuid;
+    v_is_owner boolean;
+    v_has_permission boolean;
+    v_caller_position integer;
+    v_target_position integer;
+    v_target_is_owner boolean;
+BEGIN
+    v_caller_id := public.get_current_profile_id();
+    IF v_caller_id IS NULL THEN
+        RAISE EXCEPTION 'Not authenticated';
+    END IF;
+
+    IF EXISTS (SELECT 1 FROM public.servers s WHERE s.id = p_server_id AND NOT s.is_local_server) THEN
+        RAISE EXCEPTION 'Members of this server are moderated on its home instance' USING ERRCODE = '42501';
+    END IF;
+
+    IF v_caller_id = p_user_id THEN
+        RAISE EXCEPTION 'Cannot ban yourself';
+    END IF;
+
+    SELECT (owner = p_user_id) INTO v_target_is_owner
+    FROM public.servers WHERE id = p_server_id;
+    IF v_target_is_owner THEN
+        RAISE EXCEPTION 'Cannot ban the server owner';
+    END IF;
+
+    SELECT (owner = v_caller_id) INTO v_is_owner
+    FROM public.servers WHERE id = p_server_id;
+    -- A server without an owner has no owner path: NOT NULL would skip the permission check.
+    v_is_owner := COALESCE(v_is_owner, false);
+
+    IF NOT v_is_owner THEN
+        SELECT COALESCE((public.get_user_permissions(v_caller_id, p_server_id)->>'BAN_MEMBERS')::boolean, false)
+        INTO v_has_permission;
+        IF NOT v_has_permission THEN
+            RAISE EXCEPTION 'Missing BAN_MEMBERS permission';
+        END IF;
+    END IF;
+
+    IF NOT v_is_owner THEN
+        v_caller_position := public.get_user_highest_role_position(v_caller_id, p_server_id);
+        v_target_position := public.get_user_highest_role_position(p_user_id, p_server_id);
+        IF v_caller_position <= v_target_position THEN
+            RAISE EXCEPTION 'Cannot ban a member with an equal or higher role';
+        END IF;
+    END IF;
+
+    RETURN public._ban_server_member_internal(p_server_id, p_user_id, p_reason, v_caller_id,
+                                              p_delete_message_seconds);
+END;
+$$;
+
+-- Open, unpaused migrations the gateway should sync now: a sync was asked for, or the last one is older
+-- than p_interval (or there was none). Oldest first.
+CREATE OR REPLACE FUNCTION public.discord_migration_due(
+    p_limit integer DEFAULT 20, p_interval interval DEFAULT interval '6 hours')
+RETURNS SETOF jsonb
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public, extensions, pg_temp
+AS $$
+    SELECT jsonb_build_object('server_id', m.server_id, 'discord_guild_id', m.discord_guild_id,
+                              'credential_source', m.credential_source,
+                              'sync_requested_at', m.sync_requested_at, 'last_sync_at', m.last_sync_at,
+                              'sync_cursor', m.sync_cursor)
+      FROM public.discord_migrations m
+     WHERE m.state = 'open' AND m.sync_paused_reason IS NULL
+       AND (m.sync_requested_at IS NOT NULL OR m.last_sync_at IS NULL OR m.last_sync_at < now() - p_interval)
+     ORDER BY COALESCE(m.sync_requested_at, m.last_sync_at) NULLS FIRST, m.server_id
+     LIMIT GREATEST(COALESCE(p_limit, 20), 0)
+$$;
+
+-- Active links, least recently synced first.
+CREATE OR REPLACE FUNCTION public.discord_migration_links_batch(p_server_id uuid, p_limit integer)
+RETURNS SETOF jsonb
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public, extensions, pg_temp
+AS $$
+    SELECT jsonb_build_object('user_id', l.user_id, 'discord_user_id', l.discord_user_id,
+                              'sync_fields', to_jsonb(l.sync_fields))
+      FROM public.discord_migration_links l
+     WHERE l.server_id = p_server_id AND l.status = 'active'
+     ORDER BY l.last_synced_at NULLS FIRST, l.user_id
+     LIMIT GREATEST(COALESCE(p_limit, 0), 0)
+$$;
+
+-- Stops syncing the server until a manager resumes it, and says so in the audit log.
+CREATE OR REPLACE FUNCTION public.discord_migration_pause(p_server_id uuid, p_reason text)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, extensions, pg_temp
+AS $$
+BEGIN
+    UPDATE public.discord_migrations SET sync_paused_reason = p_reason, updated_at = now()
+     WHERE server_id = p_server_id;
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'migration_not_configured' USING ERRCODE = 'P0002';
+    END IF;
+    PERFORM public.server_audit_write(p_server_id, 'discord_migration.paused', 'server', p_server_id::text, NULL, NULL,
+        jsonb_build_object('reason', p_reason, 'via', 'discord_migration'), NULL, NULL, 'system');
+END;
+$$;
+
+-- Ends a sync pass: when it ran, what it found, where the next one starts.
+CREATE OR REPLACE FUNCTION public.discord_migration_record_sync(
+    p_server_id uuid, p_result jsonb, p_cursor timestamptz)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, extensions, pg_temp
+AS $$
+BEGIN
+    UPDATE public.discord_migrations
+       SET last_sync_at = now(), last_sync_result = p_result, sync_cursor = p_cursor,
+           sync_requested_at = NULL, updated_at = now()
+     WHERE server_id = p_server_id;
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'migration_not_configured' USING ERRCODE = 'P0002';
+    END IF;
+END;
+$$;
+
+-- Syncs one member from what the gateway read. Returns {skipped: 'not_member'|'no_link'} for anyone who is
+-- not an accepted member with an active link (nothing changes), {candidate: 'left'|'banned'} when the member
+-- is gone from Discord (nothing is removed here), otherwise {present: true, roles: {added, removed}}.
+-- A key missing from p_member (role_ids, joined_at, timed_out_until, a profile field) was not fetched and
+-- leaves that part alone.
+CREATE OR REPLACE FUNCTION public.discord_migration_sync_member(
+    p_server_id uuid, p_user_id uuid, p_member jsonb)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, extensions, pg_temp
+AS $$
+DECLARE
+    v_link public.discord_migration_links;
+    v_owner uuid;
+    v_prev_via text;
+    v_profile jsonb := COALESCE(p_member -> 'profile', '{}'::jsonb);
+    v_fields text[];
+    v_roles text[];
+    v_role_result jsonb := jsonb_build_object('added', '[]'::jsonb, 'removed', '[]'::jsonb);
+    v_server jsonb := '{}'::jsonb;
+    v_color integer;
+    v_until timestamptz;
+    v_timeout public.server_member_timeouts;
+    v_username text;
+BEGIN
+    IF p_member IS NULL OR jsonb_typeof(p_member) <> 'object' THEN
+        RAISE EXCEPTION 'p_member must be a JSON object' USING ERRCODE = '22023';
+    END IF;
+    IF jsonb_typeof(v_profile) <> 'object' THEN
+        v_profile := '{}'::jsonb;
+    END IF;
+
+    SELECT s.owner INTO v_owner FROM public.servers s WHERE s.id = p_server_id;
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'Server not found' USING ERRCODE = 'P0002';
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM public.user_servers us
+                    WHERE us.server_id = p_server_id AND us.user_id = p_user_id AND us.status = 'accepted') THEN
+        RETURN jsonb_build_object('skipped', 'not_member');
+    END IF;
+    SELECT * INTO v_link FROM public.discord_migration_links l
+     WHERE l.server_id = p_server_id AND l.user_id = p_user_id AND l.status = 'active';
+    IF NOT FOUND THEN
+        RETURN jsonb_build_object('skipped', 'no_link');
+    END IF;
+
+    IF NOT COALESCE((p_member ->> 'present')::boolean, false) THEN
+        RETURN jsonb_build_object('candidate',
+            CASE WHEN COALESCE((p_member ->> 'banned')::boolean, false) THEN 'banned' ELSE 'left' END);
+    END IF;
+
+    v_fields := v_link.sync_fields;
+    SELECT p.username INTO v_username FROM public.profiles p WHERE p.id = p_user_id;
+
+    -- Roles
+    IF p_member ? 'role_ids' AND jsonb_typeof(p_member -> 'role_ids') = 'array' THEN
+        SELECT COALESCE(array_agg(DISTINCT e), '{}') INTO v_roles
+          FROM jsonb_array_elements_text(p_member -> 'role_ids') e WHERE e ~ '^[0-9]{1,20}$';
+        v_role_result := public.discord_migration_apply_roles(p_server_id, p_user_id, v_roles);
+        UPDATE public.discord_migration_links SET discord_role_ids = v_roles
+         WHERE server_id = p_server_id AND user_id = p_user_id;
+    END IF;
+    IF p_member ? 'joined_at' AND jsonb_typeof(p_member -> 'joined_at') = 'string' THEN
+        UPDATE public.discord_migration_links SET discord_joined_at = (p_member ->> 'joined_at')::timestamptz
+         WHERE server_id = p_server_id AND user_id = p_user_id;
+    END IF;
+
+    -- Profile: only what the member opted into. A global value that is null leaves the profile alone.
+    IF 'avatar' = ANY (v_fields) AND jsonb_typeof(v_profile -> 'avatar_url') = 'string' THEN
+        UPDATE public.profiles SET avatar_url = v_profile ->> 'avatar_url' WHERE id = p_user_id;
+    END IF;
+    IF 'display_name' = ANY (v_fields) AND jsonb_typeof(v_profile -> 'display_name') = 'string' THEN
+        UPDATE public.profiles SET display_name = v_profile ->> 'display_name' WHERE id = p_user_id;
+    END IF;
+    IF 'banner' = ANY (v_fields) AND jsonb_typeof(v_profile -> 'banner_url') = 'string' THEN
+        UPDATE public.profiles SET banner_url = v_profile ->> 'banner_url' WHERE id = p_user_id;
+    END IF;
+    IF 'accent_color' = ANY (v_fields) AND jsonb_typeof(v_profile -> 'accent_color') = 'number' THEN
+        v_color := (v_profile ->> 'accent_color')::integer;
+        UPDATE public.profiles SET color = '#' || lpad(to_hex(v_color & 16777215), 6, '0') WHERE id = p_user_id;
+    END IF;
+    IF 'server_nickname' = ANY (v_fields) AND v_profile ? 'server_nickname' THEN
+        v_server := v_server || jsonb_build_object('nickname', v_profile -> 'server_nickname');
+    END IF;
+    IF 'server_avatar' = ANY (v_fields) AND v_profile ? 'server_avatar_url' THEN
+        v_server := v_server || jsonb_build_object('avatar_url', v_profile -> 'server_avatar_url');
+    END IF;
+    IF 'server_banner' = ANY (v_fields) AND v_profile ? 'server_banner_url' THEN
+        v_server := v_server || jsonb_build_object('banner_url', v_profile -> 'server_banner_url');
+    END IF;
+    IF v_server <> '{}'::jsonb THEN
+        PERFORM public.service_set_member_server_profile(p_server_id, p_user_id, v_server);
+    END IF;
+
+    -- Timeouts: Harmony's own (moderator, automod) are never replaced or lifted. The owner and
+    -- Administrator holders cannot be timed out.
+    IF p_member ? 'timed_out_until' THEN
+        v_prev_via := current_setting('harmony.via', true);
+        PERFORM set_config('harmony.via', 'discord_migration', true);
+        v_until := CASE WHEN jsonb_typeof(p_member -> 'timed_out_until') = 'string'
+                        THEN (p_member ->> 'timed_out_until')::timestamptz END;
+        IF v_until IS NOT NULL AND v_until > now() THEN
+            IF v_owner IS DISTINCT FROM p_user_id AND NOT public.has_permission(p_user_id, p_server_id, 'ADMINISTRATOR') THEN
+                SELECT * INTO v_timeout FROM public.server_member_timeouts t
+                 WHERE t.server_id = p_server_id AND t.user_id = p_user_id;
+                IF NOT FOUND OR v_timeout.until <= now() OR v_timeout.source = 'discord_migration' THEN
+                    INSERT INTO public.server_member_timeouts (server_id, user_id, until, reason, source)
+                    VALUES (p_server_id, p_user_id, v_until, 'Timed out on Discord', 'discord_migration')
+                    ON CONFLICT (server_id, user_id) DO UPDATE
+                       SET until = EXCLUDED.until, reason = EXCLUDED.reason, source = EXCLUDED.source,
+                           created_by = NULL, created_at = now();
+                    IF v_timeout.user_id IS NULL OR v_timeout.until <= now() OR v_timeout.until IS DISTINCT FROM v_until THEN
+                        PERFORM public.server_audit_write(p_server_id, 'member.timeout', 'user', p_user_id::text,
+                            v_username, NULL,
+                            jsonb_build_object('until', v_until, 'via', 'discord_migration'),
+                            'Timed out on Discord', NULL, 'system');
+                    END IF;
+                END IF;
+            END IF;
+        ELSE
+            DELETE FROM public.server_member_timeouts t
+             WHERE t.server_id = p_server_id AND t.user_id = p_user_id AND t.source = 'discord_migration'
+            RETURNING * INTO v_timeout;
+            IF FOUND AND v_timeout.until > now() THEN
+                PERFORM public.server_audit_write(p_server_id, 'member.timeout_remove', 'user', p_user_id::text,
+                    v_username, NULL, jsonb_build_object('via', 'discord_migration'), NULL, NULL, 'system');
+            END IF;
+        END IF;
+        PERFORM set_config('harmony.via', COALESCE(v_prev_via, ''), true);
+    END IF;
+
+    UPDATE public.discord_migration_links SET last_synced_at = now()
+     WHERE server_id = p_server_id AND user_id = p_user_id;
+    RETURN jsonb_build_object('present', true, 'roles', v_role_result);
+END;
+$$;
+
+-- Removes members the gateway saw leave or get banned on Discord. p_candidates is [{user_id, kind}] with
+-- kind left or banned. The removal brake pauses the whole batch instead when it would remove at least 3
+-- members and more than removal_brake_pct of the active links. The owner and Administrator holders are
+-- skipped. Returns {paused: true} or {applied, skipped: [{user_id, reason}]}.
+CREATE OR REPLACE FUNCTION public.discord_migration_apply_removals(p_server_id uuid, p_candidates jsonb)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, extensions, pg_temp
+AS $$
+DECLARE
+    v_mig public.discord_migrations;
+    v_owner uuid;
+    v_count integer;
+    v_active integer;
+    v_prev_via text := current_setting('harmony.via', true);
+    v_cand jsonb;
+    v_user uuid;
+    v_kind text;
+    v_link public.discord_migration_links;
+    v_username text;
+    v_applied integer := 0;
+    v_skipped jsonb := '[]'::jsonb;
+BEGIN
+    IF p_candidates IS NULL OR jsonb_typeof(p_candidates) <> 'array' THEN
+        RAISE EXCEPTION 'p_candidates must be a JSON array' USING ERRCODE = '22023';
+    END IF;
+    SELECT * INTO v_mig FROM public.discord_migrations m WHERE m.server_id = p_server_id FOR UPDATE;
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'migration_not_configured' USING ERRCODE = 'P0002';
+    END IF;
+    IF v_mig.state <> 'open' THEN
+        RETURN jsonb_build_object('applied', 0, 'skipped', '[]'::jsonb, 'closed', true);
+    END IF;
+
+    v_count := jsonb_array_length(p_candidates);
+    SELECT count(*)::integer INTO v_active FROM public.discord_migration_links l
+     WHERE l.server_id = p_server_id AND l.status = 'active';
+    IF v_count >= 3 AND v_count * 100 > v_mig.removal_brake_pct * v_active THEN
+        PERFORM public.discord_migration_pause(p_server_id, 'removal_brake');
+        RETURN jsonb_build_object('paused', true);
+    END IF;
+
+    SELECT s.owner INTO v_owner FROM public.servers s WHERE s.id = p_server_id;
+    PERFORM set_config('harmony.via', 'discord_migration', true);
+
+    FOR v_cand IN SELECT * FROM jsonb_array_elements(p_candidates) LOOP
+        v_user := NULLIF(v_cand ->> 'user_id', '')::uuid;
+        v_kind := v_cand ->> 'kind';
+        IF v_user IS NULL OR v_kind IS NULL OR v_kind NOT IN ('left', 'banned') THEN
+            v_skipped := v_skipped || jsonb_build_object('user_id', v_user, 'reason', 'invalid');
+            CONTINUE;
+        END IF;
+        SELECT * INTO v_link FROM public.discord_migration_links l
+         WHERE l.server_id = p_server_id AND l.user_id = v_user AND l.status = 'active';
+        IF NOT FOUND THEN
+            v_skipped := v_skipped || jsonb_build_object('user_id', v_user, 'reason', 'no_active_link');
+            CONTINUE;
+        END IF;
+        IF v_owner IS NOT DISTINCT FROM v_user THEN
+            v_skipped := v_skipped || jsonb_build_object('user_id', v_user, 'reason', 'owner');
+            CONTINUE;
+        END IF;
+        IF public.has_permission(v_user, p_server_id, 'ADMINISTRATOR') THEN
+            v_skipped := v_skipped || jsonb_build_object('user_id', v_user, 'reason', 'administrator');
+            CONTINUE;
+        END IF;
+
+        SELECT p.username INTO v_username FROM public.profiles p WHERE p.id = v_user;
+        IF v_kind = 'banned' THEN
+            PERFORM public._ban_server_member_internal(p_server_id, v_user, 'Banned on the Discord server');
+            PERFORM public.server_audit_write(p_server_id, 'member.ban', 'user', v_user::text, v_username, NULL,
+                jsonb_build_object('via', 'discord_migration'), 'Banned on the Discord server', NULL, 'system');
+            UPDATE public.discord_migration_links SET status = 'banned'
+             WHERE server_id = p_server_id AND user_id = v_user;
+        ELSE
+            IF EXISTS (SELECT 1 FROM public.user_servers us
+                        WHERE us.server_id = p_server_id AND us.user_id = v_user) THEN
+                PERFORM public._kick_server_member_internal(p_server_id, v_user, 'Left the Discord server');
+                PERFORM public.server_audit_write(p_server_id, 'member.kick', 'user', v_user::text, v_username, NULL,
+                    jsonb_build_object('via', 'discord_migration'), 'Left the Discord server', NULL, 'system');
+            END IF;
+            UPDATE public.discord_migration_links SET status = 'left'
+             WHERE server_id = p_server_id AND user_id = v_user;
+        END IF;
+        v_applied := v_applied + 1;
+    END LOOP;
+
+    PERFORM set_config('harmony.via', COALESCE(v_prev_via, ''), true);
+    RETURN jsonb_build_object('applied', v_applied, 'skipped', v_skipped);
+END;
+$$;
+
 DO $$
 DECLARE
     fn regprocedure;
@@ -1499,7 +2199,13 @@ BEGIN
     FOREACH fn IN ARRAY ARRAY[
         'public.discord_migration_create_claim(uuid, jsonb, text[], timestamptz)',
         'public.discord_migration_bind_claim(text, uuid)',
-        'public.discord_migration_apply_roles(uuid, uuid, text[])'
+        'public.discord_migration_apply_roles(uuid, uuid, text[])',
+        'public.discord_migration_due(integer, interval)',
+        'public.discord_migration_links_batch(uuid, integer)',
+        'public.discord_migration_sync_member(uuid, uuid, jsonb)',
+        'public.discord_migration_apply_removals(uuid, jsonb)',
+        'public.discord_migration_pause(uuid, text)',
+        'public.discord_migration_record_sync(uuid, jsonb, timestamptz)'
     ]::regprocedure[] LOOP
         EXECUTE format('REVOKE ALL ON FUNCTION %s FROM PUBLIC, anon, authenticated', fn);
         EXECUTE format('GRANT EXECUTE ON FUNCTION %s TO service_role', fn);
