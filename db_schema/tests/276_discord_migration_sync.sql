@@ -8,7 +8,7 @@
 --   s1  roles Mod (c1), Helper (c4), Artist (c3, unmapped), Admins (c2, ADMINISTRATOR); map D1 -> Mod, D2 -> Admins
 BEGIN;
 SET LOCAL search_path = tests, public;
-SELECT plan(72);
+SELECT plan(76);
 
 CREATE TEMP TABLE out (k text PRIMARY KEY, v jsonb) ON COMMIT DROP;
 GRANT ALL ON out TO PUBLIC;
@@ -65,7 +65,7 @@ INSERT INTO service_fns VALUES
   ('public.discord_migration_sync_member(uuid, uuid, jsonb)'),
   ('public.discord_migration_apply_removals(uuid, jsonb)'),
   ('public.discord_migration_pause(uuid, text)'),
-  ('public.discord_migration_record_sync(uuid, jsonb, timestamptz, timestamptz)');
+  ('public.discord_migration_record_sync(uuid, jsonb, timestamptz, timestamptz, boolean)');
 SELECT is_empty($q$SELECT fn FROM service_fns WHERE has_function_privilege('anon', fn, 'EXECUTE')
                                                 OR has_function_privilege('authenticated', fn, 'EXECUTE')
                                                 OR NOT has_function_privilege('service_role', fn, 'EXECUTE')$q$,
@@ -361,6 +361,23 @@ SELECT results_eq($q$SELECT sync_requested_at IS NULL, last_sync_at > now() - in
   $q$VALUES (true, true, '{"members": 2}'::jsonb, '2026-11-01 00:00:00+00'::timestamptz)$q$, 'record_sync stores the pass and clears the request');
 SELECT ok(NOT EXISTS (SELECT 1 FROM public.discord_migration_due(100) d WHERE d ->> 'server_id' = 'f2760000-0000-0000-0000-0000000000a1'),
   'due: a fresh sync is not due again');
+-- a pass stopped on its budget (p_complete = false) stays due and does not advance last_sync_at
+UPDATE public.discord_migrations SET last_sync_at = now() - interval '1 hour' WHERE server_id = 'f2760000-0000-0000-0000-0000000000a1';
+SET LOCAL role service_role;
+SELECT public.discord_migration_record_sync('f2760000-0000-0000-0000-0000000000a1', '{"partial": 1}', NULL, now(), false);
+RESET role;
+SELECT results_eq($q$SELECT sync_requested_at IS NOT NULL, last_sync_result
+                       FROM public.discord_migrations WHERE server_id = 'f2760000-0000-0000-0000-0000000000a1'$q$,
+  $q$VALUES (true, '{"partial": 1}'::jsonb)$q$, 'record_sync partial: result stored and a request kept pending');
+SELECT ok(EXISTS (SELECT 1 FROM public.discord_migration_due(100) d WHERE d ->> 'server_id' = 'f2760000-0000-0000-0000-0000000000a1'),
+  'due: a partial pass is still returned');
+SELECT ok((SELECT last_sync_at = now() - interval '1 hour' FROM public.discord_migrations WHERE server_id = 'f2760000-0000-0000-0000-0000000000a1'),
+  'record_sync partial: last_sync_at did not advance');
+SET LOCAL role service_role;
+SELECT public.discord_migration_record_sync('f2760000-0000-0000-0000-0000000000a1', '{"members": 3}', NULL, now(), true);
+RESET role;
+SELECT ok(NOT EXISTS (SELECT 1 FROM public.discord_migration_due(100) d WHERE d ->> 'server_id' = 'f2760000-0000-0000-0000-0000000000a1'),
+  'record_sync complete: no longer due');
 UPDATE public.discord_migrations SET last_sync_at = now() - interval '7 hours' WHERE server_id = 'f2760000-0000-0000-0000-0000000000a1';
 SELECT ok(EXISTS (SELECT 1 FROM public.discord_migration_due(100) d WHERE d ->> 'server_id' = 'f2760000-0000-0000-0000-0000000000a1'),
   'due: a sync older than the interval is due');

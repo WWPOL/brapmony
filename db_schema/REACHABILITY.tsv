@@ -195,7 +195,7 @@ can_current_user_manage_messages_in_channel	definer	boolean	anon+authenticated+s
 can_current_user_moderate_report	definer	boolean	service_role	client, policy	called by get_reports_with_details, message_media_reported, moderate_report
 can_current_user_moderate_server_reports	definer	boolean	authenticated+service_role	client, policy	called by can_current_user_moderate_report, get_reports_with_details
 can_manage_channel_webhooks	definer	boolean	service_role	client	called by create_channel_webhook, list_channel_webhooks, list_server_webhooks, +1
-can_manage_discord_bridge	definer	boolean	authenticated+service_role	client, policy	policy public.discord_bridge_channels SELECT on discord_bridge_channels_select_manager, public.discord_bridge_imports SELECT on discord_bridge_imports_select_manager, public.discord_bridges SELECT on discord_bridges_select_manager
+can_manage_discord_bridge	definer	boolean	authenticated+service_role	client, policy	policy public.discord_bridge_channels SELECT on discord_bridge_channels_select_manager, public.discord_bridge_imports SELECT on discord_bridge_imports_select_manager, public.discord_bridges SELECT on discord_bridges_select_manager; rpc in bot-gateway/src/api/MigrationAPI.ts
 can_manage_emoji	definer	boolean	service_role	client	called by remove_emoji, rename_emoji, restore_emoji
 can_manage_group_icon	definer	boolean	service_role	client	called by remove_group_icon, update_group_icon, update_group_name
 can_manage_outgoing_webhooks	definer	boolean	service_role	client	called by create_outgoing_webhook, list_outgoing_webhooks, lock_managed_outgoing_webhook
@@ -332,7 +332,7 @@ discord_bridge_delete	definer	void	authenticated	client	rpc in src/components/se
 discord_bridge_encrypted_channel_ids	definer	SETOF uuid	service_role	client	rpc in bot-gateway/src/bridge/bridgeConfig.ts
 discord_bridge_for_manager	definer	discord_bridges	-	client	called by discord_bridge_delete, discord_bridge_import_cancel, discord_bridge_import_start, +6
 discord_bridge_guild_channels	invoker	SETOF jsonb	-	client	called by discord_bridge_pair_internal, discord_bridge_report_status, discord_bridge_set_guild
-discord_bridge_hosted_list	definer	TABLE(bridge_id uuid, harmony_token text, discord_token text)	service_role	client	rpc in bot-gateway/src/api/BridgeV2API.ts
+discord_bridge_hosted_list	definer	TABLE(bridge_id uuid, harmony_token text, discord_token text)	service_role	client	rpc in bot-gateway/src/api/BridgeV2API.ts, bot-gateway/src/api/MigrationAPI.ts
 discord_bridge_hosting_enabled	definer	boolean	-	client	named in bot-gateway/src/api/BridgeV2API.ts, bot-gateway/src/api/__tests__/BridgeV2API.instance.test.ts, bot-gateway/src/api/__tests__/BridgeV2API.test.ts, +4
 discord_bridge_hosting_limit	definer	integer	-	client	named in src/components/settings/discord-bridge/__tests__/BridgeAdminAndMenus.test.ts, src/components/settings/discord-bridge/bridgeApi.ts
 discord_bridge_import_cancel	definer	SETOF discord_bridge_imports	authenticated	client	rpc in src/components/settings/discord-bridge/bridgeApi.ts
@@ -369,29 +369,29 @@ discord_bridge_unpair	definer	boolean	authenticated	client	rpc in src/components
 discord_bridge_update_settings	definer	jsonb	authenticated	client	rpc in src/components/settings/discord-bridge/bridgeApi.ts
 discord_bridges_retire_bot	definer	trigger	-	trigger	trigger public.discord_bridges AFTER DELETE (discord_bridges_retire_bot)
 discord_bridges_touch	invoker	trigger	-	trigger	trigger public.discord_bridges BEFORE UPDATE (discord_bridges_touch)
-discord_migration_admin_bearing	definer	boolean	-	nothing	called by discord_migration_apply_roles, discord_migration_save_role_map
+discord_migration_admin_bearing	definer	boolean	-	client	called by discord_migration_apply_roles, discord_migration_save_role_map
 discord_migration_admin_impact	definer	jsonb	authenticated	http authenticated	nothing references it
 discord_migration_allow_back	definer	void	authenticated	http authenticated	nothing references it
 discord_migration_apply_permissions	invoker	jsonb	authenticated	http authenticated	nothing references it
-discord_migration_apply_removals	definer	jsonb	service_role	service key	nothing references it
-discord_migration_apply_roles	definer	jsonb	service_role	service key	called by discord_migration_claim, discord_migration_sync_member
+discord_migration_apply_removals	definer	jsonb	service_role	client	rpc in bot-gateway/src/migration/MigrationSyncRunner.ts
+discord_migration_apply_roles	definer	jsonb	service_role	client	called by discord_migration_claim, discord_migration_sync_member
 discord_migration_assert_manager	definer	uuid	-	nothing	called by discord_migration_admin_impact, discord_migration_allow_back, discord_migration_auto_match, +9
 discord_migration_auto_match	definer	jsonb	authenticated	http authenticated	nothing references it
-discord_migration_bind_claim	definer	void	service_role	service key	nothing references it
+discord_migration_bind_claim	definer	void	service_role	client	rpc in bot-gateway/src/api/MigrationAPI.ts
 discord_migration_claim	definer	jsonb	authenticated	http authenticated	nothing references it
-discord_migration_create_claim	definer	jsonb	service_role	service key	nothing references it
-discord_migration_credentials	definer	jsonb	service_role	service key	nothing references it
-discord_migration_due	definer	SETOF jsonb	service_role	service key	nothing references it
+discord_migration_create_claim	definer	jsonb	service_role	client	rpc in bot-gateway/src/api/MigrationAPI.ts
+discord_migration_credentials	definer	jsonb	service_role	client	rpc in bot-gateway/src/api/MigrationAPI.ts, bot-gateway/src/migration/MigrationSyncRunner.ts
+discord_migration_due	definer	SETOF jsonb	service_role	client	rpc in bot-gateway/src/migration/MigrationSyncRunner.ts
 discord_migration_get	definer	jsonb	authenticated	http authenticated	called by discord_migration_save, discord_migration_set_state
-discord_migration_links_batch	definer	SETOF jsonb	service_role	service key	nothing references it
+discord_migration_links_batch	definer	SETOF jsonb	service_role	client	rpc in bot-gateway/src/migration/MigrationSyncRunner.ts
 discord_migration_member_joined_at	definer	timestamp with time zone	authenticated	http authenticated	nothing references it
 discord_migration_my_link	definer	jsonb	authenticated	http authenticated	nothing references it
 discord_migration_my_pending_claims	definer	jsonb	authenticated	http authenticated	nothing references it
 discord_migration_note_kick	definer	trigger	-	trigger	trigger public.server_membership_events AFTER INSERT (z_membership_events_discord_migration)
-discord_migration_pause	definer	void	service_role	service key	called by discord_migration_apply_removals
+discord_migration_pause	definer	void	service_role	client	rpc in bot-gateway/src/migration/MigrationSyncRunner.ts
 discord_migration_permission_gaps	definer	jsonb	authenticated	http authenticated	called by discord_migration_apply_permissions, discord_migration_get
 discord_migration_readiness	definer	jsonb	authenticated	http authenticated	called by discord_migration_get, discord_migration_save_role_map, discord_migration_set_state
-discord_migration_record_sync	definer	void	service_role	service key	nothing references it
+discord_migration_record_sync	definer	void	service_role	client	rpc in bot-gateway/src/migration/MigrationSyncRunner.ts
 discord_migration_regenerate_token	definer	text	authenticated	http authenticated	nothing references it
 discord_migration_request_sync	definer	void	authenticated	http authenticated	nothing references it
 discord_migration_save	definer	jsonb	authenticated	http authenticated	nothing references it
@@ -400,9 +400,9 @@ discord_migration_secrets_purge	definer	trigger	-	trigger	trigger public.discord
 discord_migration_set_my_sync	definer	void	authenticated	http authenticated	nothing references it
 discord_migration_set_own_credentials	definer	void	authenticated	http authenticated	nothing references it
 discord_migration_set_state	definer	jsonb	authenticated	http authenticated	nothing references it
-discord_migration_store_discord_roles	definer	void	service_role	service key	nothing references it
-discord_migration_store_warnings	definer	void	service_role	service key	nothing references it
-discord_migration_sync_member	definer	jsonb	service_role	service key	nothing references it
+discord_migration_store_discord_roles	definer	void	service_role	client	rpc in bot-gateway/src/api/MigrationAPI.ts, bot-gateway/src/migration/MigrationSyncRunner.ts
+discord_migration_store_warnings	definer	void	service_role	client	rpc in bot-gateway/src/api/MigrationAPI.ts
+discord_migration_sync_member	definer	jsonb	service_role	client	rpc in bot-gateway/src/migration/MigrationSyncRunner.ts
 dismiss_server_automod_prompt	definer	jsonb	authenticated+service_role	client	rpc in src/services/AutoModService.ts
 dm_policy_allows	definer	boolean	service_role	client	called by dm_recipients_allowing, dm_start_guard
 dm_recipients_allowing	definer	uuid[]	service_role	client	rpc in federation-backend/src/activitypub/ActivityProcessor.ts
@@ -821,7 +821,7 @@ outgoing_webhook_probes	definer	SETOF uuid	service_role	client	rpc in federation
 outgoing_webhook_routes	definer	TABLE(bot_id uuid, server_id uuid, events text[])	service_role	client	rpc in bot-gateway/src/gateway/outgoingWebhooks.ts
 outgoing_webhook_valid_url	invoker	boolean	service_role	client	called by outgoing_webhook_check_fields
 outgoing_webhooks_purge_secret	definer	trigger	service_role	trigger	trigger public.outgoing_webhooks AFTER DELETE (outgoing_webhooks_purge_secret)
-permission_bit_names	invoker	text[]	authenticated+service_role	client, policy, trigger	rpc in bot-gateway/src/bridge/bridgeConfig.ts
+permission_bit_names	invoker	text[]	authenticated+service_role	client, policy, trigger	rpc in bot-gateway/src/api/MigrationAPI.ts, bot-gateway/src/bridge/bridgeConfig.ts, bot-gateway/src/migration/MigrationSyncRunner.ts
 personal_emoji_limit	invoker	integer	authenticated+service_role	client, trigger	rpc in federation-backend/src/routes/gifs.ts
 pin_membership_join_time	invoker	trigger	service_role	trigger	trigger public.conversation_participants BEFORE INSERT/UPDATE (a_conversation_participants_pin_join_time), public.user_servers BEFORE INSERT/UPDATE (a_user_servers_pin_join_time)
 pin_message	definer	boolean	authenticated+service_role	client	rpc in src/services/MessageService.ts

@@ -1928,10 +1928,14 @@ $$;
 
 -- Ends a sync pass: when it ran, what it found, where the next one starts. p_started_at is when the pass
 -- began: a "Sync now" asked for after that moment stays pending (sync_requested_at is cleared only when it
--- is not later than p_started_at; a null p_started_at clears it).
+-- is not later than p_started_at; a null p_started_at clears it). p_complete = false records a pass the
+-- gateway stopped on its time budget with members left: the result and cursor are stored, last_sync_at does
+-- not advance, and the migration stays due (sync_requested_at = now()) so the next run continues.
 DROP FUNCTION IF EXISTS public.discord_migration_record_sync(uuid, jsonb, timestamptz);
+DROP FUNCTION IF EXISTS public.discord_migration_record_sync(uuid, jsonb, timestamptz, timestamptz);
 CREATE OR REPLACE FUNCTION public.discord_migration_record_sync(
-    p_server_id uuid, p_result jsonb, p_cursor timestamptz, p_started_at timestamptz DEFAULT NULL)
+    p_server_id uuid, p_result jsonb, p_cursor timestamptz, p_started_at timestamptz DEFAULT NULL,
+    p_complete boolean DEFAULT true)
 RETURNS void
 LANGUAGE plpgsql
 SECURITY DEFINER
@@ -1939,8 +1943,10 @@ SET search_path = public, extensions, pg_temp
 AS $$
 BEGIN
     UPDATE public.discord_migrations
-       SET last_sync_at = now(), last_sync_result = p_result, sync_cursor = p_cursor,
-           sync_requested_at = CASE WHEN p_started_at IS NULL OR sync_requested_at <= p_started_at
+       SET last_sync_at = CASE WHEN COALESCE(p_complete, true) THEN now() ELSE last_sync_at END,
+           last_sync_result = p_result, sync_cursor = p_cursor,
+           sync_requested_at = CASE WHEN NOT COALESCE(p_complete, true) THEN now()
+                                    WHEN p_started_at IS NULL OR sync_requested_at <= p_started_at
                                     THEN NULL ELSE sync_requested_at END,
            updated_at = now()
      WHERE server_id = p_server_id;
@@ -2225,7 +2231,7 @@ BEGIN
         'public.discord_migration_sync_member(uuid, uuid, jsonb)',
         'public.discord_migration_apply_removals(uuid, jsonb)',
         'public.discord_migration_pause(uuid, text)',
-        'public.discord_migration_record_sync(uuid, jsonb, timestamptz, timestamptz)'
+        'public.discord_migration_record_sync(uuid, jsonb, timestamptz, timestamptz, boolean)'
     ]::regprocedure[] LOOP
         EXECUTE format('REVOKE ALL ON FUNCTION %s FROM PUBLIC, anon, authenticated', fn);
         EXECUTE format('GRANT EXECUTE ON FUNCTION %s TO service_role', fn);

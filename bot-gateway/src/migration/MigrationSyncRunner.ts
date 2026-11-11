@@ -80,6 +80,9 @@ export interface MigrationSyncDeps {
 const MIN_SAMPLE_FOR_ERROR_BRAKE = 3
 const MIRROR_CACHE_MAX = 5000
 const DUE_LIMIT = 20
+/** Wait after a transient failure of one server: doubles per consecutive failure. */
+const BACKOFF_START_MS = 60_000
+const BACKOFF_MAX_MS = 30 * 60_000
 
 class DiscordCallFailed extends Error {
   constructor(readonly status: number, readonly reason: string) {
@@ -111,6 +114,8 @@ export class MigrationSyncRunner {
   private readonly batch: number
   private timer: NodeJS.Timeout | null = null
   private running = false
+  /** Servers whose last attempt failed transiently: not tried again before `until`. */
+  private readonly backoffs = new Map<string, { until: number; delayMs: number }>()
   /** Source URL -> stored path, so an unchanged Discord image is not copied again on every pass. */
   private readonly mirrored = new Map<string, string>()
 
@@ -155,15 +160,24 @@ export class MigrationSyncRunner {
         return
       }
       for (const row of Array.isArray(data) ? (data as DueMigration[]) : []) {
+        const wait = this.backoffs.get(row.server_id)
+        if (wait && this.now() < wait.until) continue
         try {
           await this.syncServer(row)
         } catch (err) {
           console.error('migration sync failed:', err instanceof Error ? err.message : 'unknown error')
+          this.backOff(row.server_id)
         }
       }
     } finally {
       this.running = false
     }
+  }
+
+  private backOff(serverId: string): void {
+    const prev = this.backoffs.get(serverId)
+    const delayMs = prev ? Math.min(prev.delayMs * 2, BACKOFF_MAX_MS) : BACKOFF_START_MS
+    this.backoffs.set(serverId, { until: this.now() + delayMs, delayMs })
   }
 
   async syncServer(m: DueMigration): Promise<SyncResult> {
@@ -174,25 +188,26 @@ export class MigrationSyncRunner {
     const pauseWith = async (reason: string) => {
       await this.rpc('discord_migration_pause', { p_server_id: serverId, p_reason: reason })
       result.paused = reason
+      this.backoffs.delete(serverId)
+      return result
+    }
+    // A transient failure ends the attempt early; the server is skipped for a growing delay.
+    const transient = () => {
+      result.errors++
+      this.backOff(serverId)
       return result
     }
 
     const creds = await this.credentials(serverId)
     if (creds === null) return pauseWith('credentials_missing')
-    if (creds === 'error') {
-      result.errors++
-      return result
-    }
+    if (creds === 'error') return transient()
     const info = await this.loadMigration(serverId)
     const guildId = info?.discord_guild_id ?? m.discord_guild_id
     if (!info || !guildId) return pauseWith('credentials_missing')
 
     const refreshed = await this.refreshRoles(serverId, guildId, creds.bot_token)
     if (refreshed !== 'ok') {
-      if (refreshed === 'unavailable') {
-        result.errors++
-        return result
-      }
+      if (refreshed === 'unavailable') return transient()
       return pauseWith(refreshed)
     }
 
@@ -201,6 +216,8 @@ export class MigrationSyncRunner {
     let failedMembers = 0
     let checkedMembers = 0
     let stop = false
+    // False when the pass ended with members left (time budget, a failed batch read): the next run continues.
+    let complete = true
 
     while (!stop && this.now() - Date.parse(startedAt) < this.budgetMs) {
       const { data, error } = await this.rpc('discord_migration_links_batch', {
@@ -211,6 +228,7 @@ export class MigrationSyncRunner {
       if (error) {
         console.error('discord_migration_links_batch failed:', error.code, error.message)
         result.errors++
+        complete = false
         break
       }
       const fresh = (Array.isArray(data) ? (data as MigrationLink[]) : []).filter((l) => !seen.has(l.user_id))
@@ -219,6 +237,7 @@ export class MigrationSyncRunner {
       for (const l of fresh) {
         if (this.now() - Date.parse(startedAt) >= this.budgetMs) {
           stop = true
+          complete = false
           break
         }
         seen.add(l.user_id)
@@ -241,6 +260,9 @@ export class MigrationSyncRunner {
         }
       }
     }
+
+    // The loop condition ended it on the budget: members may be left.
+    if (!stop && this.now() - Date.parse(startedAt) >= this.budgetMs) complete = false
 
     if (checkedMembers > 0 && failedMembers * 2 > checkedMembers) return pauseWith('discord_errors')
 
@@ -266,7 +288,9 @@ export class MigrationSyncRunner {
       p_result: result,
       p_cursor: null,
       p_started_at: startedAt,
+      p_complete: complete,
     })
+    this.backoffs.delete(serverId)
     if (recorded.error) console.error('discord_migration_record_sync failed:', recorded.error.code, recorded.error.message)
     return result
   }
@@ -381,7 +405,6 @@ export class MigrationSyncRunner {
       timed_out_until: member.timed_out_until,
       profile: await this.buildProfile(serverId, guildId, botToken, l, member, result),
     }
-    if (member.timed_out_until && Date.parse(member.timed_out_until) > this.now()) result.timeouts++
 
     const { data, error } = await this.rpc('discord_migration_sync_member', {
       p_server_id: serverId,
@@ -393,6 +416,8 @@ export class MigrationSyncRunner {
       result.errors++
       return { kind: 'error', memberFetch: true, failed: false }
     }
+    if (data?.skipped || data?.candidate) return { kind: 'synced', memberFetch: true, failed: false }
+    if (member.timed_out_until && Date.parse(member.timed_out_until) > this.now()) result.timeouts++
     const roles = data?.roles
     if (roles) result.rolesChanged += (roles.added?.length ?? 0) + (roles.removed?.length ?? 0)
     return { kind: 'synced', memberFetch: true, failed: false }

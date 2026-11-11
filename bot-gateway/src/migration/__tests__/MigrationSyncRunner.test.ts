@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { MigrationSyncRunner, type DueMigration } from '../MigrationSyncRunner'
 import { mirrorExternalMediaToStorage } from '../../utils/mirrorExternalMedia.js'
 
@@ -7,6 +7,14 @@ vi.mock('../../config/supabase.js', () => ({
   config: { migration: { syncMs: 21_600_000, pollMs: 30_000, budgetMs: 120_000, batch: 100 } },
 }))
 vi.mock('../../utils/mirrorExternalMedia.js', () => ({ mirrorExternalMediaToStorage: vi.fn() }))
+
+const ENV_BEFORE = { SUPABASE_URL: process.env.SUPABASE_URL, PUBLIC_URL: process.env.PUBLIC_URL }
+afterEach(() => {
+  for (const [k, v] of Object.entries(ENV_BEFORE)) {
+    if (v === undefined) delete process.env[k]
+    else process.env[k] = v
+  }
+})
 
 const SERVER = '11111111-1111-1111-1111-111111111111'
 const GUILD = '900'
@@ -244,6 +252,22 @@ describe('MigrationSyncRunner.syncServer', () => {
     const rec = t.of('discord_migration_record_sync')
     expect(rec).toHaveLength(1)
     expect(rec[0].args.p_started_at).toBe(new Date(1_000_000).toISOString())
+    expect(rec[0].args.p_complete).toBe(false)
+  })
+
+  it('records a pass that walked every link as complete', async () => {
+    const t = build({ links: [link(1), link(2)] })
+    await t.runner.syncServer(due)
+    expect(t.of('discord_migration_record_sync')[0].args.p_complete).toBe(true)
+  })
+
+  it('does not count a timeout for a skipped member', async () => {
+    const until = new Date(Date.now() + 3600_000).toISOString()
+    const t = build({ links: [link(1)], members: () => member({ timed_out_until: until }), syncMember: () => ({ skipped: 'no_link' }) })
+    const r = await t.runner.syncServer(due)
+    expect(r.timeouts).toBe(0)
+    const ok = build({ links: [link(1)], members: () => member({ timed_out_until: until }) })
+    expect((await ok.runner.syncServer(due)).timeouts).toBe(1)
   })
 
   it('pauses with discord_errors when over half the member fetches fail, applying no removals', async () => {
@@ -271,6 +295,58 @@ describe('MigrationSyncRunner.syncServer', () => {
     const t = build({ links: [link(1)], members: () => ({ present: false }), removals: { paused: true } })
     const r = await t.runner.syncServer(due)
     expect(r.paused).toBe('removal_brake')
+  })
+})
+
+describe('MigrationSyncRunner backoff', () => {
+  function backoffSetup() {
+    let clock = 5_000_000
+    const t = build({ links: [link(1)], now: () => clock })
+    const base = t.rpc.getMockImplementation()!
+    t.rpc.mockImplementation(async (fn: string, args: any) =>
+      fn === 'discord_migration_due' ? { data: [due], error: null } : base(fn, args),
+    )
+    return { t, advance: (ms: number) => (clock += ms) }
+  }
+
+  it('skips a failing server until the delay passes, doubling it, and resets after a success', async () => {
+    const { t, advance } = backoffSetup()
+    t.discord.fetchGuildRoles.mockResolvedValue(fail(500) as any)
+    await t.runner.runOnce()
+    expect(t.discord.fetchGuildRoles).toHaveBeenCalledTimes(1)
+    await t.runner.runOnce()
+    expect(t.discord.fetchGuildRoles).toHaveBeenCalledTimes(1)
+    advance(61_000)
+    await t.runner.runOnce()
+    expect(t.discord.fetchGuildRoles).toHaveBeenCalledTimes(2)
+    // second failure: the wait doubled to 2 minutes
+    advance(61_000)
+    await t.runner.runOnce()
+    expect(t.discord.fetchGuildRoles).toHaveBeenCalledTimes(2)
+    advance(60_000)
+    t.discord.fetchGuildRoles.mockResolvedValue(ok([]) as any)
+    await t.runner.runOnce()
+    expect(t.discord.fetchGuildRoles).toHaveBeenCalledTimes(3)
+    expect(t.of('discord_migration_record_sync')).toHaveLength(1)
+    // reset: a new failure waits only a minute again
+    t.discord.fetchGuildRoles.mockResolvedValue(fail(500) as any)
+    await t.runner.runOnce()
+    expect(t.discord.fetchGuildRoles).toHaveBeenCalledTimes(4)
+    advance(61_000)
+    await t.runner.runOnce()
+    expect(t.discord.fetchGuildRoles).toHaveBeenCalledTimes(5)
+  })
+
+  it('backs off when credentials cannot be read for another reason', async () => {
+    const { t } = backoffSetup()
+    const base = t.rpc.getMockImplementation()!
+    t.rpc.mockImplementation(async (fn: string, args: any) =>
+      fn === 'discord_migration_credentials' ? { data: null, error: { message: 'db down' } } : base(fn, args),
+    )
+    await t.runner.runOnce()
+    await t.runner.runOnce()
+    expect(t.rpc.mock.calls.filter((c) => c[0] === 'discord_migration_credentials')).toHaveLength(1)
+    expect(t.rpc.mock.calls.filter((c) => c[0] === 'discord_migration_pause')).toHaveLength(0)
   })
 })
 
