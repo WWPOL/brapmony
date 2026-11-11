@@ -1,6 +1,6 @@
 # Migrate from Discord: server-level member migration
 
-Status: design, awaiting approval (2026-11-09)
+Status: approved 2026-11-09; revised 2026-11-11 (see "Revisions 2026-11-11" at the end)
 
 ## Intent
 
@@ -26,17 +26,19 @@ the owner **finishes** the migration and Harmony becomes the source of truth.
   roles only.
 - Membership follows Discord while open: leaving or being kicked on Discord removes the member from the
   Harmony server; a Discord ban bans them on Harmony.
-- Per-user opt-in profile sync: avatar, display name (extensible list of fields later).
+- Per-user opt-in profile sync: avatar, display name, profile banner, accent colour, and the server
+  nickname, server avatar and server banner (see Revisions 2026-11-11).
 - End state: **Finish migration** closes the link page, stops all syncing, keeps accounts and the
   roles as they stand. **Re-open** is possible, with a warning that Discord becomes authoritative again.
 
 ## Non-goals
 
-- Copying role definitions, role permissions or channel permissions. That is the bridge's job
-  (`/bridge sync-perms`). The migration only decides **who holds which role**.
+- Copying role definitions or channel permissions. That is the bridge's job (`/bridge clone-server`,
+  `/bridge sync-perms`). The migration decides **who holds which role**, and lets an admin top up a
+  mapped role's permissions from Discord (Revisions 2026-11-11), because bridge-made roles can't carry
+  moderator permissions.
 - Cloning channels/roles. Cloning is a stated prerequisite.
 - Real-time sync via the Discord gateway (would need the privileged Server Members intent).
-- Message history import.
 - Changes to the separate `harmony-discord-bridge` repository.
 - Instance-wide "Sign in with Discord" on the main login page.
 
@@ -315,3 +317,71 @@ additions below before execution.
    - Keep `discord_message_id`, so the bridge keeps relaying edits and deletes, and it keeps permission
      to edit messages it relayed.
    - A trigger reassigns new bridged messages from linked Discord users as they arrive.
+
+## Revisions 2026-11-11
+
+Decided with the user after server profiles (WWPOL/brapmony#3) and history import merged.
+
+### Numbering
+
+Migrations after master's last (`20261112100006`): `20261112500001_discord_migration.sql`. pgTAP files
+274-276.
+
+### Role permissions: "Apply Discord permissions"
+
+A bridge bot may grant a Harmony role only @everyone's permissions plus its install flags (read, send,
+manage channels, manage roles), so `/bridge clone-server` and `/bridge sync-perms` leave Kick, Ban,
+Manage Messages, Manage Nicknames, Pin Messages and Administrator off cloned roles (seen live,
+2026-11-11). Migrated moderators would get their role but not their powers.
+
+- The role snapshot keeps each Discord role's permissions, translated to Harmony bits by name. The
+  translation includes Administrator (the bridge's never does).
+- The role-mapping step shows, per mapped row, the Discord permissions the Harmony role lacks, and an
+  **Apply Discord permissions** button (per row and for all rows).
+- Applying adds the missing bits to the Harmony role. It never removes a permission the Harmony role
+  has and Discord's doesn't.
+- It runs as the admin pressing it, under Harmony's ordinary role rules: hierarchy (only roles below
+  their top role, unless owner) and "grant only what you hold" (holding Administrator counts as all).
+  Nothing a bot does gains new powers.
+
+### Administrator roles
+
+While the migration is open Discord decides who holds mapped roles, so a mapped role carrying
+Administrator turns any Discord account given that role into a Harmony admin at the next sync.
+
+- Only the owner may map a row that involves Administrator (the Discord role has it, or the Harmony
+  role has it or is the protected admin role), or apply Administrator to a role. The owner confirms in
+  a dialog that names the linked members who hold that Discord role now, and says that anyone given it
+  on Discord later becomes an admin too.
+- Every Administrator-carrying role the sync grants or removes is audited and notifies the owner.
+- The owner is never touched by the sync: no roles added or removed, never removed from the server.
+  Members holding Administrator are still never removed from the server by the sync (they can lose
+  the mapped role, audited and notified as above).
+- Finishing the migration closes the link; Harmony alone then decides who is an admin.
+
+### Profile fields (opt-in per member)
+
+Each linked member chooses any of: `avatar`, `display_name`, `banner`, `accent_color` (account
+profile: `profiles.avatar_url`, `display_name`, `banner_url`, `color`) and `server_nickname`,
+`server_avatar`, `server_banner` (this server's profile, written with `service_set_member_server_profile`).
+Discord sources: the user object (`GET /users/{id}`: avatar, global name, banner, accent colour) and the
+guild member (`nick`, guild `avatar`, guild `banner`). Media is mirrored to Harmony storage; Discord CDN
+URLs are never stored. A field the member turns off is left as it is, not cleared. Bio and pronouns are
+Harmony-only (Discord doesn't expose them to apps).
+
+### Timeouts (always on)
+
+A Discord timeout (`communication_disabled_until` in the future) becomes a Harmony timeout with source
+`discord_migration`. A Harmony moderator's or AutoMod's running timeout is never replaced or lifted.
+When Discord lifts or the timeout ends, only a `discord_migration` timeout is removed.
+
+### Discord join date
+
+The guild member's `joined_at` is stored on the link and shown on the member's profile card in that
+server as "Joined on Discord", as bridged Discord profiles show "Joined server".
+
+### Live testing
+
+Unit, pgTAP and one stubbed Playwright journey as before, plus a live pass against the test Discord
+server with the kit in `~/.config/harmony-test/kit` (test bot, ROODAY Dev Server). The e2e stack has no
+Realtime, so live UI updates are checked on a full deploy.
