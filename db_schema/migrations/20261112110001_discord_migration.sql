@@ -466,7 +466,7 @@ $$;
 -- {client_id, client_secret, bot_token} by credential source. instance_bot reads the instance bot;
 -- bridge takes the bot token from the server's hosted bridge and the client id and secret from the
 -- migration's own credentials; own reads the migration's own credentials. Raises
--- MIGRATION_CREDENTIALS_MISSING when any part is missing.
+-- MIGRATION_CREDENTIALS_MISSING when any part is missing, or when the instance bot is turned off.
 CREATE OR REPLACE FUNCTION public.discord_migration_credentials(p_server_id uuid)
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -491,7 +491,8 @@ BEGIN
           FROM public.discord_bridge_instance_bot ib
           JOIN vault.decrypted_secrets c ON c.id = ib.client_secret_secret
           JOIN vault.decrypted_secrets t ON t.id = ib.bot_token_secret
-         WHERE ib.id AND ib.application_id IS NOT NULL;
+         WHERE ib.id AND ib.application_id IS NOT NULL
+           AND public.discord_bridge_instance_bot_enabled();
     ELSIF v_source = 'bridge' THEN
         SELECT jsonb_build_object('client_id', s.client_id,
                                   'client_secret', c.decrypted_secret,

@@ -8,7 +8,7 @@
 --   s3                  source 'instance_bot'
 BEGIN;
 SET LOCAL search_path = tests, public;
-SELECT plan(51);
+SELECT plan(52);
 
 CREATE TEMP TABLE out (k text PRIMARY KEY, v jsonb) ON COMMIT DROP;
 GRANT ALL ON out TO PUBLIC;
@@ -187,6 +187,10 @@ INSERT INTO public.discord_bridge_instance_bot (id, application_id, bot_token_se
 VALUES (true, '300000000000000277', :'ib_tok', :'ib_cs')
 ON CONFLICT (id) DO UPDATE SET application_id = EXCLUDED.application_id,
   bot_token_secret = EXCLUDED.bot_token_secret, client_secret_secret = EXCLUDED.client_secret_secret;
+SET LOCAL role service_role;
+SELECT throws_ok($q$SELECT public.discord_migration_credentials('f2740000-0000-0000-0000-0000000000a3')$q$,
+  'P0001', 'MIGRATION_CREDENTIALS_MISSING', 'the instance bot source raises while the instance bot is configured but disabled');
+RESET role;
 UPDATE public.instance_config SET config_value = 'true'::jsonb WHERE config_key = 'discord_bridge_instance_bot_enabled';
 SET LOCAL role service_role;
 INSERT INTO out VALUES ('cred3', public.discord_migration_credentials('f2740000-0000-0000-0000-0000000000a3'));
