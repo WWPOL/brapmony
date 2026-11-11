@@ -12,10 +12,10 @@ so this is a setting, not a replacement.
 
 - Two sidebar modes:
   - `all`: today's behaviour. Every active thread of the channel except ones the account left.
-  - `joined`: only threads the account is a member of. A thread you open without joining is not
-    added to the sidebar (decided by the user); joining, posting or being mentioned adds it. The
-    rest stay reachable from the channel's Threads button (`AllThreadsModal.vue`), which is
-    unchanged.
+  - `joined`: only threads the account is a member of, plus the thread currently open, as on
+    Discord (decided by the user): a thread opened without joining shows while it's open and drops
+    off when you go elsewhere; joining, posting or being mentioned keeps it. The rest stay
+    reachable from the channel's Threads button (`AllThreadsModal.vue`), which is unchanged.
 - The instance admin sets the default. Each server can follow the instance or choose a mode.
 - An @mention of a specific member in a thread reply adds that member to the thread, in **both**
   modes (decided by the user), like Discord. It also brings back someone who had left the thread
@@ -126,8 +126,8 @@ at `20261112400001` / 279. Re-check before writing.
   the server setting, the instance default via `instance_config` + `set_instance_config`, and the
   member-readable effective mode.
 - The effective mode per server is loaded when the server's channel list loads and cached per
-  server id (store or composable; builder's choice). Default `all` until loaded, so the sidebar
-  never flashes empty. A change by an admin reaches other members' sidebars the next time their
+  server id (store or composable; builder's choice), seeded from the device's remembered mode
+  (see "Decided after review"), else `all`, so the sidebar never flashes empty. A change by an admin reaches other members' sidebars the next time their
   client loads that server's channels; no live subscription (my call). The admin who changed it
   sees it immediately.
 - Unread and mention indicators are unchanged: thread entries in the sidebar have none of their
@@ -135,8 +135,7 @@ at `20261112400001` / 279. Re-check before writing.
   indicator.
 - `ChannelSidebar.vue` `getChannelActiveThreads(channelId)`:
   - `all`: unchanged, `activeChannelThreads(channelId).filter(t => !t.left)`.
-  - `joined`: `activeChannelThreads(channelId).filter(t => t.is_member)`; the open thread gets no
-    exception.
+  - `joined`: `activeChannelThreads(channelId).filter(t => t.is_member || t.id === selectedThreadId)`.
 - A member added by mention should see the thread appear without reloading. My call: the mention
   notification payload gets an additive `thread: { id }` for thread replies (newcomer alerts
   already use this shape), and when the client receives a mention notification carrying it, it
@@ -160,8 +159,10 @@ at `20261112400001` / 279. Re-check before writing.
   the sender). If they gain access later, the thread is not added to their sidebar
   retroactively; they find it in the Threads list.
 - Someone who blocked the author is never pulled into a thread by that author's mention.
-- If the mode lookup fails, the sidebar uses `all` for that session (today's behaviour), never an
-  empty list.
+- The device remembers each server's last known mode (localStorage, keyed by server id). The
+  client still looks the mode up on every server load and updates what it remembers; while the
+  lookup is pending, or if it fails, the remembered mode is used. Only a device that has never
+  loaded the server falls back to `all` (decided by the user).
 - Switching a server back to "Instance default" clears its choice; its sidebar follows the
   instance from the next load (immediately for the admin who changed it). Memberships are
   untouched.
