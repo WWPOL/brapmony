@@ -5781,9 +5781,11 @@
       "startAgain": "Start again",
       "federated": "Create an account on this instance to migrate. Accounts from other instances can’t be linked here.",
       "signOut": "Sign out",
+      "accountCreatedSignIn": "Your account was created. Sign in to finish joining.",
+      "signIn": "Sign in",
       "errors": {
-        "closed": "This migration is closed.",
-        "migration_closed": "This migration is closed.",
+        "closed": "This migration is closed; ask the server's admins for an invite.",
+        "migration_closed": "This migration is closed; ask the server's admins for an invite.",
         "not_member": "You aren't a member of the Discord server.",
         "harmony_banned": "You are banned from this server on Harmony.",
         "kicked_on_harmony": "You were removed from this server on Harmony. A moderator has to allow you back first.",

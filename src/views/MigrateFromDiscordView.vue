@@ -71,6 +71,13 @@
           </button>
         </section>
 
+        <section v-else-if="state === 'login-failed'" class="mg-section" data-testid="migrate-login-failed" role="alert">
+          <p>{{ t('discordMigration.migrate.accountCreatedSignIn') }}</p>
+          <RouterLink class="mg-btn mg-btn-primary" data-testid="migrate-login-link" :to="loginTarget">
+            {{ t('discordMigration.migrate.signIn') }}
+          </RouterLink>
+        </section>
+
         <!-- New account -->
         <section v-else-if="state === 'confirm-email'" class="mg-section" data-testid="migrate-confirm-email" role="status">
           <p>{{ t('discordMigration.migrate.confirmEmail') }}</p>
@@ -143,7 +150,7 @@ import { useProfileStore } from '@/stores/useProfile'
 import { useServerChannelStore } from '@/stores/useServerChannel'
 import { normalizeUsernameInput } from '@/utils/usernameRules'
 
-type ViewState = 'loading' | 'landing' | 'error' | 'claiming' | 'done' | 'form' | 'confirm-email' | 'federated'
+type ViewState = 'loading' | 'landing' | 'error' | 'claiming' | 'done' | 'form' | 'confirm-email' | 'federated' | 'login-failed'
 
 const KNOWN_ERRORS = new Set([
   'closed', 'migration_closed', 'not_member', 'harmony_banned', 'kicked_on_harmony', 'discord_banned_here',
@@ -204,6 +211,9 @@ function restart() {
 async function signOutHere() {
   await authStore.logout()
   await router.replace(route.fullPath)
+  // Start over as a signed-out visitor: federated, result and claiming states do not carry over.
+  state.value = 'loading'
+  await init()
 }
 
 function openServer() {
@@ -266,7 +276,13 @@ async function submitAccount() {
       state.value = 'confirm-email'
       return
     }
-    await authStore.login(email.value.trim(), password.value)
+    try {
+      await authStore.login(email.value.trim(), password.value)
+    } catch {
+      // The account exists and its ticket is bound; only the sign-in failed.
+      state.value = 'login-failed'
+      return
+    }
     await router.replace({ path: '/new-profile', query: { username: name } })
   } catch (err) {
     formError.value = err instanceof DiscordMigrationError ? err.code : 'unknown'
@@ -275,7 +291,11 @@ async function submitAccount() {
   }
 }
 
-onMounted(async () => {
+async function init() {
+  errorCode.value = ''
+  formError.value = ''
+  rolesGranted.value = []
+  claimedServerId.value = null
   if (errorParam) {
     server.value = await preview(token).catch(() => null)
     showError(errorParam)
@@ -300,7 +320,9 @@ onMounted(async () => {
     return
   }
   state.value = ticket ? 'form' : 'landing'
-})
+}
+
+onMounted(init)
 </script>
 
 <style scoped>

@@ -5785,9 +5785,11 @@
       "startAgain": "다시 시작",
       "federated": "이전하려면 이 인스턴스에 계정을 만드세요. 다른 인스턴스의 계정은 여기에 연결할 수 없습니다.",
       "signOut": "로그아웃",
+      "accountCreatedSignIn": "계정이 만들어졌습니다. 로그인하여 참가를 마무리하세요.",
+      "signIn": "로그인",
       "errors": {
-        "closed": "이 마이그레이션은 종료되었습니다.",
-        "migration_closed": "이 마이그레이션은 종료되었습니다.",
+        "closed": "이 마이그레이션은 종료되었습니다. 서버 관리자에게 초대를 요청하세요.",
+        "migration_closed": "이 마이그레이션은 종료되었습니다. 서버 관리자에게 초대를 요청하세요.",
         "not_member": "이 Discord 서버의 멤버가 아닙니다.",
         "harmony_banned": "Harmony에서 이 서버에서 차단되었습니다.",
         "kicked_on_harmony": "Harmony에서 이 서버에서 추방되었습니다. 먼저 관리자가 다시 허용해야 합니다.",

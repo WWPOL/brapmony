@@ -5785,9 +5785,11 @@
       "startAgain": "Empezar de nuevo",
       "federated": "Crea una cuenta en esta instancia para migrar. Las cuentas de otras instancias no se pueden vincular aquí.",
       "signOut": "Cerrar sesión",
+      "accountCreatedSignIn": "Tu cuenta se creó. Inicia sesión para terminar de unirte.",
+      "signIn": "Iniciar sesión",
       "errors": {
-        "closed": "Esta migración está cerrada.",
-        "migration_closed": "Esta migración está cerrada.",
+        "closed": "Esta migración está cerrada; pide una invitación a los administradores del servidor.",
+        "migration_closed": "Esta migración está cerrada; pide una invitación a los administradores del servidor.",
         "not_member": "No eres miembro del servidor de Discord.",
         "harmony_banned": "Estás vetado de este servidor en Harmony.",
         "kicked_on_harmony": "Te expulsaron de este servidor en Harmony. Un moderador debe permitirte volver primero.",

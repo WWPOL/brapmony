@@ -39,9 +39,17 @@ vi.mock('vue-router', () => ({
   useRouter: () => h.router,
   RouterLink: { props: ['to'], template: '<a :href="typeof to === \'string\' ? to : \'\'"><slot /></a>' },
 }))
-vi.mock('@/stores/auth', () => ({ useAuthStore: () => h.auth }))
+vi.mock('@/stores/auth', async () => {
+  const { reactive } = await import('vue')
+  h.auth = reactive(h.auth)
+  return { useAuthStore: () => h.auth }
+})
 vi.mock('@/stores/useServerChannel', () => ({ useServerChannelStore: () => ({ setCurrentServer: vi.fn() }) }))
-vi.mock('@/stores/useProfile', () => ({ useProfileStore: () => h.profile }))
+vi.mock('@/stores/useProfile', async () => {
+  const { reactive } = await import('vue')
+  h.profile = reactive(h.profile)
+  return { useProfileStore: () => h.profile }
+})
 vi.mock('@/services/discordMigrationService', () => ({
   ...h.svc,
   DiscordMigrationError: h.DiscordMigrationError,
@@ -147,6 +155,58 @@ describe('MigrateFromDiscordView', () => {
   it('prefills the username from the Discord username in the address', async () => {
     const wrapper = await open({ ticket: 'tkt', username: 'dave_d' })
     expect((wrapper.get('[data-testid="migrate-username"]').element as HTMLInputElement).value).toBe('dave_d')
+  })
+
+  it('closed reads as the spec copy (locale check)', async () => {
+    const en = (await import('@/locales/en.json')).default.discordMigration.migrate.errors
+    expect(en.closed).toBe("This migration is closed; ask the server's admins for an invite.")
+    expect(en.migration_closed).toBe(en.closed)
+  })
+
+  it('Not you? Sign out resets a federated session to the signed-out landing', async () => {
+    h.auth.isLoggedIn = true
+    h.profile.profile = { username: 'bob', is_local: false }
+    h.auth.logout.mockImplementation(async () => {
+      h.auth.isLoggedIn = false
+      h.profile.profile = null
+    })
+    const wrapper = await open()
+    expect(wrapper.find('[data-testid="migrate-federated"]').exists()).toBe(true)
+    await wrapper.get('[data-testid="migrate-federated"] button').trigger('click')
+    await flushPromises()
+    expect(h.auth.logout).toHaveBeenCalled()
+    expect(wrapper.find('[data-testid="migrate-federated"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="migrate-have-account"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="migrate-new-account"]').exists()).toBe(true)
+  })
+
+  it('Not you? Sign out on the signed-in landing returns to the two signed-out buttons', async () => {
+    h.auth.isLoggedIn = true
+    h.profile.profile = { username: 'alice', is_local: true }
+    h.auth.logout.mockImplementation(async () => {
+      h.auth.isLoggedIn = false
+      h.profile.profile = null
+    })
+    const wrapper = await open()
+    await wrapper.get('.mg-link').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('[data-testid="migrate-signin-discord"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="migrate-have-account"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="migrate-new-account"]').exists()).toBe(true)
+  })
+
+  it('a failed sign-in after the account was created says so and links to sign in', async () => {
+    h.svc.createAccount.mockResolvedValue({ needsConfirmation: false })
+    h.auth.login.mockRejectedValue(new Error('boom'))
+    const wrapper = await open({ ticket: 'tkt' })
+    await wrapper.get('[data-testid="migrate-username"]').setValue('newbie')
+    await wrapper.get('[data-testid="migrate-email"]').setValue('n@example.com')
+    await wrapper.get('[data-testid="migrate-password"]').setValue('correct horse battery')
+    await wrapper.get('[data-testid="migrate-form"]').trigger('submit')
+    await flushPromises()
+    expect(wrapper.get('[data-testid="migrate-login-failed"]').text()).toContain('accountCreatedSignIn')
+    expect(wrapper.get('[data-testid="migrate-login-link"]').attributes('href')).toBe('/login?redirect=%2Fmigrate%2Ftok')
+    expect(h.router.replace).not.toHaveBeenCalledWith(expect.objectContaining({ path: '/new-profile' }))
   })
 
   it('a federated session is asked to create an account here', async () => {

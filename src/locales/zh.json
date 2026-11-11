@@ -5785,9 +5785,11 @@
       "startAgain": "重新开始",
       "federated": "请在此实例上创建账号后再迁移。其他实例的账号无法在此关联。",
       "signOut": "退出登录",
+      "accountCreatedSignIn": "账号已创建。请登录以完成加入。",
+      "signIn": "登录",
       "errors": {
-        "closed": "此迁移已关闭。",
-        "migration_closed": "此迁移已关闭。",
+        "closed": "此迁移已关闭，请向服务器管理员索取邀请。",
+        "migration_closed": "此迁移已关闭，请向服务器管理员索取邀请。",
         "not_member": "你不是该 Discord 服务器的成员。",
         "harmony_banned": "你在 Harmony 上已被此服务器封禁。",
         "kicked_on_harmony": "你在 Harmony 上已被移出此服务器，需要管理员先允许你回来。",

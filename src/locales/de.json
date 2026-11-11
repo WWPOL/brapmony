@@ -5785,9 +5785,11 @@
       "startAgain": "Neu starten",
       "federated": "Erstelle ein Konto auf dieser Instanz, um umzuziehen. Konten anderer Instanzen können hier nicht verknüpft werden.",
       "signOut": "Abmelden",
+      "accountCreatedSignIn": "Dein Konto wurde erstellt. Melde dich an, um den Beitritt abzuschließen.",
+      "signIn": "Anmelden",
       "errors": {
-        "closed": "Diese Migration ist geschlossen.",
-        "migration_closed": "Diese Migration ist geschlossen.",
+        "closed": "Diese Migration ist geschlossen; bitte die Admins des Servers um eine Einladung.",
+        "migration_closed": "Diese Migration ist geschlossen; bitte die Admins des Servers um eine Einladung.",
         "not_member": "Du bist kein Mitglied des Discord-Servers.",
         "harmony_banned": "Du bist auf Harmony von diesem Server gebannt.",
         "kicked_on_harmony": "Du wurdest auf Harmony von diesem Server entfernt. Ein Moderator muss dich erst wieder zulassen.",

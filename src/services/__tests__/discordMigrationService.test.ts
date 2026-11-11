@@ -44,7 +44,7 @@ describe('completePendingClaims', () => {
   })
 
   it('applies the toggles saved for the ticket after its claim', async () => {
-    localStorage.setItem('discord-migration-sync:a', JSON.stringify(['avatar']))
+    localStorage.setItem('discord-migration-sync:a', JSON.stringify({ fields: ['avatar'], savedAt: Date.now() }))
     vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => ({ ok: true }) })))
     rpc.mockImplementation(async (name: string) => {
       if (name === 'discord_migration_my_pending_claims') return { data: [{ ticket: 'a', server_id: 's1' }], error: null }
@@ -54,6 +54,34 @@ describe('completePendingClaims', () => {
     await completePendingClaims()
     expect(rpc).toHaveBeenCalledWith('discord_migration_set_my_sync', { p_server_id: 's1', p_fields: ['avatar'] })
     expect(localStorage.getItem('discord-migration-sync:a')).toBeNull()
+  })
+})
+
+describe('saved sync choices', () => {
+  const pending = (ticket: string) => rpc.mockImplementation(async (name: string) => {
+    if (name === 'discord_migration_my_pending_claims') return { data: [{ ticket, server_id: 's1' }], error: null }
+    if (name === 'discord_migration_claim') return { data: null, error: { message: 'HARMONY_BANNED' } }
+    return { data: null, error: null }
+  })
+
+  it('is removed after any final claim error', async () => {
+    localStorage.setItem('discord-migration-sync:a', JSON.stringify({ fields: ['avatar'], savedAt: Date.now() }))
+    pending('a')
+    await completePendingClaims()
+    expect(localStorage.getItem('discord-migration-sync:a')).toBeNull()
+  })
+
+  it('older than seven days is ignored and deleted', async () => {
+    const old = Date.now() - 8 * 24 * 60 * 60 * 1000
+    localStorage.setItem('discord-migration-sync:b', JSON.stringify({ fields: ['avatar'], savedAt: old }))
+    rpc.mockImplementation(async (name: string) => {
+      if (name === 'discord_migration_my_pending_claims') return { data: [{ ticket: 'b', server_id: 's1' }], error: null }
+      if (name === 'discord_migration_claim') return { data: { server_id: 's1', roles_granted: [] }, error: null }
+      return { data: null, error: null }
+    })
+    await completePendingClaims()
+    expect(rpc.mock.calls.some(c => c[0] === 'discord_migration_set_my_sync')).toBe(false)
+    expect(localStorage.getItem('discord-migration-sync:b')).toBeNull()
   })
 })
 

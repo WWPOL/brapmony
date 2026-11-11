@@ -5785,9 +5785,11 @@
       "startAgain": "Recommencer",
       "federated": "Créez un compte sur cette instance pour migrer. Les comptes d’autres instances ne peuvent pas être liés ici.",
       "signOut": "Se déconnecter",
+      "accountCreatedSignIn": "Votre compte a été créé. Connectez-vous pour finir de rejoindre.",
+      "signIn": "Se connecter",
       "errors": {
-        "closed": "Cette migration est fermée.",
-        "migration_closed": "Cette migration est fermée.",
+        "closed": "Cette migration est fermée ; demandez une invitation aux administrateurs du serveur.",
+        "migration_closed": "Cette migration est fermée ; demandez une invitation aux administrateurs du serveur.",
         "not_member": "Vous n’êtes pas membre du serveur Discord.",
         "harmony_banned": "Vous êtes banni de ce serveur sur Harmony.",
         "kicked_on_harmony": "Vous avez été expulsé de ce serveur sur Harmony. Un modérateur doit d’abord vous autoriser à revenir.",

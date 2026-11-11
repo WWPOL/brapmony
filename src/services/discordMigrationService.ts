@@ -104,10 +104,12 @@ export async function claim(ticket: string): Promise<ClaimResult> {
 // -------------------------------------------------------------------------------------------
 
 const SYNC_CHOICE_PREFIX = 'discord-migration-sync:'
+/** A ticket lives seven days; a choice saved for it is dropped after the same time. */
+const SYNC_CHOICE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000
 
 export function saveSyncChoice(ticket: string, fields: SyncField[]): void {
   try {
-    localStorage.setItem(SYNC_CHOICE_PREFIX + ticket, JSON.stringify(fields))
+    localStorage.setItem(SYNC_CHOICE_PREFIX + ticket, JSON.stringify({ fields, savedAt: Date.now() }))
   } catch {
     /* storage unavailable: the member can set the toggles in Settings */
   }
@@ -118,8 +120,11 @@ function takeSyncChoice(ticket: string): SyncField[] | null {
     const raw = localStorage.getItem(SYNC_CHOICE_PREFIX + ticket)
     if (raw === null) return null
     localStorage.removeItem(SYNC_CHOICE_PREFIX + ticket)
-    const parsed = JSON.parse(raw)
-    return Array.isArray(parsed) ? parsed.filter((f): f is SyncField => (SYNC_FIELDS as readonly string[]).includes(f)) : null
+    const parsed = JSON.parse(raw) as { fields?: unknown; savedAt?: unknown } | null
+    if (!parsed || typeof parsed.savedAt !== 'number' || Date.now() - parsed.savedAt > SYNC_CHOICE_MAX_AGE_MS) return null
+    return Array.isArray(parsed.fields)
+      ? parsed.fields.filter((f): f is SyncField => (SYNC_FIELDS as readonly string[]).includes(f))
+      : null
   } catch {
     return null
   }
@@ -143,10 +148,9 @@ export async function completePendingClaims(): Promise<ClaimResult[]> {
         await setMySync(result.serverId, chosen).catch(() => {})
       }
     } catch (err) {
-      if (err instanceof DiscordMigrationError && err.code === 'ticket_expired') {
-        takeSyncChoice(pending.ticket)
-      }
-      // Anything else (a ban, a closed migration) is final for this ticket or retried next time.
+      // A refusal of the claim (expired, banned, closed, ...) is final for this ticket: its saved
+      // choice goes too. An unrecognised failure may be transient and keeps the ticket's choice.
+      if (err instanceof DiscordMigrationError && err.code !== 'unknown') takeSyncChoice(pending.ticket)
     }
   }
   return results
