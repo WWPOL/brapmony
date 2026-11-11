@@ -382,11 +382,104 @@ describe('relayed authors and server-only content', () => {
     expect(inserted().metadata).toEqual({ bot: true, created_via: 'bot_api' })
   })
 
+  it('drops history_import from bot-supplied metadata, on send and on a metadata merge', async () => {
+    seed()
+    const sent = await supertest(app()).post(`/api/v1/channels/${PAIRED}/messages`)
+      .send({ content: 'hi', metadata: { ...AUTHOR, discord_message_id: '9', history_import: true, discord_reply_to: '5' } })
+    expect(sent.status).toBe(201)
+    expect(inserted().metadata).not.toHaveProperty('history_import')
+    expect(inserted().metadata).not.toHaveProperty('discord_reply_to')
+
+    const own = '00000000-0000-0000-0000-0000000000f5'
+    db.rows('messages').push({ id: own, channel_id: PAIRED, user_id: null, bot_id: BOT_ID, content: [], metadata: {} })
+    const merged = await supertest(app()).patch(`/api/v1/messages/${own}/metadata`)
+      .send({ metadata: { discord_message_id: '10', history_import: true, discord_reply_to: '5', created_via: 'history_import' } })
+    expect(merged.status).toBe(200)
+    expect(metadataOf(own)).toEqual({ discord_message_id: '10' })
+  })
+
   it('refuses a message left empty', async () => {
     seed()
     const res = await supertest(app()).post(`/api/v1/channels/${PAIRED}/messages`)
       .send({ content: [{ type: 'system', event_type: 'leave', user: { id: 'u' } }] })
     expect(res.status).toBe(400)
     expect(db.writesTo('messages', 'insert')).toHaveLength(0)
+  })
+})
+
+describe('sendMessage and a Discord message id already bridged', () => {
+  const EXISTING = '00000000-0000-0000-0000-0000000000f7'
+  const DUPLICATE_ERROR = {
+    code: '23505',
+    message: 'duplicate key value violates unique constraint "messages_channel_discord_message_id_unique"',
+  }
+
+  // The insert of a message is refused by the unique index; reads go to the fake table.
+  function refuseInsert(error: { code: string; message: string }) {
+    mocks.from.mockImplementation((table: string) => {
+      const query: any = db.from(table)
+      if (table !== 'messages') return query
+      const insert = () => ({ select: async () => ({ data: null, error }) })
+      return new Proxy(query, { get: (target, prop) => (prop === 'insert' ? insert : target[prop].bind(target)) })
+    })
+  }
+
+  it('returns the existing message when the Discord message id is already bridged', async () => {
+    seed()
+    db.rows('messages').push({
+      id: EXISTING, channel_id: PAIRED, user_id: null, bot_id: BOT_ID,
+      content: [{ type: 'text', text: 'first' }], metadata: { discord_message_id: '77', bot: true }, is_deleted: false,
+    })
+    refuseInsert(DUPLICATE_ERROR)
+    const res = await supertest(app()).post(`/api/v1/channels/${PAIRED}/messages`)
+      .send({ content: [{ type: 'text', text: 'again' }], metadata: { discord_message_id: '77' } })
+    expect(res.status).toBe(200)
+    expect(res.body.id).toBe(EXISTING)
+    expect(res.body.content).toBe('first')
+    expect(db.rows('bot_audit_log')).toHaveLength(0)
+  })
+
+  it('still fails on any other unique violation', async () => {
+    seed()
+    refuseInsert({ code: '23505', message: 'duplicate key value violates unique constraint "messages_pkey"' })
+    const res = await supertest(app()).post(`/api/v1/channels/${PAIRED}/messages`)
+      .send({ content: [{ type: 'text', text: 'again' }], metadata: { discord_message_id: '77' } })
+    expect(res.status).toBe(500)
+  })
+})
+
+describe('PATCH /messages/:id/metadata and a Discord message id already bridged', () => {
+  const MINE = '00000000-0000-0000-0000-0000000000f8'
+  const UPDATE_DUPLICATE = {
+    code: '23505',
+    message: 'duplicate key value violates unique constraint "messages_channel_discord_message_id_unique"',
+  }
+
+  function refuseUpdate(error: { code: string; message: string }) {
+    mocks.from.mockImplementation((table: string) => {
+      const query: any = db.from(table)
+      if (table !== 'messages') return query
+      const update = () => ({ eq: async () => ({ error }) })
+      return new Proxy(query, { get: (target, prop) => (prop === 'update' ? update : target[prop].bind(target)) })
+    })
+  }
+
+  it('answers 200 and leaves the message unchanged when an import already holds the id', async () => {
+    seed()
+    db.rows('messages').push({ id: MINE, channel_id: PAIRED, user_id: null, bot_id: BOT_ID, content: [], metadata: { bot: true } })
+    refuseUpdate(UPDATE_DUPLICATE)
+    const res = await supertest(app()).patch(`/api/v1/messages/${MINE}/metadata`)
+      .send({ metadata: { discord_message_id: '77' } })
+    expect(res.status).toBe(200)
+    expect(res.body).toEqual({ ok: true, metadata: { bot: true } })
+  })
+
+  it('still fails on any other unique violation', async () => {
+    seed()
+    db.rows('messages').push({ id: MINE, channel_id: PAIRED, user_id: null, bot_id: BOT_ID, content: [], metadata: {} })
+    refuseUpdate({ code: '23505', message: 'duplicate key value violates unique constraint "messages_pkey"' })
+    const res = await supertest(app()).patch(`/api/v1/messages/${MINE}/metadata`)
+      .send({ metadata: { discord_message_id: '77' } })
+    expect(res.status).toBe(500)
   })
 })
