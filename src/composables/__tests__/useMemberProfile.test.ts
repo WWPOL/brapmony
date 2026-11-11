@@ -202,4 +202,15 @@ describe('useMemberProfile', () => {
     expect(getMemberDisplayName(U, S).value).toBe('Account Name')
     ;(userDataService as any).contexts.delete(S)
   })
+
+  it('account pronouns arrive through profile:updated (broadcast_profile_change)', async () => {
+    const { getUserPronouns } = useUserData()
+    ;(userDataService as any).contexts.set(S, { id: S, type: 'server', userIds: new Set([U]), lastSync: new Date() })
+    await (userDataService as any).setupServerPresence(S, [U])
+    const pronouns = getUserPronouns(U)
+    // The shape public.broadcast_profile_change() sends (20261111950006), as realtime delivers it.
+    h.handlers.presence_event({ payload: { type: 'profile:updated', user_id: U, pronouns: 'they/them' } })
+    expect(pronouns.value).toBe('they/them')
+    ;(userDataService as any).contexts.delete(S)
+  })
 })
