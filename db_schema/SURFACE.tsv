@@ -170,7 +170,7 @@ broadcast_notification_event		trigger	definer	public, extensions, pg_temp	anon+a
 broadcast_permission_override_change		trigger	definer	public, extensions, pg_temp	anon+authenticated+service_role	trigger
 broadcast_post_event		trigger	definer	public, pg_temp	anon+authenticated+service_role	client
 broadcast_post_interaction_event		trigger	definer	public, pg_temp	anon+authenticated+service_role	trigger
-broadcast_profile_change		trigger	definer	public, pg_temp	anon+authenticated+service_role	trigger
+broadcast_profile_change		trigger	definer	public, extensions, pg_temp	anon+authenticated+service_role	trigger
 broadcast_role_change		trigger	definer	public, extensions, pg_temp	anon+authenticated+service_role	trigger
 broadcast_server_change_event		trigger	definer	public, pg_temp	anon+authenticated+service_role	trigger
 broadcast_server_settings_change		trigger	definer	public, extensions, pg_temp	anon+authenticated+service_role	trigger

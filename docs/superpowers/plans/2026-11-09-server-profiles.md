@@ -13,12 +13,12 @@
 ## Global Constraints
 
 - Migrations:
-  - `db_schema/migrations/20261110950001_nickname_permissions.sql`;
-  - `db_schema/migrations/20261110950002_server_profiles.sql`.
+  - `db_schema/migrations/20261111950001_nickname_permissions.sql`;
+  - `db_schema/migrations/20261111950002_server_profiles.sql`.
   - House style: idempotent ("converges by state"), `BEGIN; SET LOCAL lock_timeout …; COMMIT;`, `NOTIFY pgrst, 'reload schema'`, and `SET search_path = public, extensions, pg_temp` on every SECURITY DEFINER.
 - pgTAP files:
-  - `db_schema/tests/268_nickname_permissions.sql`;
-  - `db_schema/tests/269_server_profiles.sql`.
+  - `db_schema/tests/269_nickname_permissions.sql`;
+  - `db_schema/tests/270_server_profiles.sql`.
   - The parked Discord-migration plan must renumber its tests when it is revised.
 - After adding RPCs, regenerate `db_schema/SURFACE.tsv` (`scripts/generate-surface.sh`) and `REACHABILITY.tsv` (`scripts/generate-reachability.sh`). Then run `scripts/check-rpc-coverage.sh` and `scripts/check-plpgsql.sh`.
 - Permission bits: `CHANGE_NICKNAME = 32`, `MANAGE_NICKNAMES = 33`, appended after `USE_EXTERNAL_SOUNDS` (31).
@@ -47,8 +47,8 @@
 ### Task 1: Nickname permission bits
 
 **Files:**
-- Create: `db_schema/migrations/20261110950001_nickname_permissions.sql`
-- Create: `db_schema/tests/268_nickname_permissions.sql`
+- Create: `db_schema/migrations/20261111950001_nickname_permissions.sql`
+- Create: `db_schema/tests/269_nickname_permissions.sql`
 - Modify:
   - `src/services/RoleService.ts` (the `Permission` enum, the group list near line 98, the bit map near line 149 and the descriptions near line 215);
   - `db_schema/PERMISSIONS.json`;
@@ -85,8 +85,8 @@
 ### Task 2: Pronouns and server profile columns and RPCs
 
 **Files:**
-- Create: `db_schema/migrations/20261110950002_server_profiles.sql`
-- Create: `db_schema/tests/269_server_profiles.sql`
+- Create: `db_schema/migrations/20261111950002_server_profiles.sql`
+- Create: `db_schema/tests/270_server_profiles.sql`
 
 **Interfaces:**
 - Produces (columns):
