@@ -1,6 +1,6 @@
 -- Final review: server-presence:<server> (which carries member:update bio/pronouns/avatar) is
 -- subscribable by accepted members only; and moderate_server_profile's reset audit row is written
--- only when something was cleared (20261109200004_server_profile_review_fixes.sql).
+-- only when something was cleared (20261110950004_server_profile_review_fixes.sql).
 --
 --   owner mallory (33..) owns the server; alice (11..) accepted; pend (f249..c1) pending;
 --   bob (22..) not a member of the server.

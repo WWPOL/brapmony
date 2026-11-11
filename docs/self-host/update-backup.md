@@ -30,7 +30,9 @@ In order, it:
    checkout: `X.Y.Z` on tag `vX.Y.Z`, otherwise `edge`. On an instance whose
    `.env` has no `ENABLE_ANALYTICS`, [log collection](/self-host/#log-collection)
    turns off: `analytics` and `vector` are removed and the logs they stored
-   deleted, with one line naming the space freed.
+   deleted, with one line naming the space freed. Files the new code brings
+   are made readable to the containers, which a umask of 077 or 027 keeps
+   them from ([A restrictive umask](/self-host/troubleshooting#umask)).
 3. **Downloads the new images**, or builds Harmony's with `HARMONY_BUILD=1`.
    The running instance is untouched so far, log collection aside.
 4. **Backs up** the database, the database roles and the configuration into
@@ -40,11 +42,13 @@ In order, it:
    running.
 6. **Recreates the containers** whose image or configuration changed, and
    restarts Caddy when the Caddyfile changed.
+7. **Deletes old update backups**, keeping the newest 5 of each kind (see
+   [Delete old backups](#delete-old-backups)).
 
 It ends with a table of the containers and `Update complete (VERSION).`;
 then run `harmony doctor`. Nothing in an update deletes volumes, data
-directories or backups. It deletes the logs of log collection only when it
-turns log collection off (step 2).
+directories or any other backup. It deletes the logs of log collection only
+when it turns log collection off (step 2).
 
 ### The apps and an older instance
 
@@ -87,6 +91,23 @@ differs from `master` needs `HARMONY_BUILD=1`.
 `HARMONY_VERSION=TAG harmony update` runs another image tag, for example
 `sha-1a2b3c4`, until the next update or configuration run derives it from
 the checkout again.
+
+### Forks
+
+A fork's image workflow builds on every pull request and push but publishes
+only when the fork sets the repository variable `PUBLISH_IMAGES=true`
+(Settings, Secrets and variables, Actions, Variables). It then publishes the
+same tags into the fork owner's namespace, `ghcr.io/<owner>` in lower case.
+GHCR creates new packages as private: make each public in the package's
+settings, or run `docker login ghcr.io` on the instance. To run them:
+
+```bash
+HARMONY_REGISTRY=ghcr.io/<owner> HARMONY_REMOTE=<fork remote> harmony update --version <branch or tag>
+```
+
+`HARMONY_REGISTRY` stays in `.env` until set again; `HARMONY_REGISTRY=ghcr.io/y4my4my4m`
+returns to the upstream images. `DISCORD_BRIDGE_REGISTRY` does the same for the
+bridge image, published by the bridge repository's own workflow.
 
 ### When an update stops
 
@@ -142,8 +163,9 @@ bash configure.sh --refresh-supabase
 docker compose up -d
 ```
 
-The refresh replaces the upstream compose and configuration files and adds
-new keys to `supabase/.env`. It never touches `supabase/volumes/db/data` or
+The refresh replaces the upstream compose and configuration files, makes
+them readable to the containers, and adds new keys to `supabase/.env`. It
+never touches `supabase/volumes/db/data` or
 `supabase/volumes/storage`, and refuses a commit whose Postgres major
 version differs from the existing database's: a major upgrade is a dump and
 restore.
@@ -196,10 +218,24 @@ Schedule the copy off the server too.
 
 ### Delete old backups
 
-Nothing deletes backups, and every update adds one. Delete old directories
-in `self-host/backups/` yourself, along with the `restore-TIME.log` files
-restores leave there. `harmony doctor` fails its `disk` check under 1 GB
-free.
+After an update succeeds, `harmony update` deletes its own older backups,
+keeping the newest 5 of each kind:
+
+| Kind | Name | Written by |
+|---|---|---|
+| Version change | `TIME-OLD-to-NEW` | An update that moved the code. A [rollback](#roll-back-an-update) restores this one |
+| Same version | `TIME-OLD-to-OLD` | An update with no new code, such as a re-run after a failure or a scheduled `harmony update` |
+
+An update that stops, or runs with `HARMONY_SKIP_BACKUP=1`, deletes nothing.
+
+To keep more, set `HARMONY_KEEP_UPDATE_BACKUPS=N` in `self-host/.env`, or in
+the command's environment for one run; `0` keeps them all. To keep one backup
+for good, add `-keep` to the end of its directory name.
+
+Nothing deletes what `harmony backup` and restores write, including backups
+with uploads, or the `restore-TIME.log` files restores leave. Delete those
+from `self-host/backups/` yourself. `harmony doctor` fails its `disk` check
+under 1 GB free.
 
 ## Restore a backup
 

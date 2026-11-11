@@ -611,7 +611,7 @@
       ],
       "backend": [
         "bot-gateway/src/gateway/EventDispatcher.ts",
-        "bot-gateway/src/api/BotRestAPI.ts"
+        "bot-gateway/src/api/messageContent.ts"
       ],
       "client": [
         "src/composables/useAutoSuggest.ts"
@@ -906,7 +906,7 @@
         "src/services/RoleService.ts"
       ],
       "pgtap": [
-        "db_schema/tests/246_nickname_permissions.sql"
+        "db_schema/tests/268_nickname_permissions.sql"
       ],
       "e2e": [
         "e2e/specs/server-profiles.spec.ts"
@@ -927,7 +927,7 @@
         "src/services/RoleService.ts"
       ],
       "pgtap": [
-        "db_schema/tests/246_nickname_permissions.sql"
+        "db_schema/tests/268_nickname_permissions.sql"
       ],
       "e2e": [
         "e2e/specs/server-profiles.spec.ts"

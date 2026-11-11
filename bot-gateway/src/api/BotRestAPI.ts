@@ -15,19 +15,29 @@ import {
   grantableRoleBits,
   isAdminRole,
   loadEveryoneLayer,
-  loadEveryoneLayers,
   loadInstall,
   overrideGrants,
   parseMask,
   rolePositionCap,
   u64,
 } from '../auth/botPermissions.js'
-import { applyBridgeAttachmentPolicy } from '../utils/mirrorExternalMedia.js'
-import { stripBotSuppliedPaths } from '../utils/messageMedia.js'
+import {
+  BRIDGE_AUTHOR_KEYS,
+  UUID_PATTERN,
+  botContentParts,
+  channelServerId as lookupChannelServerId,
+  checkServerPermission,
+  claimsBridgeAuthor,
+  formatContent,
+  prepareBotMessageContent,
+  resolveMentionParts,
+  visibleChannels,
+} from './messageContent.js'
 import { absoluteAvatarUrl, absoluteServerIconUrl } from '../utils/avatarUrl.js'
 import { isDiscordCdnUrl } from '../utils/emojiUrl.js'
 import { DISCORD_EMOJI_ID, EMOJI_NAME, storeDiscordEmojiImage } from '../utils/discordEmojiImport.js'
 import { TTLCache } from '../utils/TTLCache.js'
+import { MAX_COMMANDS, validateCommand, validateCommands } from '../commands/validate.js'
 
 const AUTOMOD_BLOCKED_BODY = {
   error: "Blocked by the server's AutoMod",
@@ -47,6 +57,99 @@ function moderationErrorResponse(error: { message?: string; details?: string; hi
 
 type ChannelAccess = { ok: true } | { ok: false; error: string }
 
+/** A refused message write, with its bot_interaction_record p_error. */
+type WriteFailure = 'bot_cannot_post' | 'thread_locked' | 'automod_blocked' | 'failed'
+
+type WriteResult =
+  | { ok: true; message: any; duplicate?: true }
+  | { ok: false; status: number; body: Record<string, unknown>; failure: WriteFailure }
+
+interface BotMessageInput {
+  content?: any
+  embeds?: any
+  reply_to?: any
+  metadata?: any
+  thread_id?: any
+}
+
+// enforce_message_length (baseline) raises check_violation with this text.
+const MESSAGE_TOO_LONG = /^Message text exceeds the instance limit of \d+ characters/
+
+/** An interaction as the reply routes need it; bot_interaction_ack answers the same fields. */
+interface InteractionContext {
+  id: string
+  channel_id: string
+  thread_id: string | null
+  user_id: string
+  command_name: string
+  ephemeral?: boolean | null
+}
+
+// Discord's InteractionCallbackType: CHANNEL_MESSAGE_WITH_SOURCE, DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE.
+const CALLBACK_REPLY = 4
+const CALLBACK_DEFER = 5
+// Discord's MessageFlags.EPHEMERAL.
+const EPHEMERAL = 64
+
+/** A reply's flags: 0 when absent; null for anything but 0 and EPHEMERAL. */
+export function replyFlags(value: unknown): 0 | typeof EPHEMERAL | null {
+  if (value === undefined || value === null || value === 0) return 0
+  return value === EPHEMERAL ? EPHEMERAL : null
+}
+
+const INTERACTION_ERRORS: Readonly<Record<string, [number, string]>> = {
+  INTERACTION_UNKNOWN: [404, 'Unknown interaction'],
+  INTERACTION_ACKNOWLEDGED: [400, 'Interaction already acknowledged'],
+  INTERACTION_EXPIRED: [400, 'Interaction expired'],
+  INTERACTION_NOT_ACKNOWLEDGED: [400, 'Interaction not acknowledged'],
+  INTERACTION_RESPONSE_IN_PROGRESS: [409, 'Response in progress'],
+  INTERACTION_FOLLOWUP_LIMIT: [400, 'Follow-up limit reached'],
+}
+
+const UNKNOWN_INTERACTION = { error: 'Unknown interaction' } as const
+const UNKNOWN_COMMAND = { error: 'Unknown command' } as const
+
+/** Code and detail of `RAISE EXCEPTION '<CODE>'` or `'<CODE>:<detail>'`. */
+function raisedCode(error: { message?: string }): { code: string; detail: string } {
+  const message = error.message ?? ''
+  const colon = message.indexOf(':')
+  if (colon < 0) return { code: message.trim(), detail: '' }
+  return { code: message.slice(0, colon).trim(), detail: message.slice(colon + 1).trim() }
+}
+
+/** HTTP answer to an error of an interaction RPC. */
+export function interactionErrorResponse(error: { message?: string }): { status: number; body: { error: string } } {
+  const { code, detail } = raisedCode(error)
+  const known = INTERACTION_ERRORS[code]
+  if (known) return { status: known[0], body: { error: known[1] } }
+  if (code === 'INTERACTION_REPLY_TOO_LONG') {
+    return { status: 400, body: { error: `Message text exceeds the instance limit of ${detail} characters` } }
+  }
+  return { status: 500, body: { error: error.message || 'Interaction update failed' } }
+}
+
+/** HTTP answer to an error of a command RPC; 22023 is the RPC's own shape check. */
+export function commandErrorResponse(error: { message?: string; code?: string }): { status: number; body: { error: string } } {
+  if (error.code === '22023') return { status: 400, body: { error: error.message || 'Invalid command' } }
+  const { code, detail } = raisedCode(error)
+  switch (code) {
+    case 'BOT_COMMAND_LIMIT':
+      return { status: 400, body: { error: `A bot has at most ${MAX_COMMANDS} commands` } }
+    case 'BOT_COMMAND_DUPLICATE':
+      return { status: 400, body: { error: `Duplicate command name: ${detail}` } }
+    case 'BOT_COMMAND_UNKNOWN_PERMISSION':
+      return { status: 400, body: { error: `Unknown permission name: ${detail}` } }
+  }
+  if (code.startsWith('BOT_COMMAND_')) {
+    return { status: 400, body: { error: `The command was refused: ${detail || code}` } }
+  }
+  return { status: 500, body: { error: error.message || 'Command update failed' } }
+}
+
+function isPlainObject(value: unknown): value is Record<string, any> {
+  return !!value && typeof value === 'object' && !Array.isArray(value)
+}
+
 interface ThreadRow {
   id: string
   channel_id: string
@@ -56,6 +159,8 @@ interface ThreadRow {
   locked: boolean | null
   created_at: string
 }
+
+export { botContentParts, claimsBridgeAuthor, embedPart, typedMassMentionParts } from './messageContent.js'
 
 /** A Discord snowflake: 1 to 20 digits. */
 const SNOWFLAKE_RE = /^[0-9]{1,20}$/
@@ -74,19 +179,17 @@ export interface BotRequest extends Request {
 // Message metadata keys written by federation, definer functions and this API; the
 // client UI treats them as server statements. A bot's metadata never sets them. embeds holds
 // link-preview payloads (update_message_embeds), suppress_embeds is set through
-// set_message_embeds_suppressed, webhook by execute_channel_webhook.
+// set_message_embeds_suppressed, webhook by execute_channel_webhook, history_import by the
+// history import function alone (it marks rows the dispatcher and realtime must stay quiet for),
+// discord_reply_to likewise (import_link_replies acts on it). interaction names the slash
+// command invocation a reply answers, and AutoMod judges the message as its invoker's.
 const SERVER_METADATA_KEYS = new Set([
   'type', 'federated', 'ap_id', 'from_domain', 'original_url', 'published', 'conversation',
   'in_reply_to_ap', 'pending_thread_ap_id', 'federated_at', 'federated_to', 'automod',
   'bot', 'created_via', 'embeds', 'suppress_embeds', 'webhook', 'remote_author', 'host_ap_id',
+  'interaction',
+  'history_import', 'discord_reply_to',
 ])
-
-// The displayed author of a relayed message (src/utils/messageAuthor.ts in the client). Kept
-// only from a bridge bot whose bridge relays the channel (bridgePairsChannel).
-const BRIDGE_AUTHOR_KEYS = new Set(['discord_user', 'bridge_source'])
-
-/** EmbedProvider in the client's src/types/chat.ts. */
-const EMBED_PROVIDERS = new Set(['harmony-post', 'harmony-invite', 'fediverse-post', 'youtube', 'spotify', 'generic'])
 
 // Metadata a bridge bot records on a message it did not write (bridge 2.2): the Discord
 // message ids of its copy, whether a webhook posted it, and the files uploaded with it.
@@ -111,42 +214,6 @@ export function botSuppliedMetadata(
   )
 }
 
-/** True when bot metadata names the relayed author, which only a relaying bridge may. */
-export function claimsBridgeAuthor(input: unknown): boolean {
-  return !!input && typeof input === 'object' && !Array.isArray(input)
-    && Object.keys(input).some((key) => BRIDGE_AUTHOR_KEYS.has(key))
-}
-
-/** An embed part as the client reads it (EmbedContent), or null. */
-export function embedPart(part: Record<string, unknown>): Record<string, unknown> | null {
-  const { url, provider, previewId, collapsed } = part
-  if (typeof url !== 'string' || url.length > 2048 || !/^https?:\/\/\S+$/i.test(url)) return null
-  if (typeof provider !== 'string' || !EMBED_PROVIDERS.has(provider)) return null
-  if (typeof previewId !== 'string' || !previewId || previewId.length > 2048) return null
-  return { type: 'embed', url, provider, previewId, ...(typeof collapsed === 'boolean' ? { collapsed } : {}) }
-}
-
-/**
- * Bot-supplied parts without system parts, which are server-generated join and leave
- * notices, and with embed parts reduced to their fields or dropped when malformed.
- */
-export function botContentParts(parts: unknown[]): any[] {
-  const out: any[] = []
-  for (const part of parts) {
-    if (part && typeof part === 'object' && !Array.isArray(part)) {
-      const type = (part as { type?: unknown }).type
-      if (type === 'system') continue
-      if (type === 'embed') {
-        const embed = embedPart(part as Record<string, unknown>)
-        if (embed) out.push(embed)
-        continue
-      }
-    }
-    out.push(part)
-  }
-  return out
-}
-
 /** The string fields of a bridged thread's Discord starter, or null (bot_create_thread p_discord_user). */
 export function threadStarter(input: unknown): Record<string, string> | null {
   if (!input || typeof input !== 'object' || Array.isArray(input)) return null
@@ -157,40 +224,6 @@ export function threadStarter(input: unknown): Record<string, string> | null {
     if (typeof user[key] === 'string' && user[key]) out[key] = user[key] as string
   }
   return out
-}
-
-const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-// role_mention roleId of @here (db_schema/migrations/20261011600001_here_mention.sql).
-const HERE_ROLE_ID = 'here'
-
-// src/utils/massMentions.ts TYPED_MASS_MENTION: the handle grammar's boundaries, no host.
-const TYPED_MASS_MENTION = /(?<![\p{L}\p{N}_@/])@(everyone|here)(?![\p{L}\p{N}_@-]|\.[\p{L}\p{N}_-])/u
-// Fenced code, inline code and URLs hold no mention (src/utils/unifiedContentProcessing opaqueRanges).
-const OPAQUE_TEXT = /```[\s\S]*?```|`[^`\n]+`|\bhttps?:\/\/\S+/g
-
-/**
- * Text content with each typed bare @everyone or @here outside code and URLs as its role_mention
- * part: `everyoneRoleId` (the server's default role) and roleId `here`. Discord pings the
- * lowercase words only; any other spelling, and @everyone without a default role, stays text.
- */
-export function typedMassMentionParts(text: string, everyoneRoleId: string | null): any[] {
-  const opaque: Array<[number, number]> = []
-  for (const m of text.matchAll(OPAQUE_TEXT)) opaque.push([m.index!, m.index! + m[0].length])
-  const parts: any[] = []
-  let last = 0
-  for (const m of text.matchAll(new RegExp(TYPED_MASS_MENTION, 'gu'))) {
-    const at = m.index!
-    if (opaque.some(([start, end]) => at >= start && at < end)) continue
-    const here = m[1] === HERE_ROLE_ID
-    if (!here && !everyoneRoleId) continue
-    if (at > last) parts.push({ type: 'text', text: text.slice(last, at) })
-    parts.push(here
-      ? { type: 'role_mention', roleId: HERE_ROLE_ID, roleName: HERE_ROLE_ID, roleColor: null }
-      : { type: 'role_mention', roleId: everyoneRoleId, roleName: 'everyone', roleColor: null })
-    last = at + m[0].length
-  }
-  if (last < text.length) parts.push({ type: 'text', text: text.slice(last) })
-  return parts
 }
 
 /** A reaction's bot-supplied metadata; remote_emoji_url is kept only when it is an https Discord CDN URL. */
@@ -208,13 +241,29 @@ export interface MessageDeleteSink {
   messageHardDeleted(message: { id: string; channel_id: string | null; thread_id: string | null; metadata: unknown }): Promise<void>
 }
 
+/** Most messages one history read returns, Discord's maximum. */
+export const MAX_MESSAGES_PER_READ = 100
+/** Most members one member list read returns, Discord's maximum. */
+export const MAX_MEMBERS_PER_READ = 1000
+
+/**
+ * A list route's `limit` query: `fallback` when absent or not a whole number, else clamped to
+ * 1..max. Unclamped, one request reads up to PostgREST's row limit (1000 by default).
+ */
+export function queryLimit(raw: unknown, fallback: number, max: number): number {
+  if (typeof raw !== 'string' || !/^\d+$/.test(raw)) return fallback
+  return Math.min(Math.max(Number(raw), 1), max)
+}
+
 /** A bridge pairing removed keeps answering true for at most this long. */
 const BRIDGE_PAIR_TTL_MS = 60_000
 
 export class BotRestAPI {
   public router: Router
   private readonly bridgePairs = new TTLCache<string, true>(5_000, BRIDGE_PAIR_TTL_MS)
-  
+  // A channel never moves to another server.
+  private readonly auditChannelServers = new TTLCache<string, string>(10_000, 10 * 60_000)
+
   constructor(private readonly deletes?: MessageDeleteSink) {
     this.router = Router()
     this.setupMiddleware()
@@ -323,6 +372,21 @@ export class BotRestAPI {
 
     this.route('get', '/users/:userId', this.getUser)
 
+    // APPLICATION COMMANDS
+    // The calling bot's slash commands; PUT replaces the whole set.
+
+    this.route('get', '/commands', this.getCommands)
+    this.route('put', '/commands', this.replaceCommands)
+    this.route('post', '/commands', this.upsertCommand)
+    this.route('delete', '/commands/:commandId', this.deleteCommand)
+
+    // INTERACTIONS
+    // Answers to the bot's own INTERACTION_CREATE events; rate-limited in INTERACTION_BUCKET.
+
+    this.route('post', '/interactions/:interactionId/callback', this.interactionCallback)
+    this.route('patch', '/interactions/:interactionId/response', this.interactionResponse)
+    this.route('post', '/interactions/:interactionId/followups', this.interactionFollowup)
+
     // Requests no route matched are counted in a shared bucket, then fall through to the 404.
     this.router.use(botRateLimit)
   }
@@ -364,7 +428,7 @@ export class BotRestAPI {
       const { data: updated, error } = await supabase.rpc('update_message_content_silent', {
         p_message_id: messageId,
         p_old_content: message.content,
-        p_content: await this.resolveMentionParts(botContentParts(content), message.channel_id, botId),
+        p_content: await resolveMentionParts(botContentParts(content), message.channel_id, botId),
       })
       if (error) {
         return res.status(400).json({ error: error.message })
@@ -393,7 +457,7 @@ export class BotRestAPI {
 
   /** The bot's Discord bridge on the channel's server, when the bot runs one. */
   private async bridgeIdFor(botId: string, channelId: string): Promise<string | null> {
-    const serverId = await this.channelServerId(channelId)
+    const serverId = await lookupChannelServerId(channelId)
     if (!serverId) return null
     const { data } = await supabase
       .from('discord_bridges')
@@ -468,7 +532,7 @@ export class BotRestAPI {
       }
       const thread = await this.loadThread(threadId as string)
       if (!thread) return res.status(500).json({ error: 'Thread not found after creation' })
-      await this.logBotAction(botId, 'thread_created', { channel_id: channelId, thread_id: thread.id })
+      await this.logBotAction(botId, 'thread_created', { channel_id: channelId, thread_id: thread.id }, { channelId })
       res.status(201).json(await this.formatThread(thread, botId))
     } catch (error: any) {
       console.error('Create thread error:', error)
@@ -572,82 +636,122 @@ export class BotRestAPI {
       
       console.log(`Bot ${req.bot!.username} (${botId}) attempting to send message to channel ${channelId}`)
       console.log(`Received metadata:`, JSON.stringify(metadata, null, 2))
-      
-      const access = await this.channelWriteAccess(botId, channelId, 'send_messages')
-      if (!access.ok) {
-        console.log(`Permission denied for bot ${botId} in channel ${channelId}: ${access.error}`)
-        return res.status(403).json({ error: access.error })
-      }
 
-      let threadId: string | null = null
-      if (thread_id !== undefined && thread_id !== null) {
-        const thread = typeof thread_id === 'string' ? await this.loadThread(thread_id) : null
-        if (!thread || thread.channel_id !== channelId) {
-          return res.status(400).json({ error: 'thread_id is not a thread of this channel' })
-        }
-        if (thread.locked) return res.status(403).json({ error: 'Thread is locked' })
-        threadId = thread.id
-      }
-      
-      // Instance attachment policy (e.g. mirroring Discord CDN URLs into
-      // user_media) is applied here, keeping bots policy-agnostic.
-      const typed = claimsBridgeAuthor(metadata) ? this.formatContent(content, embeds)
-        : await this.typedMassMentions(this.formatContent(content, embeds), content, channelId, botId)
-      const messageContent = await applyBridgeAttachmentPolicy(
-        await this.resolveMentionParts(typed, channelId, botId),
-        botId,
-        channelId,
-      )
-      if (!Array.isArray(messageContent) || messageContent.length === 0) {
-        return res.status(400).json({ error: 'Cannot send an empty message' })
-      }
-
-      const bridgeAuthor = claimsBridgeAuthor(metadata) && await this.bridgePairsChannel(botId, channelId)
-      const messageMetadata = {
-        ...botSuppliedMetadata(metadata, { bridgeAuthor }),
-        bot: true,
-        created_via: 'bot_api',
-      }
-      
-      // Array response, not .single(): the server's AutoMod drops a blocked row and
-      // the insert returns zero rows. PostgREST rolls a zero-row singular request
-      // back, which would discard the AutoMod event.
-      const { data: rows, error } = await supabase
-        .from('messages')
-        .insert({
-          channel_id: channelId,
-          thread_id: threadId,
-          bot_id: botId,  // Use bot_id instead of user_id
-          content: messageContent,
-          reply_to: reply_to || null,
-          metadata: messageMetadata
-        })
-        .select(`
-          *,
-          bot:bots!messages_bot_id_fkey(id, username, display_name, avatar_url)
-        `)
-      
-      if (error) {
-        console.error('Error sending message:', error)
-        const blocked = moderationErrorResponse(error)
-        if (blocked) return res.status(blocked.status).json(blocked.body)
-        return res.status(500).json({ error: error.message })
-      }
-
-      const message = rows?.[0]
-      if (!message) {
-        return res.status(403).json(AUTOMOD_BLOCKED_BODY)
-      }
-      
-      await this.logBotAction(botId, 'message_sent', { channel_id: channelId, message_id: message.id })
-
-      this.triggerLinkPreviewEnrichment(message.id)
-
-      res.status(201).json(this.formatMessage(message))
+      const result = await this.createBotMessage(botId, channelId, { content, embeds, reply_to, metadata, thread_id })
+      if (!result.ok) return res.status(result.status).json(result.body)
+      res.status(result.duplicate ? 200 : 201).json(this.formatMessage(result.message))
     } catch (error: any) {
       console.error('Send message error:', error)
       res.status(500).json({ error: error.message || 'Internal server error' })
     }
+  }
+
+  /**
+   * A bot message in a channel, or in a thread of it: send_messages access, thread checks,
+   * typed mass mentions, mention resolution, attachment policy, AutoMod, audit log and link
+   * previews. `interaction` is stored as metadata.interaction.
+   */
+  private async createBotMessage(
+    botId: string,
+    channelId: string,
+    input: BotMessageInput,
+    interaction?: Record<string, unknown>,
+  ): Promise<WriteResult> {
+    const { content, embeds, reply_to, metadata, thread_id } = input
+    const access = await this.channelWriteAccess(botId, channelId, 'send_messages')
+    if (!access.ok) {
+      console.log(`Permission denied for bot ${botId} in channel ${channelId}: ${access.error}`)
+      return { ok: false, status: 403, body: { error: access.error }, failure: 'bot_cannot_post' }
+    }
+
+    let threadId: string | null = null
+    if (thread_id !== undefined && thread_id !== null) {
+      const thread = typeof thread_id === 'string' ? await this.loadThread(thread_id) : null
+      if (!thread || thread.channel_id !== channelId) {
+        return { ok: false, status: 400, body: { error: 'thread_id is not a thread of this channel' }, failure: 'failed' }
+      }
+      if (thread.locked) {
+        return { ok: false, status: 403, body: { error: 'Thread is locked' }, failure: 'thread_locked' }
+      }
+      threadId = thread.id
+    }
+
+    // Instance attachment policy (e.g. mirroring Discord CDN URLs into
+    // user_media) is applied here, keeping bots policy-agnostic.
+    const messageContent = await prepareBotMessageContent({ content, embeds, metadata, channelId, botId })
+    if (!Array.isArray(messageContent) || messageContent.length === 0) {
+      return { ok: false, status: 400, body: { error: 'Cannot send an empty message' }, failure: 'failed' }
+    }
+
+    const bridgeAuthor = claimsBridgeAuthor(metadata) && await this.bridgePairsChannel(botId, channelId)
+    const messageMetadata = {
+      ...botSuppliedMetadata(metadata, { bridgeAuthor }),
+      bot: true,
+      created_via: 'bot_api',
+      ...(interaction ? { interaction } : {}),
+    }
+
+    const messageSelect = `
+        *,
+        bot:bots!messages_bot_id_fkey(id, username, display_name, avatar_url)
+      `
+    // Array response, not .single(): the server's AutoMod drops a blocked row and
+    // the insert returns zero rows. PostgREST rolls a zero-row singular request
+    // back, which would discard the AutoMod event.
+    const { data: rows, error } = await supabase
+      .from('messages')
+      .insert({
+        channel_id: channelId,
+        thread_id: threadId,
+        bot_id: botId,  // Use bot_id instead of user_id
+        content: messageContent,
+        reply_to: reply_to || null,
+        metadata: messageMetadata
+      })
+      .select(messageSelect)
+
+    // The unique index allows one live row per Discord message per channel. A live relay
+    // racing a history import (or a retry) loses here; answer with the row that won.
+    const discordMessageId = (messageMetadata as Record<string, unknown>).discord_message_id
+    if (error?.code === '23505'
+      && error.message?.includes('messages_channel_discord_message_id_unique')
+      && typeof discordMessageId === 'string') {
+      const { data: existing, error: lookupError } = await supabase
+        .from('messages')
+        .select(messageSelect)
+        .eq('channel_id', channelId)
+        .eq('metadata->>discord_message_id', discordMessageId)
+        .eq('is_deleted', false)
+        .order('created_at', { ascending: true })
+        .limit(1)
+        .maybeSingle()
+      if (lookupError) return { ok: false, status: 500, body: { error: lookupError.message }, failure: 'failed' }
+      if (existing) return { ok: true, message: existing, duplicate: true }
+    }
+
+    if (error) {
+      console.error('Error sending message:', error)
+      const blocked = moderationErrorResponse(error)
+      if (blocked) {
+        const failure = blocked.body.code === 'AUTOMOD_BLOCKED' ? 'automod_blocked' : 'failed'
+        return { ok: false, ...blocked, failure }
+      }
+      if (MESSAGE_TOO_LONG.test(error.message ?? '')) {
+        return { ok: false, status: 400, body: { error: error.message }, failure: 'failed' }
+      }
+      return { ok: false, status: 500, body: { error: error.message }, failure: 'failed' }
+    }
+
+    const message = rows?.[0]
+    if (!message) {
+      return { ok: false, status: 403, body: { ...AUTOMOD_BLOCKED_BODY }, failure: 'automod_blocked' }
+    }
+
+    await this.logBotAction(botId, 'message_sent', { channel_id: channelId, message_id: message.id }, { channelId })
+
+    this.triggerLinkPreviewEnrichment(message.id)
+
+    return { ok: true, message }
   }
 
   /**
@@ -775,6 +879,13 @@ export class BotRestAPI {
         .update({ metadata: mergedMetadata })
         .eq('id', messageId)
 
+      // An import may already hold this Discord message id in the channel (the unique index of
+      // 20261110900002); the live copy lost the race, so the mapping is a no-op like sendMessage's.
+      if (updateError?.code === '23505'
+        && updateError.message?.includes('messages_channel_discord_message_id_unique')) {
+        return res.json({ ok: true, metadata: message.metadata ?? {} })
+      }
+
       if (updateError) {
         return res.status(500).json({ error: updateError.message })
       }
@@ -788,9 +899,10 @@ export class BotRestAPI {
   private async getMessages(req: BotRequest, res: Response) {
     try {
       const { channelId } = req.params
-      const { limit = 50, before, after } = req.query
+      const { before, after } = req.query
+      const limit = queryLimit(req.query.limit, 50, MAX_MESSAGES_PER_READ)
       const botId = req.bot!.id
-      
+
       const canRead = await this.canReadChannel(botId, channelId)
       if (!canRead) {
         return res.status(403).json({ error: 'Missing permission: read_messages' })
@@ -809,7 +921,7 @@ export class BotRestAPI {
         `)
         .eq('channel_id', channelId)
         .order('created_at', { ascending: false })
-        .limit(Number(limit))
+        .limit(limit)
       
       if (before) {
         query = query.lt('created_at', before as string)
@@ -879,69 +991,396 @@ export class BotRestAPI {
     try {
       const { messageId } = req.params
       const { content } = req.body
-      const botId = req.bot!.id
-      
-      const { data: message } = await supabase
-        .from('messages')
-        .select('user_id, bot_id, channel_id, metadata')
-        .eq('id', messageId)
-        .single()
-      
-      if (!message || message.bot_id !== botId) {
-        return res.status(403).json({ error: 'Cannot edit messages from other bots or users' })
-      }
-
-      // BUGS.md H38: editing one's own message requires only `send_messages`.
-      // Bridge bots hold `send_messages` alone, so gating on `manage_messages`
-      // breaks Discord edit-sync. The ownership check above guarantees the bot
-      // is the author. `deleteMessage` mirrors this: `manage_messages` is
-      // required only for other bots' messages.
-      const access = await this.channelWriteAccess(botId, message.channel_id, 'send_messages')
-      if (!access.ok) {
-        return res.status(403).json({ error: access.error })
-      }
-      
-      const typed = claimsBridgeAuthor(message.metadata) ? this.formatContent(content)
-        : await this.typedMassMentions(this.formatContent(content), content, message.channel_id, botId)
-      const messageContent = await applyBridgeAttachmentPolicy(
-        await this.resolveMentionParts(typed, message.channel_id, botId),
-        botId,
-        message.channel_id,
-      )
-      if (!Array.isArray(messageContent) || messageContent.length === 0) {
-        return res.status(400).json({ error: 'Cannot send an empty message' })
-      }
-
-      const { data: updatedRows, error } = await supabase
-        .from('messages')
-        .update({ 
-          content: messageContent
-        })
-        .eq('id', messageId)
-        .select(`
-          *,
-          user:profiles!messages_user_id_fkey(id, username, display_name, avatar_url),
-          bot:bots!messages_bot_id_fkey(id, username, display_name, avatar_url)
-        `)
-      
-      if (error) {
-        const blocked = moderationErrorResponse(error)
-        if (blocked) return res.status(blocked.status).json(blocked.body)
-        return res.status(500).json({ error: error.message })
-      }
-
-      // The row exists and belongs to this bot (checked above), so zero rows is
-      // AutoMod dropping the edit.
-      const updated = updatedRows?.[0]
-      if (!updated) {
-        return res.status(403).json(AUTOMOD_BLOCKED_BODY)
-      }
-      
-      await this.logBotAction(botId, 'message_edited', { message_id: messageId })
-      
-      res.json(this.formatMessage(updated))
+      const result = await this.editBotMessage(req.bot!.id, messageId, content)
+      if (!result.ok) return res.status(result.status).json(result.body)
+      res.json(this.formatMessage(result.message))
     } catch (error: any) {
       res.status(500).json({ error: error.message })
+    }
+  }
+
+  /** New content for the bot's own message: send_messages access, mention resolution, attachment policy, AutoMod. */
+  private async editBotMessage(botId: string, messageId: string, content: any, embeds?: any): Promise<WriteResult> {
+    const { data: message } = await supabase
+      .from('messages')
+      .select('user_id, bot_id, channel_id, metadata')
+      .eq('id', messageId)
+      .single()
+
+    if (!message || message.bot_id !== botId) {
+      return { ok: false, status: 403, body: { error: 'Cannot edit messages from other bots or users' }, failure: 'failed' }
+    }
+
+    // BUGS.md H38: editing one's own message requires only `send_messages`.
+    // Bridge bots hold `send_messages` alone, so gating on `manage_messages`
+    // breaks Discord edit-sync. The ownership check above guarantees the bot
+    // is the author. `deleteMessage` mirrors this: `manage_messages` is
+    // required only for other bots' messages.
+    const access = await this.channelWriteAccess(botId, message.channel_id, 'send_messages')
+    if (!access.ok) {
+      return { ok: false, status: 403, body: { error: access.error }, failure: 'bot_cannot_post' }
+    }
+
+    const messageContent = await prepareBotMessageContent({
+      content,
+      embeds,
+      metadata: message.metadata,
+      channelId: message.channel_id,
+      botId,
+    })
+    if (!Array.isArray(messageContent) || messageContent.length === 0) {
+      return { ok: false, status: 400, body: { error: 'Cannot send an empty message' }, failure: 'failed' }
+    }
+
+    const { data: updatedRows, error } = await supabase
+      .from('messages')
+      .update({
+        content: messageContent
+      })
+      .eq('id', messageId)
+      .select(`
+        *,
+        user:profiles!messages_user_id_fkey(id, username, display_name, avatar_url),
+        bot:bots!messages_bot_id_fkey(id, username, display_name, avatar_url)
+      `)
+
+    if (error) {
+      const blocked = moderationErrorResponse(error)
+      if (blocked) {
+        const failure = blocked.body.code === 'AUTOMOD_BLOCKED' ? 'automod_blocked' : 'failed'
+        return { ok: false, ...blocked, failure }
+      }
+      if (MESSAGE_TOO_LONG.test(error.message ?? '')) {
+        return { ok: false, status: 400, body: { error: error.message }, failure: 'failed' }
+      }
+      return { ok: false, status: 500, body: { error: error.message }, failure: 'failed' }
+    }
+
+    // The row exists and belongs to this bot (checked above), so zero rows is
+    // AutoMod dropping the edit.
+    const updated = updatedRows?.[0]
+    if (!updated) {
+      return { ok: false, status: 403, body: { ...AUTOMOD_BLOCKED_BODY }, failure: 'automod_blocked' }
+    }
+
+    await this.logBotAction(botId, 'message_edited', { message_id: messageId }, { channelId: message.channel_id })
+
+    return { ok: true, message: updated }
+  }
+
+  // APPLICATION COMMANDS
+
+  private async getCommands(req: BotRequest, res: Response) {
+    try {
+      const { data, error } = await supabase.rpc('get_bot_commands', { p_bot_id: req.bot!.id })
+      if (error) {
+        const answer = commandErrorResponse(error)
+        return res.status(answer.status).json(answer.body)
+      }
+      res.json(Array.isArray(data) ? data : [])
+    } catch (error: any) {
+      console.error('Get commands error:', error)
+      res.status(500).json({ error: error.message || 'Internal server error' })
+    }
+  }
+
+  /** Body: the bot's whole command set. Names absent from it are deleted; kept names keep their ids. */
+  private async replaceCommands(req: BotRequest, res: Response) {
+    try {
+      const botId = req.bot!.id
+      const checked = validateCommands(req.body)
+      if (!checked.ok) return res.status(400).json({ error: checked.error })
+
+      const { data, error } = await supabase.rpc('bot_commands_replace', { p_bot_id: botId, p_commands: checked.value })
+      if (error) {
+        const answer = commandErrorResponse(error)
+        return res.status(answer.status).json(answer.body)
+      }
+      await this.logBotAction(botId, 'commands_replaced', { count: checked.value.length })
+      res.json(Array.isArray(data) ? data : [])
+    } catch (error: any) {
+      console.error('Replace commands error:', error)
+      res.status(500).json({ error: error.message || 'Internal server error' })
+    }
+  }
+
+  /** Body: one command, created or replaced by name. 201 when created. */
+  private async upsertCommand(req: BotRequest, res: Response) {
+    try {
+      const botId = req.bot!.id
+      const checked = validateCommand(req.body)
+      if (!checked.ok) return res.status(400).json({ error: checked.error })
+
+      const { data, error } = await supabase.rpc('bot_command_upsert', { p_bot_id: botId, p_command: checked.value })
+      if (error) {
+        const answer = commandErrorResponse(error)
+        return res.status(answer.status).json(answer.body)
+      }
+      const created = data?.created === true
+      await this.logBotAction(botId, created ? 'command_created' : 'command_updated', {
+        command_id: data?.command?.id ?? null,
+        name: checked.value.name,
+      })
+      res.status(created ? 201 : 200).json(data?.command ?? null)
+    } catch (error: any) {
+      console.error('Upsert command error:', error)
+      res.status(500).json({ error: error.message || 'Internal server error' })
+    }
+  }
+
+  private async deleteCommand(req: BotRequest, res: Response) {
+    try {
+      const botId = req.bot!.id
+      const { commandId } = req.params
+      if (!UUID_PATTERN.test(commandId)) return res.status(404).json(UNKNOWN_COMMAND)
+
+      const { data, error } = await supabase
+        .from('bot_commands')
+        .delete()
+        .eq('id', commandId)
+        .eq('bot_id', botId)
+        .select('id')
+      if (error) return res.status(500).json({ error: error.message })
+      if (!Array.isArray(data) || data.length === 0) return res.status(404).json(UNKNOWN_COMMAND)
+
+      await this.logBotAction(botId, 'command_deleted', { command_id: commandId })
+      res.status(204).send()
+    } catch (error: any) {
+      console.error('Delete command error:', error)
+      res.status(500).json({ error: error.message || 'Internal server error' })
+    }
+  }
+
+  // INTERACTIONS
+
+  /** The bot's own interaction, or null when absent or another bot's. */
+  private async loadInteraction(botId: string, interactionId: string): Promise<InteractionContext | null> {
+    if (!UUID_PATTERN.test(interactionId)) return null
+    const { data, error } = await supabase
+      .from('bot_interactions')
+      .select('id, channel_id, thread_id, user_id, command_name, ephemeral')
+      .eq('id', interactionId)
+      .eq('bot_id', botId)
+      .maybeSingle()
+    if (error) throw new Error(`bot_interactions lookup failed: ${error.message}`)
+    return (data as InteractionContext | null) ?? null
+  }
+
+  /**
+   * A private reply's parts: content and embeds as POST /channels/:id/messages reads them
+   * (system parts dropped, embeds reduced, paths stripped, role and channel mentions resolved
+   * against the interaction's channel), with no message written.
+   */
+  private async privateReplyParts(content: any, embeds: any, channelId: string, botId: string): Promise<any[]> {
+    return resolveMentionParts(formatContent(content, embeds), channelId, botId)
+  }
+
+  private privateReply(reply: any, parts: any[]) {
+    const content = Array.isArray(reply?.content) ? reply.content : parts
+    return { id: reply?.id ?? null, ephemeral: true, content: this.contentToText(content), content_raw: content }
+  }
+
+  /**
+   * A public reply; metadata.interaction names the invocation. The original's outcome is
+   * recorded, a thrown write as 'failed': an unrecorded row stays 'responding' until it expires.
+   */
+  private async postInteractionMessage(
+    botId: string,
+    interaction: InteractionContext,
+    body: Record<string, any>,
+    followup: boolean,
+  ): Promise<WriteResult> {
+    let result: WriteResult
+    try {
+      result = await this.createBotMessage(
+        botId,
+        interaction.channel_id,
+        { content: body.content, embeds: body.embeds, thread_id: interaction.thread_id },
+        {
+          id: interaction.id,
+          name: interaction.command_name,
+          user_id: interaction.user_id,
+          ...(followup ? { followup: true } : {}),
+        },
+      )
+    } catch (error) {
+      if (!followup) await this.recordInteraction(botId, interaction.id, null, 'failed')
+      throw error
+    }
+    if (!followup) {
+      await this.recordInteraction(botId, interaction.id, result.ok ? result.message.id : null, result.ok ? null : result.failure)
+    }
+    return result
+  }
+
+  /** bot_interaction_record; logs and swallows its failure. */
+  private async recordInteraction(botId: string, id: string, messageId: string | null, failure: WriteFailure | null) {
+    try {
+      const { error } = await supabase.rpc('bot_interaction_record', {
+        p_bot_id: botId,
+        p_id: id,
+        p_message_id: messageId,
+        p_error: failure,
+      })
+      if (error) console.error(`bot_interaction_record failed for ${id}:`, error.message)
+    } catch (error: any) {
+      console.error(`bot_interaction_record failed for ${id}:`, error?.message ?? error)
+    }
+  }
+
+  /** bot_interaction_reply's action, carried out and answered. */
+  private async answerReply(
+    res: Response,
+    botId: string,
+    interaction: InteractionContext,
+    body: Record<string, any>,
+    parts: any[],
+    outcome: any,
+    followup: boolean,
+  ) {
+    switch (outcome?.action) {
+      case 'stored':
+        return res.json(this.privateReply(outcome.reply, parts))
+      case 'edit_message': {
+        const result = await this.editBotMessage(botId, outcome.message_id, body.content, body.embeds)
+        if (!result.ok) return res.status(result.status).json(result.body)
+        return res.json(this.formatMessage(result.message))
+      }
+      case 'create_message': {
+        const result = await this.postInteractionMessage(botId, interaction, body, followup)
+        if (!result.ok) return res.status(result.status).json(result.body)
+        return res.json(this.formatMessage(result.message))
+      }
+      default:
+        console.error(`bot_interaction_reply answered no known action for ${interaction.id}:`, outcome)
+        return res.status(500).json({ error: 'Interaction reply failed' })
+    }
+  }
+
+  /**
+   * Body {type: 4, data: {content, embeds, flags}} replies, {type: 5, data: {flags}} defers;
+   * flags 64 makes the reply private to the invoker. bot_interaction_ack acknowledges before any
+   * message is written, so of two answers one acknowledges and the other gets 400.
+   */
+  private async interactionCallback(req: BotRequest, res: Response) {
+    try {
+      const botId = req.bot!.id
+      const { interactionId } = req.params
+      const { type, data } = req.body ?? {}
+      if (type !== CALLBACK_REPLY && type !== CALLBACK_DEFER) {
+        return res.status(400).json({ error: 'type must be 4 (reply) or 5 (defer)' })
+      }
+      if (data !== undefined && data !== null && !isPlainObject(data)) {
+        return res.status(400).json({ error: 'data must be an object' })
+      }
+      const body: Record<string, any> = data ?? {}
+      const flags = replyFlags(body.flags)
+      if (flags === null) return res.status(400).json({ error: 'flags must be 0 or 64' })
+      if (!UUID_PATTERN.test(interactionId)) return res.status(404).json(UNKNOWN_INTERACTION)
+
+      const defer = type === CALLBACK_DEFER
+      const ephemeral = flags === EPHEMERAL
+      let reply: any[] | null = null
+      if (!defer) {
+        if (formatContent(body.content, body.embeds).length === 0) {
+          return res.status(400).json({ error: 'Cannot send an empty message' })
+        }
+        if (ephemeral) {
+          const interaction = await this.loadInteraction(botId, interactionId)
+          if (!interaction) return res.status(404).json(UNKNOWN_INTERACTION)
+          reply = await this.privateReplyParts(body.content, body.embeds, interaction.channel_id, botId)
+        }
+      }
+
+      const { data: ack, error } = await supabase.rpc('bot_interaction_ack', {
+        p_bot_id: botId,
+        p_id: interactionId,
+        p_defer: defer,
+        p_ephemeral: ephemeral,
+        p_reply: reply,
+      })
+      if (error) {
+        const answer = interactionErrorResponse(error)
+        return res.status(answer.status).json(answer.body)
+      }
+      if (defer || ephemeral) return res.status(204).send()
+
+      if (!isPlainObject(ack) || typeof ack.channel_id !== 'string') {
+        console.error(`bot_interaction_ack answered no channel for ${interactionId}:`, ack)
+        return res.status(500).json({ error: 'Interaction reply failed' })
+      }
+      const result = await this.postInteractionMessage(botId, ack as InteractionContext, body, false)
+      if (!result.ok) return res.status(result.status).json(result.body)
+      res.status(204).send()
+    } catch (error: any) {
+      console.error('Interaction callback error:', error)
+      res.status(500).json({ error: error.message || 'Internal server error' })
+    }
+  }
+
+  /** Body {content, embeds}: edits the reply, or posts it after a defer. The acknowledgement's flags decide privacy. */
+  private async interactionResponse(req: BotRequest, res: Response) {
+    try {
+      const botId = req.bot!.id
+      const { interactionId } = req.params
+      const body: Record<string, any> = isPlainObject(req.body) ? req.body : {}
+      if (formatContent(body.content, body.embeds).length === 0) {
+        return res.status(400).json({ error: 'Cannot send an empty message' })
+      }
+      const interaction = await this.loadInteraction(botId, interactionId)
+      if (!interaction) return res.status(404).json(UNKNOWN_INTERACTION)
+
+      // Parts go with every call: the row's ephemeral decides, and it is set by the acknowledgement.
+      const parts = await this.privateReplyParts(body.content, body.embeds, interaction.channel_id, botId)
+      const { data, error } = await supabase.rpc('bot_interaction_reply', {
+        p_bot_id: botId,
+        p_id: interactionId,
+        p_kind: 'original',
+        p_ephemeral: interaction.ephemeral === true,
+        p_reply: parts,
+      })
+      if (error) {
+        const answer = interactionErrorResponse(error)
+        return res.status(answer.status).json(answer.body)
+      }
+      return await this.answerReply(res, botId, interaction, body, parts, data, false)
+    } catch (error: any) {
+      console.error('Interaction response error:', error)
+      res.status(500).json({ error: error.message || 'Internal server error' })
+    }
+  }
+
+  /** Body {content, embeds, flags}: a further reply, private with flags 64. */
+  private async interactionFollowup(req: BotRequest, res: Response) {
+    try {
+      const botId = req.bot!.id
+      const { interactionId } = req.params
+      const body: Record<string, any> = isPlainObject(req.body) ? req.body : {}
+      const flags = replyFlags(body.flags)
+      if (flags === null) return res.status(400).json({ error: 'flags must be 0 or 64' })
+      if (formatContent(body.content, body.embeds).length === 0) {
+        return res.status(400).json({ error: 'Cannot send an empty message' })
+      }
+      const interaction = await this.loadInteraction(botId, interactionId)
+      if (!interaction) return res.status(404).json(UNKNOWN_INTERACTION)
+
+      // A public follow-up's parts bound its length before its slot is taken.
+      const parts = await this.privateReplyParts(body.content, body.embeds, interaction.channel_id, botId)
+      const { data, error } = await supabase.rpc('bot_interaction_reply', {
+        p_bot_id: botId,
+        p_id: interactionId,
+        p_kind: 'followup',
+        p_ephemeral: flags === EPHEMERAL,
+        p_reply: parts,
+      })
+      if (error) {
+        const answer = interactionErrorResponse(error)
+        return res.status(answer.status).json(answer.body)
+      }
+      return await this.answerReply(res, botId, interaction, body, parts, data, true)
+    } catch (error: any) {
+      console.error('Interaction follow-up error:', error)
+      res.status(500).json({ error: error.message || 'Internal server error' })
     }
   }
   
@@ -979,7 +1418,7 @@ export class BotRestAPI {
         return res.status(500).json({ error: error.message })
       }
       
-      await this.logBotAction(botId, 'message_deleted', { message_id: messageId })
+      await this.logBotAction(botId, 'message_deleted', { message_id: messageId }, { channelId: message.channel_id })
 
       // A soft-deleted row was dispatched when is_deleted was set.
       if (this.deletes && message.is_deleted !== true) {
@@ -1167,7 +1606,8 @@ export class BotRestAPI {
     try {
       // Route registered under both /servers/:serverId and /guilds/:guildId.
       const serverId = req.params.serverId || req.params.guildId
-      const { limit = 100, after } = req.query
+      const { after } = req.query
+      const limit = queryLimit(req.query.limit, 100, MAX_MEMBERS_PER_READ)
       const botId = req.bot!.id
 
       // Keyset cursor, as Discord's: the last user.id of the previous page.
@@ -1188,7 +1628,7 @@ export class BotRestAPI {
         `)
         .eq('server_id', serverId)
         .order('user_id')
-        .limit(Number(limit))
+        .limit(limit)
       
       if (after) {
         query = query.gt('user_id', after)
@@ -1226,7 +1666,7 @@ export class BotRestAPI {
         return res.status(500).json({ error: error.message })
       }
       
-      const visible = await this.visibleChannels(botId, serverId, channels ?? [])
+      const visible = await visibleChannels(botId, serverId, channels ?? [])
       res.json(visible.map(c => this.formatChannel(c)))
     } catch (error: any) {
       res.status(500).json({ error: error.message })
@@ -1251,7 +1691,7 @@ export class BotRestAPI {
         return res.status(400).json({ error: 'name is required' })
       }
 
-      const allowed = await this.checkServerPermission(botId, serverId, 'manage_channels')
+      const allowed = await checkServerPermission(botId, serverId, 'manage_channels')
       if (!allowed) {
         return res.status(403).json({ error: 'Missing permission: manage_channels' })
       }
@@ -1268,7 +1708,7 @@ export class BotRestAPI {
 
       if (error) return res.status(500).json({ error: error.message })
 
-      await this.logBotAction(botId, 'category_created', { server_id: serverId, category_id: data.id })
+      await this.logBotAction(botId, 'category_created', { server_id: serverId, category_id: data.id }, { serverId })
       res.status(201).json(data)
     } catch (error: any) {
       res.status(500).json({ error: error.message || 'Internal server error' })
@@ -1295,7 +1735,7 @@ export class BotRestAPI {
       // Category is rejected here; use the /categories endpoint.
       const channelType = type === 1 ? 1 : 0
 
-      const allowed = await this.checkServerPermission(botId, serverId, 'manage_channels')
+      const allowed = await checkServerPermission(botId, serverId, 'manage_channels')
       if (!allowed) {
         return res.status(403).json({ error: 'Missing permission: manage_channels' })
       }
@@ -1318,7 +1758,7 @@ export class BotRestAPI {
       if (error?.code === '23514') return res.status(400).json({ error: error.message })
       if (error) return res.status(500).json({ error: error.message })
 
-      await this.logBotAction(botId, 'channel_created', { server_id: serverId, channel_id: data.id })
+      await this.logBotAction(botId, 'channel_created', { server_id: serverId, channel_id: data.id }, { serverId, channelId: data.id })
       res.status(201).json(this.formatChannel(data))
     } catch (error: any) {
       res.status(500).json({ error: error.message || 'Internal server error' })
@@ -1332,7 +1772,7 @@ export class BotRestAPI {
       const { name, order } = req.body as { name?: string; order?: number }
       const botId = req.bot!.id
 
-      const allowed = await this.checkServerPermission(botId, serverId, 'manage_channels')
+      const allowed = await checkServerPermission(botId, serverId, 'manage_channels')
       if (!allowed) {
         return res.status(403).json({ error: 'Missing permission: manage_channels' })
       }
@@ -1376,7 +1816,7 @@ export class BotRestAPI {
       if (fetchError) return res.status(500).json({ error: fetchError.message })
       if (!existing?.server_id) return res.status(404).json({ error: 'Channel not found' })
 
-      const allowed = await this.checkServerPermission(
+      const allowed = await checkServerPermission(
         botId,
         existing.server_id,
         'manage_channels',
@@ -1423,14 +1863,14 @@ export class BotRestAPI {
       if (error) return res.status(500).json({ error: error.message })
       // As channel_categories RLS for members: a channel manager sees every category, anyone
       // else those holding a channel they see.
-      if (await this.checkServerPermission(botId, serverId, 'manage_channels')) return res.json(data || [])
+      if (await checkServerPermission(botId, serverId, 'manage_channels')) return res.json(data || [])
       const { data: channels, error: channelsError } = await supabase
         .from('channels')
         .select('id, category')
         .eq('server_id', serverId)
       if (channelsError) return res.status(500).json({ error: channelsError.message })
       const filed = ((channels ?? []) as Array<{ id: string; category: string | null }>).filter((c) => c.category)
-      const visible = await this.visibleChannels(botId, serverId, filed)
+      const visible = await visibleChannels(botId, serverId, filed)
       const shown = new Set(visible.map((c) => c.category))
       res.json((data || []).filter((k: { id: string }) => shown.has(k.id)))
     } catch (error: any) {
@@ -1585,7 +2025,7 @@ export class BotRestAPI {
 
       if (error) return res.status(500).json({ error: error.message })
 
-      await this.logBotAction(botId, 'role_created', { server_id: serverId, role_id: data.id })
+      await this.logBotAction(botId, 'role_created', { server_id: serverId, role_id: data.id }, { serverId })
       res.status(201).json(data)
     } catch (error: any) {
       res.status(500).json({ error: error.message || 'Internal server error' })
@@ -1680,7 +2120,7 @@ export class BotRestAPI {
       if (error) return res.status(500).json({ error: error.message })
       if (!data) return res.status(404).json({ error: 'Role not found' })
 
-      await this.logBotAction(botId, 'role_updated', { server_id: serverId, role_id: roleId })
+      await this.logBotAction(botId, 'role_updated', { server_id: serverId, role_id: roleId }, { serverId })
       res.json(data)
     } catch (error: any) {
       res.status(500).json({ error: error.message || 'Internal server error' })
@@ -1710,7 +2150,7 @@ export class BotRestAPI {
 
       if (error) return res.status(500).json({ error: error.message })
 
-      await this.logBotAction(botId, 'role_deleted', { server_id: serverId, role_id: roleId })
+      await this.logBotAction(botId, 'role_deleted', { server_id: serverId, role_id: roleId }, { serverId })
       res.status(204).send()
     } catch (error: any) {
       res.status(500).json({ error: error.message || 'Internal server error' })
@@ -1971,8 +2411,9 @@ export class BotRestAPI {
   /**
    * The bot is a bridge bot (bot_type 'bridge') and its bridge relays the channel: a
    * discord_bridge_channels pair of the v2 bridge whose bot it is, or, for a bot that is no v2
-   * bridge's bot, a v1 discord_bridge_pairings row of the channel's server. False on any
-   * failed lookup. A true answer is cached for BRIDGE_PAIR_TTL_MS.
+   * bridge's bot, a v1 discord_bridge_pairings row of the channel's server whose bot the pairing's
+   * creator or the server's owner owns or installed. A pairing names no bot. False on any failed
+   * lookup. A true answer is cached for BRIDGE_PAIR_TTL_MS.
    */
   private async bridgePairsChannel(botId: string, channelId: string | null | undefined): Promise<boolean> {
     if (!channelId) return false
@@ -1986,7 +2427,7 @@ export class BotRestAPI {
   private async lookupBridgePair(botId: string, channelId: string): Promise<boolean> {
     const { data: bot, error: botError } = await supabase
       .from('bots')
-      .select('bot_type')
+      .select('bot_type, owner_id')
       .eq('id', botId)
       .maybeSingle()
     if (botError || bot?.bot_type !== 'bridge') return false
@@ -2007,23 +2448,28 @@ export class BotRestAPI {
       return !pairError && Array.isArray(pairs) && pairs.length > 0
     }
 
-    const serverId = await this.channelServerId(channelId)
+    const serverId = await lookupChannelServerId(channelId)
     if (!serverId) return false
     const { data: pairing, error: pairingError } = await supabase
       .from('discord_bridge_pairings')
-      .select('server_id')
+      .select('created_by')
       .eq('server_id', serverId)
       .maybeSingle()
-    return !pairingError && !!pairing
-  }
+    if (pairingError || !pairing) return false
 
-  private async channelServerId(channelId: string): Promise<string | null> {
-    const { data: channel } = await supabase
-      .from('channels')
-      .select('server_id')
-      .eq('id', channelId)
+    const { data: server } = await supabase
+      .from('servers')
+      .select('owner')
+      .eq('id', serverId)
       .maybeSingle()
-    return channel?.server_id ?? null
+    const { data: install } = await supabase
+      .from('bot_server_permissions')
+      .select('installed_by')
+      .eq('bot_id', botId)
+      .eq('server_id', serverId)
+      .maybeSingle()
+    const trusted = [pairing.created_by, server?.owner].filter(Boolean)
+    return trusted.includes(bot.owner_id) || trusted.includes(install?.installed_by)
   }
 
   /**
@@ -2040,7 +2486,7 @@ export class BotRestAPI {
     const hidden: ChannelAccess = { ok: false, error: 'Channel not visible to this bot' }
     const denied: ChannelAccess = flag ? { ok: false, error: `Missing permission: ${flag}` } : hidden
     if (!channelId) return denied
-    const serverId = await this.channelServerId(channelId)
+    const serverId = await lookupChannelServerId(channelId)
     if (!serverId) return denied
     const install = await loadInstall(botId, serverId)
     if (!install || (flag !== null && install[flag] !== true)) return denied
@@ -2057,7 +2503,7 @@ export class BotRestAPI {
    * time ('infinity' when the row has none). Undefined when a lookup fails.
    */
   private async historySince(botId: string, channelId: string, serverId?: string): Promise<string | null | undefined> {
-    const channelServerId = serverId ?? (await this.channelServerId(channelId))
+    const channelServerId = serverId ?? (await lookupChannelServerId(channelId))
     if (!channelServerId) return undefined
     const install = await loadInstall(botId, channelServerId)
     const layer = install ? await loadEveryoneLayer(channelServerId, channelId) : null
@@ -2076,24 +2522,12 @@ export class BotRestAPI {
     return Number.isFinite(at) && Number.isFinite(floor) && at >= floor
   }
 
-  /** The channels among `channels` the bot sees (botCanSeeChannel); none on a failed lookup. */
-  private async visibleChannels<T extends { id: string }>(botId: string, serverId: string, channels: T[]): Promise<T[]> {
-    if (channels.length === 0) return []
-    const install = await loadInstall(botId, serverId)
-    if (!install) return []
-    const layers = await loadEveryoneLayers(channels.map((c) => ({ id: c.id, server_id: serverId })))
-    return channels.filter((c) => {
-      const layer = layers.get(c.id)
-      return layer !== undefined && botCanSeeChannel(install, layer, c.id)
-    })
-  }
-
   /**
    * read_messages and botCanSeeChannel: allowed_channel_ids, which also grants a channel
    * @everyone cannot view, else VIEW_CHANNEL as a holder of @everyone. False on any failed lookup.
    */
   private async canReadChannel(botId: string, channelId: string, serverId?: string): Promise<boolean> {
-    const channelServerId = serverId ?? (await this.channelServerId(channelId))
+    const channelServerId = serverId ?? (await lookupChannelServerId(channelId))
     if (!channelServerId) return false
 
     const install = await loadInstall(botId, channelServerId)
@@ -2103,23 +2537,6 @@ export class BotRestAPI {
     if (!layer) return false
 
     return botCanReadChannel(install, layer, channelId)
-  }
-
-  /**
-   * Server-scoped permission check for server-wide actions such as
-   * channel/category creation.
-   */
-  private async checkServerPermission(botId: string, serverId: string, permission: string): Promise<boolean> {
-    const { data, error } = await supabase.rpc('check_bot_permission', {
-      p_bot_id: botId,
-      p_server_id: serverId,
-      p_permission: permission,
-    })
-    if (error) {
-      console.error(`[checkServerPermission] RPC error: ${error.message}`)
-      return false
-    }
-    return data === true
   }
 
   private async checkBotInGuild(botId: string, guildId: string): Promise<boolean> {
@@ -2138,111 +2555,6 @@ export class BotRestAPI {
   
   private formatAvatarUrl(avatarPath: string | null | undefined): string | undefined {
     return absoluteAvatarUrl(avatarPath)
-  }
-  
-  /**
-   * Discord's reading of string content: a typed @everyone or @here pings for a bot holding
-   * mention_everyone in the channel's server (typedMassMentionParts on the text part
-   * formatContent made of it) and stays text otherwise. Content sent as parts and relayed
-   * content keep their text parts: a relaying bot's right is not its author's.
-   */
-  private async typedMassMentions(parts: any[], content: unknown, channelId: string, botId: string): Promise<any[]> {
-    if (typeof content !== 'string' || parts[0]?.type !== 'text' || parts[0].text !== content) return parts
-    if (!TYPED_MASS_MENTION.test(content)) return parts
-    const serverId = await this.channelServerId(channelId)
-    if (!serverId || !(await this.checkServerPermission(botId, serverId, 'mention_everyone'))) return parts
-    const { data: role } = await supabase
-      .from('server_roles')
-      .select('id')
-      .eq('server_id', serverId)
-      .eq('is_default', true)
-      .maybeSingle()
-    return [...typedMassMentionParts(content, (role as { id?: string } | null)?.id ?? null), ...parts.slice(1)]
-  }
-
-  /**
-   * role_mention and channel_mention parts against the channel's server: a role or channel of
-   * that server keeps its part, carrying the stored name (and the role's color); any other part
-   * of those types becomes the text `@name` or `#name`. @everyone (the server's default role)
-   * and @here (roleId `here`) keep their part only for a bot holding mention_everyone there, and
-   * otherwise become the text `@everyone` or `@here`. Notifications of a kept role mention
-   * follow handle_role_mention_notifications (MENTION_EVERYONE, mentionable roles).
-   */
-  private async resolveMentionParts(parts: any[], channelId: string | null | undefined, botId: string): Promise<any[]> {
-    if (!Array.isArray(parts)) return parts
-    const isRole = (p: any) => p?.type === 'role_mention'
-    const isChannel = (p: any) => p?.type === 'channel_mention'
-    if (!parts.some((p) => isRole(p) || isChannel(p))) return parts
-
-    const serverId = channelId ? await this.channelServerId(channelId) : null
-    const uuids = (values: unknown[]) =>
-      [...new Set(values.filter((v): v is string => typeof v === 'string' && UUID_PATTERN.test(v)))]
-    const roleIds = uuids(parts.filter(isRole).map((p) => p.roleId))
-    const channelIds = uuids(parts.filter(isChannel).map((p) => p.channelId))
-
-    const roles = new Map<string, { name: string; color: string | null; isDefault: boolean }>()
-    if (serverId && roleIds.length > 0) {
-      const { data } = await supabase
-        .from('server_roles')
-        .select('id, name, color, is_default')
-        .eq('server_id', serverId)
-        .in('id', roleIds)
-      for (const r of (data ?? []) as Array<{ id: string; name: string; color: string | null; is_default?: boolean | null }>) {
-        roles.set(r.id, { name: r.name, color: r.color ?? null, isDefault: r.is_default === true })
-      }
-    }
-    const isHere = (p: any) => isRole(p) && p.roleId === HERE_ROLE_ID
-    const pingsAll = parts.some((p) => isHere(p) || (isRole(p) && roles.get(p.roleId)?.isDefault))
-    const canPingAll = pingsAll && !!serverId && (await this.checkServerPermission(botId, serverId, 'mention_everyone'))
-    const channels = new Map<string, string>()
-    if (serverId && channelIds.length > 0) {
-      const { data } = await supabase
-        .from('channels')
-        .select('id, name')
-        .eq('server_id', serverId)
-        .in('id', channelIds)
-      const named = await this.visibleChannels(botId, serverId, (data ?? []) as Array<{ id: string; name: string }>)
-      for (const c of named) channels.set(c.id, c.name)
-    }
-
-    const label = (value: unknown, fallback: string) =>
-      typeof value === 'string' && value.trim() !== '' ? value : fallback
-    return parts.map((part) => {
-      if (isHere(part)) {
-        if (!canPingAll) return { type: 'text', text: `@${HERE_ROLE_ID}` }
-        return { type: 'role_mention', roleId: HERE_ROLE_ID, roleName: HERE_ROLE_ID, roleColor: null }
-      }
-      if (isRole(part)) {
-        const role = roles.get(part.roleId)
-        if (!role) return { type: 'text', text: `@${label(part.roleName, 'role')}` }
-        if (role.isDefault && !canPingAll) return { type: 'text', text: `@${role.name.replace(/^@/, '')}` }
-        return { type: 'role_mention', roleId: part.roleId, roleName: role.name, roleColor: role.color }
-      }
-      if (isChannel(part)) {
-        const name = channels.get(part.channelId)
-        if (name === undefined) return { type: 'text', text: `#${label(part.name, 'channel')}` }
-        const out: Record<string, unknown> = { type: 'channel_mention', channelId: part.channelId, serverId, name }
-        if (typeof part.messageId === 'string' && UUID_PATTERN.test(part.messageId)) out.messageId = part.messageId
-        return out
-      }
-      return part
-    })
-  }
-
-  private formatContent(content: string | any[], embeds?: any[]): any[] {
-    const parts: any[] = []
-    
-    if (Array.isArray(content)) {
-      parts.push(...botContentParts(stripBotSuppliedPaths(content)))
-    } else if (content) {
-      parts.push({ type: 'text', text: content })
-    }
-    
-    if (Array.isArray(embeds) && embeds.length > 0) {
-      parts.push(...botContentParts(embeds.map(e => ({ ...e, type: 'embed' }))))
-    }
-    
-    return parts
   }
   
   private formatMessage(message: any) {
@@ -2508,7 +2820,7 @@ export class BotRestAPI {
       const row = Array.isArray(data) ? data[0] : null
       if (!row) return res.status(500).json({ error: 'Import returned no row' })
       if (row.status === 'created') {
-        await this.logBotAction(botId, 'emoji_imported', { emojiId: row.id, serverId, discordEmojiId })
+        await this.logBotAction(botId, 'emoji_imported', { emojiId: row.id, serverId, discordEmojiId }, { serverId })
       }
       res.status(row.status === 'created' ? 201 : 200).json(row)
     } catch (error: any) {
@@ -2568,15 +2880,36 @@ export class BotRestAPI {
   
   // AUDIT LOGGING
   
-  // Never throws; an audit failure must not fail the request that triggered it.
-  private async logBotAction(botId: string, action: string, metadata: any) {
+  /** The server of a channel for an audit row; null when the lookup finds none. */
+  private async auditServerOf(channelId: string): Promise<string | null> {
+    const cached = this.auditChannelServers.get(channelId)
+    if (cached) return cached
+    const serverId = await lookupChannelServerId(channelId)
+    if (serverId) this.auditChannelServers.set(channelId, serverId)
+    return serverId
+  }
+
+  /**
+   * Never throws; an audit failure must not fail the request that triggered it. `where` fills
+   * the server_id and channel_id columns; a channel alone is resolved to its server.
+   */
+  private async logBotAction(
+    botId: string,
+    action: string,
+    metadata: any,
+    where: { serverId?: string | null; channelId?: string | null } = {},
+  ) {
     try {
+      const channelId = where.channelId ?? null
+      const serverId = where.serverId ?? (channelId ? await this.auditServerOf(channelId) : null)
       // supabase-js resolves with { error } rather than rejecting; a catch alone observes nothing.
       const { error } = await supabase
         .from('bot_audit_log')
         .insert({
           bot_id: botId,
           action_type: action,
+          server_id: serverId,
+          channel_id: channelId,
           success: true,
           metadata
         })

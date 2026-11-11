@@ -1,6 +1,6 @@
 -- Server profiles: profiles.pronouns, user_servers.{avatar_url,banner_url,bio,pronouns}, and the RPCs
 -- set_my_server_profile, moderate_server_profile, service_set_member_server_profile
--- (20261109200002_server_profiles.sql).
+-- (20261110950002_server_profiles.sql).
 --
 --   owner  mallory (33..)   owns the server
 --   admin  banned  (44..)   position 9    no MANAGE_NICKNAMES

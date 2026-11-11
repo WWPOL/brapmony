@@ -16,9 +16,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version-file: ".nvmrc"
           cache: npm
@@ -37,9 +37,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version-file: ".nvmrc"
           cache: npm
@@ -58,9 +58,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version-file: ".nvmrc"
           cache: npm
@@ -81,9 +81,9 @@ jobs:
     env:
       BOT_GATEWAY_DB_CONTAINER: ci-botgw-rpc-${{ github.run_id }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version-file: ".nvmrc"
           cache: npm
@@ -110,9 +110,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version-file: ".nvmrc"
           cache: npm
@@ -126,9 +126,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version-file: ".nvmrc"
           cache: npm
@@ -145,9 +145,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version-file: ".nvmrc"
           cache: npm
@@ -165,9 +165,9 @@ jobs:
     timeout-minutes: 15
     needs: [unit-tests, type-check]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version-file: ".nvmrc"
           cache: npm
@@ -190,9 +190,18 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      # The stacks publish fixed ports inside Linux's ephemeral range (32768-60999): 54480 and
+      # 56480 (e2e/stack.sh), 55480-55492 (e2e/specs/livekit.ts), 54580-54581
+      # (e2e/federation/stack.sh). A client socket of an earlier step that drew one of them fails
+      # the publish with "address already in use" (2026-11-05 twice, 2026-11-10). Reserved ports
+      # are skipped by automatic assignment; explicit binds still take them. First step, before
+      # any connection.
+      - name: Reserve the stack ports
+        run: sudo sysctl -w net.ipv4.ip_local_reserved_ports=54480-56480
 
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version-file: ".nvmrc"
           cache: npm
@@ -225,9 +234,13 @@ jobs:
       matrix:
         shard: [1, 2, 3, 4, 5]
     steps:
-      - uses: actions/checkout@v4
+      # Ports as in e2e-stack.
+      - name: Reserve the stack ports
+        run: sudo sysctl -w net.ipv4.ip_local_reserved_ports=54480-56480
 
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version-file: ".nvmrc"
           cache: npm
@@ -254,7 +267,7 @@ jobs:
 
       - name: Keep the report when a journey fails
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: playwright-report-${{ matrix.shard }}
           path: |
@@ -277,9 +290,13 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      # Ports as in e2e-stack.
+      - name: Reserve the stack ports
+        run: sudo sysctl -w net.ipv4.ip_local_reserved_ports=54480-56480
 
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version-file: ".nvmrc"
           cache: npm
@@ -300,7 +317,7 @@ jobs:
 
       - name: Keep the report when a journey fails
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: playwright-report-webkit
           path: |
@@ -317,9 +334,13 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      # Ports as in e2e-stack.
+      - name: Reserve the stack ports
+        run: sudo sysctl -w net.ipv4.ip_local_reserved_ports=54480-56480
 
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version-file: ".nvmrc"
           cache: npm
@@ -346,9 +367,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version-file: ".nvmrc"
           cache: npm
@@ -356,6 +377,21 @@ jobs:
       - run: npm ci
 
       - run: npm run docs:build
+
+  # Every image the stack can start has both platforms install.sh offers; Kong boots and routes.
+  # The arm64 runner runs what an arm64 install runs.
+  self-host-stack:
+    name: Self-host stack (${{ matrix.runner }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-latest, ubuntu-24.04-arm]
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - run: bash scripts/check-self-host-stack.sh
 
   ci-verdict:
     name: CI verdict
@@ -376,6 +412,7 @@ jobs:
       - e2e-webkit
       - federation-roundtrip
       - docs
+      - self-host-stack
     steps:
       - name: Require every job to have succeeded
         run: |
@@ -403,6 +440,7 @@ jobs:
           check "e2e-webkit"             "${{ needs.e2e-webkit.result }}"
           check "federation-roundtrip"   "${{ needs.federation-roundtrip.result }}"
           check "docs"                   "${{ needs.docs.result }}"
+          check "self-host-stack"        "${{ needs.self-host-stack.result }}"
 
           [ "$fail" -eq 0 ] || { echo "::error::one or more CI jobs failed"; exit 1; }
           echo "all CI jobs green"

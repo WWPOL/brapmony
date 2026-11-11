@@ -13,8 +13,8 @@
         :server-id="serverId"
         truncate
       />
-      <span class="reply-preview">
-        {{ previewText }}
+      <span class="reply-preview" data-testid="reply-preview">
+        <TwemojiText :text="previewText" />
       </span>
     </span>
   </button>
@@ -23,6 +23,7 @@
 <script setup lang="ts">
 import { computed, toRef } from 'vue'
 import Avatar from '@/components/common/Avatar.vue'
+import TwemojiText from '@/components/common/TwemojiText.vue'
 import MessageAuthorLabel from '@/components/messages/MessageAuthorLabel.vue'
 import { useReplyTarget } from '@/composables/useReplyTarget'
 import { useT } from '@/composables/useT'

@@ -1,9 +1,9 @@
--- 20261109200003_server_profile_broadcast.sql: user_servers changes broadcast to
+-- 20261110950003_server_profile_broadcast.sql: user_servers changes broadcast to
 -- server-presence:<server> as presence_event: member:join, member:leave and member:update (the
--- five server profile fields, only when one changes).
+-- five server profile fields, only when one changes); account pronouns in profile:updated.
 BEGIN;
 SET LOCAL search_path = tests, public;
-SELECT plan(8);
+SELECT plan(10);
 
 INSERT INTO public.servers (id, name, owner) VALUES
   ('f2480000-0000-0000-0000-000000000001', 'Broadcast248', '33333333-0000-0000-0000-000000000003');
@@ -66,6 +66,21 @@ SELECT is(
     WHERE topic = 'server-presence:f2480000-0000-0000-0000-000000000001'
       AND payload ->> 'type' = 'member:update'),
   1, 'writing the same values broadcasts nothing');
+
+-- Account pronouns (20261110950006): profile:updated on each of the member's servers.
+UPDATE public.profiles SET pronouns = 'they/them' WHERE id = '11111111-0000-0000-0000-000000000001';
+
+SELECT is(
+  (SELECT count(*)::int FROM realtime.messages
+    WHERE topic = 'server-presence:f2480000-0000-0000-0000-000000000001'
+      AND payload ->> 'type' = 'profile:updated'
+      AND payload ->> 'user_id' = '11111111-0000-0000-0000-000000000001'),
+  1, 'a change to account pronouns alone broadcasts profile:updated');
+SELECT is(
+  (SELECT payload ->> 'pronouns' FROM realtime.messages
+    WHERE topic = 'server-presence:f2480000-0000-0000-0000-000000000001'
+      AND payload ->> 'type' = 'profile:updated'),
+  'they/them', 'profile:updated carries the pronouns');
 
 DELETE FROM public.user_servers
  WHERE user_id = '11111111-0000-0000-0000-000000000001' AND server_id = 'f2480000-0000-0000-0000-000000000001';
