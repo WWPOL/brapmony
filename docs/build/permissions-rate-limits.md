@@ -83,7 +83,7 @@ A refused request answers `403`:
 | `add_reactions` and channel access | `PUT` and `DELETE /messages/{message.id}/reactions/{emoji}` |
 | `manage_channels` in the server | `POST /servers/{server.id}/channels`, `PATCH /channels/{channel.id}`, `POST /servers/{server.id}/categories`, `PATCH /servers/{server.id}/categories/{category.id}`, `PUT /channels/{channel.id}/permission-overrides`, `DELETE /channels/{channel.id}/permission-overrides/role/{role.id}` |
 | `manage_roles` in the server | `POST`, `PATCH`, `DELETE /servers/{server.id}/roles…` |
-| Being the bot of the server's Discord bridge | `POST /servers/{server.id}/emojis/discord`, `GET /servers/{server.id}/sounds`, `POST /servers/{server.id}/sounds/discord`, `DELETE /servers/{server.id}/sounds/{sound.id}`, `PUT /threads/{thread.id}/discord`, and a `discord_thread_id` on `POST /channels/{channel.id}/threads` |
+| Being the bot of the server's Discord bridge | `GET /servers/{server.id}/emojis/discord`, `POST /servers/{server.id}/emojis/discord`, `DELETE /servers/{server.id}/emojis/{emoji.id}`, `GET /servers/{server.id}/sounds`, `POST /servers/{server.id}/sounds/discord`, `DELETE /servers/{server.id}/sounds/{sound.id}`, `PUT /threads/{thread.id}/discord`, and a `discord_thread_id` on `POST /channels/{channel.id}/threads` |
 | A valid token | `GET`, `PUT`, `POST /commands`, `DELETE /commands/{command.id}` |
 | An interaction sent to this bot; for a public answer, `send_messages` and channel access too | `POST /interactions/{interaction.id}/callback`, `PATCH /interactions/{interaction.id}/response`, `POST /interactions/{interaction.id}/followups` |
 
@@ -129,6 +129,7 @@ Role permission masks, channel override masks and `missing_permissions` use thes
 | 13 | `SEND_MESSAGES_IN_THREADS` | 29 | `MOVE_MEMBERS` |
 | 14 | `CREATE_PUBLIC_THREADS` | 30 | `USE_SOUNDBOARD` |
 | 15 | `CREATE_PRIVATE_THREADS` | 31 | `USE_EXTERNAL_SOUNDS` |
+| 32 | `CHANGE_NICKNAME` | 33 | `MANAGE_NICKNAMES` |
 
 The value of a bit is 2 to the power of its number: `SEND_MESSAGES` is `4096`. What each permission means for members is on [Roles and permissions](/run/roles-permissions).
 

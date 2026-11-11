@@ -32,6 +32,10 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   bot-gateway endpoints for the server's bridge bot: `GET
   /servers/{id}/sounds`, `POST /servers/{id}/sounds/discord` and `DELETE
   /servers/{id}/sounds/{soundId}`.
+- **Discord bridge emoji sync.** The same bridge bot can sync a server's emoji
+  through `GET /servers/{id}/emojis/discord` (the server's emoji limit and its
+  Discord-linked emoji, removed ones included), an `update` flag on `POST
+  /servers/{id}/emojis/discord`, and `DELETE /servers/{id}/emojis/{emojiId}`.
 - **Import Discord history.** A Discord bridge can now copy a paired
   channel's older messages, threads and pins into its Harmony channel, with
   their original dates and Discord authors. Start it with **Import history**
@@ -39,6 +43,13 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   `/bridge import-history` in Discord (bridge 2.6.0 or later). Imported
   messages are quiet: no notifications, unread counts or federation, and a
   repeat or a restart never duplicates a message. Reactions are not imported.
+- **Server profiles.** Set a nickname, avatar, banner, bio and pronouns for each server
+  (right-click the server, **Edit server profile**). They show in messages, the member list,
+  voice, mentions, notifications, search and pins; direct messages keep your account profile.
+- **Pronouns** on your account profile, shown under your name and federated.
+- **Change Nickname** and **Manage Nicknames** permissions. Every server's `@everyone` role
+  gets Change Nickname; Manage Nicknames lets moderators change a member's nickname or reset
+  their server profile, logged in the audit log.
 - **One-command self-hosting.** `curl -fsSL https://raw.githubusercontent.com/y4my4my4m/harmony/master/self-host/install.sh | bash`
   installs an instance on a blank Linux server: it checks the host (offering
   Docker and a swap file), asks a few questions, checks DNS, starts the
@@ -145,6 +156,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   channels of a server live and reads who is in the others every 30 seconds.
 
 ### Changed
+- **Bot API:** importing a Discord emoji through the bridge now respects the server's emoji limit
+  (`409` with `"code": "EMOJI_LIMIT"`) and name uniqueness (`409` with `"code": "EMOJI_NAME_TAKEN"`).
 - **Bot API:** message text over the instance's length limit answers `400` on create and edit, in
   place of `500`.
 - **Bot API:** a message history read returns at most 100 messages and a member list at most 1000;
