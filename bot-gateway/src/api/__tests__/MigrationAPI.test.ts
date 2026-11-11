@@ -23,6 +23,7 @@ const mocks = vi.hoisted(() => ({
   rpc: vi.fn(),
   from: vi.fn(),
   userRpc: vi.fn(),
+  autoconfirm: vi.fn(),
   getUser: vi.fn(),
   createUser: vi.fn(),
   deleteUser: vi.fn(),
@@ -55,6 +56,7 @@ vi.mock('../../config/supabase.js', () => ({
     auth: { getUser: mocks.getUser, admin: { createUser: mocks.createUser, deleteUser: mocks.deleteUser }, resend: mocks.resend },
   },
   createUserClient: () => ({ rpc: mocks.userRpc }),
+  fetchMailerAutoconfirm: mocks.autoconfirm,
   config: mocks.config,
 }))
 
@@ -101,7 +103,8 @@ beforeEach(() => {
   })
   mocks.from.mockImplementation((table: string) => db.from(table))
   mocks.config.bridge = { instanceDomain: 'harmony.test', publicUrl: '', hostSecret: '', configPollMs: 5_000 }
-  delete process.env.GOTRUE_MAILER_AUTOCONFIRM
+  mocks.autoconfirm.mockReset()
+  mocks.autoconfirm.mockResolvedValue(false)
 
   rpcHandlers = {
     discord_migration_credentials: () => ({
@@ -154,8 +157,11 @@ beforeEach(() => {
   d.fetchGuildChannels.mockResolvedValue({
     ok: true,
     value: [
-      { id: 'c1', name: 'general', permission_overwrites: [{ type: 0 }, { type: 1 }] },
-      { id: 'c2', name: 'random', permission_overwrites: [{ type: 1 }, { type: 1 }] },
+      { id: 'c1', name: 'general', type: 0, permission_overwrites: [{ type: 0 }, { type: 1 }] },
+      { id: 'c2', name: 'random', type: 0, permission_overwrites: [{ type: 1 }, { type: 1 }] },
+      { id: 'c3', name: 'Text Channels', type: 4, permission_overwrites: [] },
+      { id: 'c4', name: 'Lounge', type: 2, permission_overwrites: [] },
+      { id: 'c5', name: 'news', type: 5, permission_overwrites: [] },
     ],
   })
 
@@ -304,11 +310,19 @@ describe('POST /bridge/v2/migrate/account', () => {
     expect(mocks.createUser.mock.invocationCallOrder[0]).toBeLessThan(mocks.rpc.mock.invocationCallOrder.at(-1)!)
   })
 
-  it('reports needsConfirmation false and confirms the email when the auth service auto-confirms', async () => {
-    process.env.GOTRUE_MAILER_AUTOCONFIRM = 'true'
+  it('reports needsConfirmation false and confirms the email when GoTrue auto-confirms', async () => {
+    mocks.autoconfirm.mockResolvedValue(true)
     const res = await post()
     expect(res.body).toEqual({ ok: true, needsConfirmation: false })
     expect(mocks.createUser.mock.calls[0][0].email_confirm).toBe(true)
+  })
+
+  it('fails safe to an unconfirmed account and warns when the GoTrue settings cannot be read', async () => {
+    mocks.autoconfirm.mockResolvedValue(null)
+    const res = await post()
+    expect(res.body).toEqual({ ok: true, needsConfirmation: true })
+    expect(mocks.createUser.mock.calls[0][0].email_confirm).toBe(false)
+    expect(logged.some((l) => l.includes('GoTrue settings unreadable'))).toBe(true)
   })
 
   it('answers 403 account_creation_disabled when the instance switch is off', async () => {
@@ -350,6 +364,15 @@ describe('POST /bridge/v2/migrate/account', () => {
     const res = await post()
     expect(res.status).toBe(400)
     expect(mocks.deleteUser).toHaveBeenCalledWith(AUTH_ID)
+  })
+
+  it('rolls back on any bind error and logs a failed rollback with the user id', async () => {
+    rpcHandlers.discord_migration_bind_claim = () => ({ data: null, error: { code: 'XX000', message: 'boom' } })
+    mocks.deleteUser.mockResolvedValue({ data: null, error: { message: 'gotrue down' } })
+    const res = await post()
+    expect(res.status).toBe(500)
+    expect(mocks.deleteUser).toHaveBeenCalledWith(AUTH_ID)
+    expect(logged.some((l) => l.includes(AUTH_ID) && l.includes('gotrue down'))).toBe(true)
   })
 
   it('rejects a malformed username', async () => {
@@ -395,7 +418,7 @@ describe('POST /bridge/v2/migrate/:serverId/refresh', () => {
     ])
     expect(db.rows('discord_migrations').find((m) => m.server_id === SERVER_ID)!.bot_can_ban).toBe(true)
     expect(rpcCalls('discord_migration_store_warnings')).toEqual([
-      { p_server_id: SERVER_ID, p_warnings: { unpaired_channels: ['random'], member_overrides: 3 } },
+      { p_server_id: SERVER_ID, p_warnings: { unpaired_channels: ['random', 'news'], member_overrides: 3 } },
     ])
   })
 

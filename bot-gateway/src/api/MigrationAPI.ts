@@ -1,7 +1,7 @@
 import { Router, type Request, type Response, type RequestHandler } from 'express'
 import { rateLimit } from 'express-rate-limit'
 import { randomBytes } from 'crypto'
-import { supabase, createUserClient } from '../config/supabase.js'
+import { supabase, createUserClient, fetchMailerAutoconfirm } from '../config/supabase.js'
 import { configuredBaseUrl } from '../bridge/bridgeConfig.js'
 import { meetsAssurance } from '../utils/sessionAssurance.js'
 import {
@@ -23,6 +23,8 @@ const TICKET = /^[0-9a-f]{64}$/
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const USERNAME = /^[a-z0-9_]{3,24}$/
 const OAUTH_CODE = /^[A-Za-z0-9._~-]{1,512}$/
+/** Discord channel types a bridge can pair: text, announcement, forum. */
+const PAIRABLE_CHANNEL_TYPES: ReadonlySet<number> = new Set([0, 5, 15])
 const LINK_STATE_TTL_MS = 10 * 60 * 1000
 
 export interface MigrationOptions {
@@ -270,7 +272,7 @@ export class MigrationAPI {
 
   private async readinessWarnings(
     serverId: string,
-    channels: Array<{ id: string; name: string; permission_overwrites: Array<{ type: number }> }>,
+    channels: Array<{ id: string; name: string; type: number; permission_overwrites: Array<{ type: number }> }>,
   ) {
     const { data: bridges, error } = await supabase.from('discord_bridges').select('id').eq('server_id', serverId)
     if (error) {
@@ -291,7 +293,7 @@ export class MigrationAPI {
       paired = new Set(((rows ?? []) as Array<{ discord_channel_id: string }>).map((r) => r.discord_channel_id))
     }
     return {
-      unpaired_channels: channels.filter((c) => !paired.has(c.id)).map((c) => c.name),
+      unpaired_channels: channels.filter((c) => PAIRABLE_CHANNEL_TYPES.has(c.type) && !paired.has(c.id)).map((c) => c.name),
       member_overrides: channels.reduce((n, c) => n + c.permission_overwrites.filter((o) => o.type === 1).length, 0),
     }
   }
@@ -466,8 +468,10 @@ export class MigrationAPI {
     }
     if (Array.isArray(taken) && taken.length > 0) return res.status(409).json({ error: 'username_taken' })
 
-    // Sign-up needs a confirmed email unless the auth service auto-confirms.
-    const needsConfirmation = process.env.GOTRUE_MAILER_AUTOCONFIRM !== 'true'
+    // Sign-up needs a confirmed email unless GoTrue auto-confirms; unreadable settings fail safe to confirming.
+    const autoconfirm = await fetchMailerAutoconfirm()
+    if (autoconfirm === null) console.warn('GoTrue settings unreadable; creating the migrated account as unconfirmed')
+    const needsConfirmation = autoconfirm !== true
     const created = await supabase.auth.admin.createUser({
       email,
       password,
@@ -488,7 +492,10 @@ export class MigrationAPI {
     const bound = await supabase.rpc('discord_migration_bind_claim', { p_ticket: ticket, p_auth_user_id: authUserId })
     if (bound.error) {
       // The ticket expired or was bound meanwhile: do not leave an orphan account behind.
-      await supabase.auth.admin.deleteUser(authUserId).catch(() => undefined)
+      const removed = await supabase.auth.admin.deleteUser(authUserId).catch((err: unknown) => ({ error: err as { message?: string } }))
+      if (removed?.error) {
+        console.error(`migration rollback: deleting auth user ${authUserId} failed:`, removed.error.message ?? 'unknown error')
+      }
       const expired = (bound.error.message ?? '').includes('TICKET_EXPIRED')
       if (!expired) console.error('discord_migration_bind_claim failed:', bound.error.code, bound.error.message)
       return res.status(expired ? 400 : 500).json({ error: expired ? 'invalid_ticket' : 'bind_failed' })

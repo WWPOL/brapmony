@@ -240,7 +240,7 @@ export function fetchGuildChannels(
   botToken: string,
   guildId: string,
   opts: DiscordClientOptions = {},
-): Promise<DiscordResult<Array<{ id: string; name: string; permission_overwrites: Array<{ type: number }> }>>> {
+): Promise<DiscordResult<Array<{ id: string; name: string; type: number; permission_overwrites: Array<{ type: number }> }>>> {
   return botGetMapped(
     botToken,
     `/guilds/${guildId}/channels`,
@@ -248,6 +248,7 @@ export function fetchGuildChannels(
       body.map((c) => ({
         id: String(c.id),
         name: String(c.name ?? ''),
+        type: Number(c.type ?? 0),
         permission_overwrites: (c.permission_overwrites ?? []).map((o: any) => ({ type: Number(o.type) })),
       })),
     opts,

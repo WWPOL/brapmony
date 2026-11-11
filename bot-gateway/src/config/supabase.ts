@@ -39,6 +39,31 @@ export function createUserClient(jwt: string) {
   })
 }
 
+/** Seconds the GoTrue settings are cached. */
+const AUTH_SETTINGS_TTL_MS = 60_000
+let autoconfirmCache: { value: boolean; at: number } | null = null
+
+/**
+ * GoTrue's `mailer_autoconfirm` from its public settings endpoint (cached 60 s); null when the
+ * settings cannot be read, so callers can fail safe.
+ */
+export async function fetchMailerAutoconfirm(): Promise<boolean | null> {
+  if (autoconfirmCache && Date.now() - autoconfirmCache.at < AUTH_SETTINGS_TTL_MS) return autoconfirmCache.value
+  try {
+    const res = await fetch(`${supabaseUrl}/auth/v1/settings`, {
+      headers: { apikey: supabaseServiceKey as string },
+      signal: AbortSignal.timeout(5_000),
+    })
+    if (!res.ok) return null
+    const body = (await res.json()) as { mailer_autoconfirm?: unknown }
+    if (typeof body.mailer_autoconfirm !== 'boolean') return null
+    autoconfirmCache = { value: body.mailer_autoconfirm, at: Date.now() }
+    return body.mailer_autoconfirm
+  } catch {
+    return null
+  }
+}
+
 /**
  * Express `trust proxy`. Default trusts loopback and private-network hops (nginx on the host or
  * in the compose network), so req.ip is the client address nginx forwarded. A number is a hop
