@@ -8,7 +8,7 @@
 --   s1  roles Mod (c1), Helper (c4), Artist (c3, unmapped), Admins (c2, ADMINISTRATOR); map D1 -> Mod, D2 -> Admins
 BEGIN;
 SET LOCAL search_path = tests, public;
-SELECT plan(91);
+SELECT plan(95);
 
 CREATE TEMP TABLE out (k text PRIMARY KEY, v jsonb) ON COMMIT DROP;
 GRANT ALL ON out TO PUBLIC;
@@ -245,10 +245,12 @@ SELECT public.discord_migration_sync_member('f2760000-0000-0000-0000-0000000000a
 RESET role;
 
 -- timeouts_respect_harmony -----------------------------------------------------------------------------
+INSERT INTO out VALUES ('tuntil', to_jsonb((now() + interval '1 hour')::text));
 SET LOCAL role service_role;
-SELECT public.discord_migration_sync_member('f2760000-0000-0000-0000-0000000000a1',
-  '22222222-0000-0000-0000-000000000002', format('{"present": true, "timed_out_until": "%s"}', (now() + interval '1 hour')::text)::jsonb);
+INSERT INTO out VALUES ('to1', public.discord_migration_sync_member('f2760000-0000-0000-0000-0000000000a1',
+  '22222222-0000-0000-0000-000000000002', format('{"present": true, "timed_out_until": "%s"}', (SELECT v #>> '{}' FROM out WHERE k = 'tuntil'))::jsonb));
 RESET role;
+SELECT is((SELECT v ->> 'timeout_changed' FROM out WHERE k = 'to1'), 'true', 'timeout_changed: true when a Discord timeout is applied');
 SELECT results_eq($q$SELECT source, reason, until > now() FROM public.server_member_timeouts
                       WHERE server_id = 'f2760000-0000-0000-0000-0000000000a1' AND user_id = '22222222-0000-0000-0000-000000000002'$q$,
   $q$VALUES ('discord_migration'::text, 'Timed out on Discord'::text, true)$q$, 'timeout: a Discord timeout creates a discord_migration row');
@@ -257,9 +259,13 @@ SELECT is((SELECT count(*)::int FROM public.server_audit_log WHERE server_id = '
               AND source = 'system' AND details ->> 'via' = 'discord_migration' AND details ? 'until'),
   1, 'timeout: audited once, as the migration');
 SET LOCAL role service_role;
-SELECT public.discord_migration_sync_member('f2760000-0000-0000-0000-0000000000a1',
-  '22222222-0000-0000-0000-000000000002', '{"present": true, "timed_out_until": null}');
+INSERT INTO out VALUES ('to2', public.discord_migration_sync_member('f2760000-0000-0000-0000-0000000000a1',
+  '22222222-0000-0000-0000-000000000002', format('{"present": true, "timed_out_until": "%s"}', (SELECT v #>> '{}' FROM out WHERE k = 'tuntil'))::jsonb));
+INSERT INTO out VALUES ('to3', public.discord_migration_sync_member('f2760000-0000-0000-0000-0000000000a1',
+  '22222222-0000-0000-0000-000000000002', '{"present": true, "timed_out_until": null}'));
 RESET role;
+SELECT is((SELECT v ->> 'timeout_changed' FROM out WHERE k = 'to2'), 'false', 'timeout_changed: false when the same until is already stored');
+SELECT is((SELECT v ->> 'timeout_changed' FROM out WHERE k = 'to3'), 'true', 'timeout_changed: true when a Discord timeout is lifted');
 SELECT is((SELECT count(*)::int FROM public.server_member_timeouts
             WHERE server_id = 'f2760000-0000-0000-0000-0000000000a1' AND user_id = '22222222-0000-0000-0000-000000000002'),
   0, 'timeout: a later null removes it');
@@ -274,9 +280,10 @@ CREATE TEMP TABLE mod_timeout ON COMMIT DROP AS
   SELECT * FROM public.server_member_timeouts
    WHERE server_id = 'f2760000-0000-0000-0000-0000000000a1' AND user_id = '22222222-0000-0000-0000-000000000002';
 SET LOCAL role service_role;
-SELECT public.discord_migration_sync_member('f2760000-0000-0000-0000-0000000000a1',
-  '22222222-0000-0000-0000-000000000002', format('{"present": true, "timed_out_until": "%s"}', (now() + interval '1 hour')::text)::jsonb);
+INSERT INTO out VALUES ('to4', public.discord_migration_sync_member('f2760000-0000-0000-0000-0000000000a1',
+  '22222222-0000-0000-0000-000000000002', format('{"present": true, "timed_out_until": "%s"}', (now() + interval '1 hour')::text)::jsonb));
 RESET role;
+SELECT is((SELECT v ->> 'timeout_changed' FROM out WHERE k = 'to4'), 'false', 'timeout_changed: false when a moderator timeout is running');
 SELECT results_eq($q$SELECT * FROM public.server_member_timeouts
                       WHERE server_id = 'f2760000-0000-0000-0000-0000000000a1' AND user_id = '22222222-0000-0000-0000-000000000002'$q$,
   $q$SELECT * FROM mod_timeout$q$, 'timeout: a running moderator timeout is unchanged by a Discord timeout');

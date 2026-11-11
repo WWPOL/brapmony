@@ -424,7 +424,7 @@ export class MigrationSyncRunner {
       return { kind: 'error', memberFetch: true, failed: false }
     }
     if (data?.skipped || data?.candidate) return { kind: 'synced', memberFetch: true, failed: false }
-    if (member.timed_out_until && Date.parse(member.timed_out_until) > this.now()) result.timeouts++
+    if (data?.timeout_changed === true) result.timeouts++
     const roles = data?.roles
     if (roles) result.rolesChanged += (roles.added?.length ?? 0) + (roles.removed?.length ?? 0)
     return { kind: 'synced', memberFetch: true, failed: false }

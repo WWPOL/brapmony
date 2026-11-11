@@ -2034,7 +2034,8 @@ $$;
 -- Syncs one member from what the gateway read. Returns {skipped: 'not_member'|'no_link'} for anyone who is
 -- not an accepted member with an active link (nothing changes), {candidate: 'left'|'banned'} when the member
 -- is gone from Discord (nothing is removed here), otherwise {present: true, roles: {added, removed}}, plus
--- profile_error: true when the profile writes failed (the roles and the timeout are still applied).
+-- profile_error: true when the profile writes failed (the roles and the timeout are still applied) and
+-- timeout_changed: true only when a discord_migration timeout row was written or deleted.
 -- A key missing from p_member (role_ids, joined_at, timed_out_until, a profile field) was not fetched and
 -- leaves that part alone.
 CREATE OR REPLACE FUNCTION public.discord_migration_sync_member(
@@ -2058,6 +2059,7 @@ DECLARE
     v_timeout public.server_member_timeouts;
     v_username text;
     v_profile_error boolean := false;
+    v_timeout_changed boolean := false;
 BEGIN
     IF p_member IS NULL OR jsonb_typeof(p_member) <> 'object' THEN
         RAISE EXCEPTION 'p_member must be a JSON object' USING ERRCODE = '22023';
@@ -2153,6 +2155,7 @@ BEGIN
                        SET until = EXCLUDED.until, reason = EXCLUDED.reason, source = EXCLUDED.source,
                            created_by = NULL, created_at = now();
                     IF v_timeout.user_id IS NULL OR v_timeout.until <= now() OR v_timeout.until IS DISTINCT FROM v_until THEN
+                        v_timeout_changed := true;
                         PERFORM public.server_audit_write(p_server_id, 'member.timeout', 'user', p_user_id::text,
                             v_username, NULL,
                             jsonb_build_object('until', v_until, 'via', 'discord_migration'),
@@ -2164,6 +2167,9 @@ BEGIN
             DELETE FROM public.server_member_timeouts t
              WHERE t.server_id = p_server_id AND t.user_id = p_user_id AND t.source = 'discord_migration'
             RETURNING * INTO v_timeout;
+            IF FOUND THEN
+                v_timeout_changed := true;
+            END IF;
             IF FOUND AND v_timeout.until > now() THEN
                 PERFORM public.server_audit_write(p_server_id, 'member.timeout_remove', 'user', p_user_id::text,
                     v_username, NULL, jsonb_build_object('via', 'discord_migration'), NULL, NULL, 'system');
@@ -2174,7 +2180,7 @@ BEGIN
 
     UPDATE public.discord_migration_links SET last_synced_at = now()
      WHERE server_id = p_server_id AND user_id = p_user_id;
-    RETURN jsonb_build_object('present', true, 'roles', v_role_result)
+    RETURN jsonb_build_object('present', true, 'roles', v_role_result, 'timeout_changed', v_timeout_changed)
         || CASE WHEN v_profile_error THEN jsonb_build_object('profile_error', true) ELSE '{}'::jsonb END;
 END;
 $$;

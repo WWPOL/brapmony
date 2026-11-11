@@ -287,8 +287,22 @@ describe('MigrationSyncRunner.syncServer', () => {
     const t = build({ links: [link(1)], members: () => member({ timed_out_until: until }), syncMember: () => ({ skipped: 'no_link' }) })
     const r = await t.runner.syncServer(due)
     expect(r.timeouts).toBe(0)
-    const ok = build({ links: [link(1)], members: () => member({ timed_out_until: until }) })
+    const ok = build({
+      links: [link(1)],
+      members: () => member({ timed_out_until: until }),
+      syncMember: () => ({ present: true, roles: { added: [], removed: [] }, timeout_changed: true }),
+    })
     expect((await ok.runner.syncServer(due)).timeouts).toBe(1)
+  })
+
+  it('does not count a timeout the database left alone', async () => {
+    const until = new Date(Date.now() + 3600_000).toISOString()
+    const t = build({
+      links: [link(1)],
+      members: () => member({ timed_out_until: until }),
+      syncMember: () => ({ present: true, roles: { added: [], removed: [] }, timeout_changed: false }),
+    })
+    expect((await t.runner.syncServer(due)).timeouts).toBe(0)
   })
 
   it('pauses with discord_errors when over half the member fetches fail, applying no removals', async () => {
