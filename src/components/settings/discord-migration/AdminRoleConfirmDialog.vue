@@ -14,16 +14,20 @@
         </button>
       </div>
       <template v-else>
-        <p class="dm-text">{{ t('discordMigration.adminConfirm.holders') }}</p>
+        <p class="dm-text" data-testid="admin-confirm-holders-text">
+          {{ t(pending ? 'discordMigration.adminConfirm.holdersPending' : 'discordMigration.adminConfirm.holders') }}
+        </p>
         <ul v-if="holders.length" class="dm-holders" data-testid="admin-confirm-holders">
           <li v-for="holder in holders" :key="holder.user_id">
             {{ holder.display_name || holder.username || holder.user_id }}
-            <span v-if="holder.display_name && holder.username" class="dm-muted">@{{ holder.username }}</span>
+            <span v-if="holder.display_name && holder.username" class="dm-muted">{{ '@' + holder.username }}</span>
           </li>
         </ul>
         <p v-else class="dm-muted" data-testid="admin-confirm-none">{{ t('discordMigration.adminConfirm.noHolders') }}</p>
       </template>
-      <p class="dm-text">{{ t('discordMigration.adminConfirm.future') }}</p>
+      <p class="dm-text" data-testid="admin-confirm-future">
+        {{ t(pending ? 'discordMigration.adminConfirm.futurePending' : 'discordMigration.adminConfirm.future') }}
+      </p>
     </div>
     <template #footer>
       <button type="button" class="btn btn-secondary" data-testid="admin-confirm-cancel" @click="emit('cancel')">
@@ -53,6 +57,8 @@ defineProps<{
   busy?: boolean
   /** The holders could not be loaded: Confirm stays disabled until a retry works. */
   loadFailed?: boolean
+  /** Saving a role map whose Harmony roles do not carry Administrator yet: only the Discord side does. */
+  pending?: boolean
 }>()
 
 const emit = defineEmits<{ confirm: []; cancel: []; retry: [] }>()

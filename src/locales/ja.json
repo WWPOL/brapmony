@@ -5776,7 +5776,7 @@
       "title": "Discordから移行",
       "loading": "読み込み中…",
       "lead": "DiscordアカウントをHarmonyにリンクすると、このコミュニティの移行後もロールを引き継げます。プロフィールも任意で引き継げます。",
-      "linkTo": "@{username}にリンクします。",
+      "linkTo": "{'@'}{username}にリンクします。",
       "notYou": "あなたではありませんか？ サインアウト",
       "signInInstead": "代わりにサインイン",
       "signInInsteadHint": "その後、もう一度「Discordでサインイン」を選んでください。",
@@ -5862,7 +5862,7 @@
     "guild": {
       "label": "DiscordサーバーID",
       "hint": "Discordで開発者モードをオンにし、サーバーを右クリックして「サーバーIDをコピー」を選びます。",
-      "locked": "移行が開いている間は、Discordサーバーを変更できません。"
+      "locked": "移行を開いた後は、Discordサーバーを変更できません。"
     },
     "refresh": {
       "button": "Discordから取得",
@@ -5908,8 +5908,10 @@
       "title": "管理者権限を付与しますか?",
       "lead": "管理者権限を持つロールをHarmonyのロールに対応付けようとしています。",
       "holders": "次のメンバーがこのサーバーの管理者になります:",
+      "holdersPending": "次のメンバーがこのロールを持ちます。このロールに管理者権限が適用されると、管理者になります:",
       "noHolders": "このロールを持つ人はまだいません。",
       "future": "移行が開いている間にDiscordでこのロールを付与された人も、こちらで管理者になります。",
+      "futurePending": "移行が開いている間にDiscordでこのロールを付与された人も、こちらでこのロールを持ち、管理者権限が適用されると管理者になります。",
       "confirm": "管理者にする"
     },
     "ready": {
@@ -5968,9 +5970,10 @@
       "actions": "操作",
       "never": "なし",
       "allowBack": "復帰を許可",
+      "leftHint": "Discordを退出した、または復帰を許可されました。再びリンクできます。",
       "statuses": {
         "active": "アクティブ",
-        "left": "Discordを退出",
+        "left": "未リンク",
         "banned": "BAN済み",
         "kicked_on_harmony": "こちらでキック済み"
       }

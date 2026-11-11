@@ -178,6 +178,21 @@ describe('role map', () => {
     ]))
   })
 
+  it('says the members will hold the role when only the Discord side is Administrator', async () => {
+    api.saveRoleMap.mockRejectedValueOnce(new MigrationError('ADMIN_ROLE_NEEDS_CONFIRM', 'ADMIN_ROLE_NEEDS_CONFIRM'))
+    api.adminImpact.mockResolvedValue({ holders: [{ user_id: 'u1', username: 'carol', display_name: 'Carol' }] })
+    const cfg = config()
+    cfg.discord_roles[1].harmony_permissions = '1'
+    const w = await mountPanel(cfg)
+    await w.find('[data-testid="map-D2"]').setValue('H2')
+    await flushPromises()
+    const text = w.find('[data-testid="admin-confirm"]').text()
+    expect(text).toContain('These members will hold this role. They become admins if Administrator is applied to it')
+    expect(text).toContain('becomes an admin if Administrator is applied to it')
+    expect(text).not.toContain('will become admins of this server')
+    expect(missingKeys).toEqual([])
+  })
+
   it('asks for confirmation when the server wants it, lists the holders, and retries confirmed', async () => {
     api.saveRoleMap.mockRejectedValueOnce(new MigrationError('ADMIN_ROLE_NEEDS_CONFIRM', 'ADMIN_ROLE_NEEDS_CONFIRM'))
     api.adminImpact.mockResolvedValue({ holders: [{ user_id: 'u1', username: 'carol', display_name: 'Carol' }] })
@@ -386,6 +401,16 @@ describe('open and finished', () => {
     expect(api.setState).toHaveBeenCalledWith(SERVER, 'open')
   })
 
+  it('labels a cleared link Not linked with a hint, not Left Discord', async () => {
+    api.listMembers.mockResolvedValue([
+      { user_id: 'u3', username: 'erin', display_name: 'Erin', discord_user_id: '557', status: 'left', last_synced_at: null },
+    ])
+    const w = await mountPanel(OPEN())
+    const cell = w.find('[data-testid="status-u3"]')
+    expect(cell.text()).toBe('Not linked')
+    expect(cell.attributes('title')).toBe('Left Discord or was allowed back. Can link again.')
+  })
+
   it('lists members and allows a member kicked on Harmony back', async () => {
     api.listMembers.mockResolvedValue([
       { user_id: 'u1', username: 'carol', display_name: 'Carol', discord_user_id: '555', status: 'active', last_synced_at: null },
@@ -397,6 +422,13 @@ describe('open and finished', () => {
     await w.find('[data-testid="allow-back-u2"]').trigger('click')
     await flushPromises()
     expect(api.allowBack).toHaveBeenCalledWith(SERVER, 'u2')
+  })
+
+  it('words the locked Discord server for open and finished alike', async () => {
+    for (const state of ['open', 'finished'] as const) {
+      const w = await mountPanel(config({ state }))
+      expect(w.text()).toContain("The Discord server can't change after the migration has been opened.")
+    }
   })
 
   it('shows Re-open with its warning once finished', async () => {

@@ -5776,7 +5776,7 @@
       "title": "从 Discord 迁移",
       "loading": "正在加载…",
       "lead": "将你的 Discord 账号关联到 Harmony，社区迁移后即可保留你的角色，也可以选择保留资料。",
-      "linkTo": "你将关联到 @{username}。",
+      "linkTo": "你将关联到 {'@'}{username}。",
       "notYou": "不是你？退出登录",
       "signInInstead": "改为登录",
       "signInInsteadHint": "然后再次选择“使用 Discord 登录”。",
@@ -5862,7 +5862,7 @@
     "guild": {
       "label": "Discord 服务器 ID",
       "hint": "在 Discord 中开启开发者模式,右键点击服务器,选择“复制服务器 ID”。",
-      "locked": "迁移开放后,无法更改 Discord 服务器。"
+      "locked": "迁移开启后,无法更改 Discord 服务器。"
     },
     "refresh": {
       "button": "从 Discord 获取",
@@ -5908,8 +5908,10 @@
       "title": "授予管理员权限?",
       "lead": "你正在把带有管理员权限的角色对应到一个 Harmony 角色。",
       "holders": "以下成员将成为本服务器的管理员:",
+      "holdersPending": "以下成员将拥有此角色。若对该角色应用管理员权限,他们将成为管理员:",
       "noHolders": "目前还没有人拥有此角色。",
       "future": "迁移开放期间,在 Discord 上获得此角色的人也会成为这里的管理员。",
+      "futurePending": "迁移开放期间,在 Discord 上获得此角色的人也会在这里拥有此角色,若对该角色应用管理员权限,将成为管理员。",
       "confirm": "设为管理员"
     },
     "ready": {
@@ -5968,9 +5970,10 @@
       "actions": "操作",
       "never": "从未",
       "allowBack": "允许返回",
+      "leftHint": "已离开 Discord 或已被允许返回。可以再次关联。",
       "statuses": {
         "active": "活跃",
-        "left": "已离开 Discord",
+        "left": "未关联",
         "banned": "已封禁",
         "kicked_on_harmony": "已在此被踢出"
       }

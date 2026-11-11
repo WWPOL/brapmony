@@ -5776,7 +5776,7 @@
       "title": "Discord에서 이전",
       "loading": "불러오는 중…",
       "lead": "Discord 계정을 Harmony에 연결하면 이 커뮤니티가 옮겨 온 뒤에도 역할을 유지하고, 원하면 프로필도 가져올 수 있습니다.",
-      "linkTo": "@{username}에 연결합니다.",
+      "linkTo": "{'@'}{username}에 연결합니다.",
       "notYou": "본인이 아닌가요? 로그아웃",
       "signInInstead": "대신 로그인",
       "signInInsteadHint": "그런 다음 'Discord로 로그인'을 다시 선택하세요.",
@@ -5862,7 +5862,7 @@
     "guild": {
       "label": "Discord 서버 ID",
       "hint": "Discord에서 개발자 모드를 켜고, 서버를 마우스 오른쪽 버튼으로 클릭해 서버 ID 복사를 선택하세요.",
-      "locked": "이전이 열려 있는 동안에는 Discord 서버를 바꿀 수 없습니다."
+      "locked": "이전을 연 후에는 Discord 서버를 바꿀 수 없습니다."
     },
     "refresh": {
       "button": "Discord에서 가져오기",
@@ -5908,8 +5908,10 @@
       "title": "관리자 권한을 부여할까요?",
       "lead": "관리자 권한이 있는 역할을 Harmony 역할에 연결하려고 합니다.",
       "holders": "다음 멤버가 이 서버의 관리자가 됩니다:",
+      "holdersPending": "다음 멤버가 이 역할을 갖게 됩니다. 이 역할에 관리자 권한이 적용되면 관리자가 됩니다:",
       "noHolders": "아직 이 역할을 가진 사람이 없습니다.",
       "future": "이전이 열려 있는 동안 Discord에서 이 역할을 받은 사람도 이곳에서 관리자가 됩니다.",
+      "futurePending": "이전이 열려 있는 동안 Discord에서 이 역할을 받은 사람도 이곳에서 이 역할을 갖게 되며, 관리자 권한이 적용되면 관리자가 됩니다.",
       "confirm": "관리자로 지정"
     },
     "ready": {
@@ -5968,9 +5970,10 @@
       "actions": "작업",
       "never": "없음",
       "allowBack": "복귀 허용",
+      "leftHint": "Discord를 탈퇴했거나 다시 허용되었습니다. 다시 연결할 수 있습니다.",
       "statuses": {
         "active": "활동 중",
-        "left": "Discord 탈퇴",
+        "left": "연결 안 됨",
         "banned": "차단됨",
         "kicked_on_harmony": "이곳에서 추방됨"
       }

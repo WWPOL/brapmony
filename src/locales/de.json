@@ -5776,7 +5776,7 @@
       "title": "Von Discord umziehen",
       "loading": "Wird geladen…",
       "lead": "Verknüpfe dein Discord-Konto mit Harmony, um deine Rollen und optional dein Profil zu behalten, wenn diese Community umzieht.",
-      "linkTo": "Du verknüpfst dies mit @{username}.",
+      "linkTo": "Du verknüpfst dies mit {'@'}{username}.",
       "notYou": "Nicht du? Abmelden",
       "signInInstead": "Stattdessen anmelden",
       "signInInsteadHint": "Wähle danach erneut „Mit Discord anmelden“.",
@@ -5862,7 +5862,7 @@
     "guild": {
       "label": "Discord-Server-ID",
       "hint": "Aktiviere in Discord den Entwicklermodus, klicke den Server mit der rechten Maustaste an und wähle „Server-ID kopieren“.",
-      "locked": "Der Discord-Server kann nicht mehr geändert werden, sobald die Migration offen ist."
+      "locked": "Der Discord-Server kann nicht mehr geändert werden, nachdem die Migration geöffnet wurde."
     },
     "refresh": {
       "button": "Von Discord abrufen",
@@ -5908,8 +5908,10 @@
       "title": "Administratorzugriff vergeben?",
       "lead": "Eine Rolle mit Administratorzugriff wird einer Harmony-Rolle zugeordnet.",
       "holders": "Diese Mitglieder werden Admins dieses Servers:",
+      "holdersPending": "Diese Mitglieder erhalten diese Rolle. Sie werden Admins, sobald der Rolle Administrator zugewiesen wird:",
       "noHolders": "Niemand hat diese Rolle bisher.",
       "future": "Wer auf Discord diese Rolle erhält, während die Migration offen ist, wird hier ebenfalls Admin.",
+      "futurePending": "Wer auf Discord diese Rolle erhält, während die Migration offen ist, erhält sie hier ebenfalls und wird Admin, sobald der Rolle Administrator zugewiesen wird.",
       "confirm": "Zu Admins machen"
     },
     "ready": {
@@ -5968,9 +5970,10 @@
       "actions": "Aktionen",
       "never": "Nie",
       "allowBack": "Wieder zulassen",
+      "leftHint": "Hat Discord verlassen oder wurde wieder zugelassen. Kann sich erneut verknüpfen.",
       "statuses": {
         "active": "Aktiv",
-        "left": "Hat Discord verlassen",
+        "left": "Nicht verknüpft",
         "banned": "Gesperrt",
         "kicked_on_harmony": "Hier gekickt"
       }

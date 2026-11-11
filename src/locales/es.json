@@ -5776,7 +5776,7 @@
       "title": "Migrar desde Discord",
       "loading": "Cargando…",
       "lead": "Vincula tu cuenta de Discord con Harmony para conservar tus roles y, si quieres, tu perfil cuando esta comunidad se mude.",
-      "linkTo": "Lo vincularás con @{username}.",
+      "linkTo": "Lo vincularás con {'@'}{username}.",
       "notYou": "¿No eres tú? Cerrar sesión",
       "signInInstead": "Iniciar sesión",
       "signInInsteadHint": "Después, elige de nuevo «Iniciar sesión con Discord».",
@@ -5862,7 +5862,7 @@
     "guild": {
       "label": "ID del servidor de Discord",
       "hint": "Activa el modo desarrollador en Discord, haz clic derecho en el servidor y elige Copiar ID del servidor.",
-      "locked": "El servidor de Discord no se puede cambiar una vez abierta la migración."
+      "locked": "El servidor de Discord no se puede cambiar después de abrir la migración."
     },
     "refresh": {
       "button": "Obtener de Discord",
@@ -5908,8 +5908,10 @@
       "title": "¿Dar acceso de administrador?",
       "lead": "Se está asignando un rol con acceso de administrador a un rol de Harmony.",
       "holders": "Estos miembros pasarán a ser administradores de este servidor:",
+      "holdersPending": "Estos miembros tendrán este rol. Pasarán a ser administradores si se aplica Administrador al rol:",
       "noHolders": "Todavía nadie tiene este rol.",
       "future": "Quien reciba este rol en Discord mientras la migración esté abierta también será administrador aquí.",
+      "futurePending": "Quien reciba este rol en Discord mientras la migración esté abierta también lo tendrá aquí, y será administrador si se aplica Administrador al rol.",
       "confirm": "Hacerlos administradores"
     },
     "ready": {
@@ -5968,9 +5970,10 @@
       "actions": "Acciones",
       "never": "Nunca",
       "allowBack": "Permitir volver",
+      "leftHint": "Salió de Discord o se le permitió volver. Puede vincularse de nuevo.",
       "statuses": {
         "active": "Activo",
-        "left": "Salió de Discord",
+        "left": "Sin vincular",
         "banned": "Vetado",
         "kicked_on_harmony": "Expulsado aquí"
       }

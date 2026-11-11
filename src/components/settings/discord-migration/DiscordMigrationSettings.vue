@@ -173,9 +173,11 @@
         <ul class="dm-gaps">
           <li v-for="gap in config.permission_gaps" :key="gap.discord_role_id" class="dm-gap" :data-gap="gap.discord_role_id">
             <div class="dm-gap-text">
-              <span class="db-ui">{{ discordRoleName(gap.discord_role_id) }}</span>
-              <span class="dm-arrow" aria-hidden="true">→</span>
-              <span class="db-ui">{{ harmonyRoleName(gap.harmony_role_id) }}</span>
+              <div class="dm-gap-line">
+                <span class="db-ui">{{ discordRoleName(gap.discord_role_id) }}</span>
+                <span class="dm-arrow" aria-hidden="true">→</span>
+                <span class="db-ui">{{ harmonyRoleName(gap.harmony_role_id) }}</span>
+              </div>
               <span class="db-muted dm-block" data-testid="gap-missing">{{ missingText(gap) }}</span>
               <span v-if="gapErrors[gap.discord_role_id]" class="dm-error dm-block" role="alert" :data-testid="`gap-error-${gap.discord_role_id}`">
                 {{ gapErrors[gap.discord_role_id] }}
@@ -285,7 +287,9 @@
               <tr v-for="member in members" :key="member.user_id" :data-member="member.user_id">
                 <td>{{ member.display_name || member.username || member.user_id }}</td>
                 <td><code class="db-inline-code">{{ member.discord_user_id }}</code></td>
-                <td>{{ t(`discordMigration.members.statuses.${member.status}`) }}</td>
+                <td :title="member.status === 'left' ? t('discordMigration.members.leftHint') : undefined" :data-testid="`status-${member.user_id}`">
+                  {{ t(`discordMigration.members.statuses.${member.status}`) }}
+                </td>
                 <td>{{ member.last_synced_at ? ago(member.last_synced_at) : t('discordMigration.members.never') }}</td>
                 <td>
                   <button
@@ -312,6 +316,7 @@
       :holders="adminDialog?.holders ?? []"
       :busy="adminBusy"
       :load-failed="adminDialog?.loadFailed ?? false"
+      :pending="adminDialog?.pending ?? false"
       @confirm="confirmAdmin"
       @cancel="cancelAdmin"
       @retry="retryHolders"
@@ -394,6 +399,8 @@ interface AdminDialog {
   loadFailed: boolean
   /** The Discord roles the confirmation is about. */
   roleIds: string[]
+  /** A role-map save where no mapped Harmony role carries Administrator yet. */
+  pending: boolean
   run: () => Promise<void>
 }
 const adminDialog = ref<AdminDialog | null>(null)
@@ -627,9 +634,9 @@ async function holdersFor(discordRoleIds: string[]): Promise<{ holders: AdminHol
   return { holders: [...unique.values()], failed }
 }
 
-async function openAdminDialog(discordRoleIds: string[], run: () => Promise<void>) {
+async function openAdminDialog(discordRoleIds: string[], run: () => Promise<void>, pending = false) {
   const { holders, failed } = await holdersFor(discordRoleIds)
-  adminDialog.value = { holders, loadFailed: failed, roleIds: discordRoleIds, run }
+  adminDialog.value = { holders, loadFailed: failed, roleIds: discordRoleIds, pending, run }
 }
 
 async function retryHolders() {
@@ -683,7 +690,8 @@ async function saveMap(changes: Record<string, string>) {
           const role = config.value?.discord_roles.find((r) => r.discord_role_id === id)
           return role ? discordAdmin(role) || harmonyAdmin(changes[id]) : false
         })
-        await openAdminDialog(admin.length ? admin : changedIds, () => attempt(true))
+        const pending = !(admin.length ? admin : changedIds).some((id) => harmonyAdmin(changes[id]))
+        await openAdminDialog(admin.length ? admin : changedIds, () => attempt(true), pending)
         return
       }
       for (const id of changedIds) rowErrors.value[id] = errorText(e)
@@ -1038,6 +1046,17 @@ onMounted(load)
 
 .dm-gap-text {
   min-width: 0;
+}
+
+.dm-gap-line {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.dm-gap-line .dm-arrow {
+  min-height: 0;
 }
 
 .dm-table-wrap {

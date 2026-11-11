@@ -5776,7 +5776,7 @@
       "title": "Migrer depuis Discord",
       "loading": "Chargement…",
       "lead": "Liez votre compte Discord à Harmony pour garder vos rôles et, si vous le souhaitez, votre profil quand cette communauté déménage.",
-      "linkTo": "Vous allez lier ceci à @{username}.",
+      "linkTo": "Vous allez lier ceci à {'@'}{username}.",
       "notYou": "Ce n’est pas vous ? Se déconnecter",
       "signInInstead": "Se connecter à la place",
       "signInInsteadHint": "Choisissez ensuite de nouveau « Se connecter avec Discord ».",
@@ -5862,7 +5862,7 @@
     "guild": {
       "label": "ID du serveur Discord",
       "hint": "Activez le mode développeur dans Discord, faites un clic droit sur le serveur et choisissez Copier l'identifiant du serveur.",
-      "locked": "Le serveur Discord ne peut plus changer une fois la migration ouverte."
+      "locked": "Le serveur Discord ne peut plus changer après l'ouverture de la migration."
     },
     "refresh": {
       "button": "Récupérer depuis Discord",
@@ -5908,8 +5908,10 @@
       "title": "Donner l'accès administrateur ?",
       "lead": "Un rôle avec l'accès administrateur est en cours d'association à un rôle Harmony.",
       "holders": "Ces membres deviendront administrateurs de ce serveur :",
+      "holdersPending": "Ces membres auront ce rôle. Ils deviendront administrateurs si Administrateur est appliqué au rôle :",
       "noHolders": "Personne n'a encore ce rôle.",
       "future": "Toute personne recevant ce rôle sur Discord tant que la migration est ouverte devient aussi administrateur ici.",
+      "futurePending": "Toute personne recevant ce rôle sur Discord tant que la migration est ouverte l'aura aussi ici, et deviendra administrateur si Administrateur est appliqué au rôle.",
       "confirm": "Les nommer administrateurs"
     },
     "ready": {
@@ -5968,9 +5970,10 @@
       "actions": "Actions",
       "never": "Jamais",
       "allowBack": "Autoriser le retour",
+      "leftHint": "A quitté Discord ou a été autorisé à revenir. Peut se lier à nouveau.",
       "statuses": {
         "active": "Actif",
-        "left": "A quitté Discord",
+        "left": "Non lié",
         "banned": "Banni",
         "kicked_on_harmony": "Expulsé ici"
       }

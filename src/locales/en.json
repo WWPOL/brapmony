@@ -5772,7 +5772,7 @@
       "title": "Migrate from Discord",
       "loading": "Loading…",
       "lead": "Link your Discord account to Harmony to keep your roles, and optionally your profile, when this community moves.",
-      "linkTo": "You'll link this to @{username}.",
+      "linkTo": "You'll link this to {'@'}{username}.",
       "notYou": "Not you? Sign out",
       "signInInstead": "Sign in instead",
       "signInInsteadHint": "Then choose Sign in with Discord again.",
@@ -5858,7 +5858,7 @@
     "guild": {
       "label": "Discord server ID",
       "hint": "Turn on Developer Mode in Discord, then right-click the server and choose Copy Server ID.",
-      "locked": "The Discord server can't change once the migration is open."
+      "locked": "The Discord server can't change after the migration has been opened."
     },
     "refresh": {
       "button": "Fetch from Discord",
@@ -5904,8 +5904,10 @@
       "title": "Give administrator access?",
       "lead": "A role with Administrator access is being mapped to a Harmony role.",
       "holders": "These members will become admins of this server:",
+      "holdersPending": "These members will hold this role. They become admins if Administrator is applied to it:",
       "noHolders": "Nobody holds this role yet.",
       "future": "Anyone given this role on Discord while the migration is open becomes an admin here too.",
+      "futurePending": "Anyone given this role on Discord while the migration is open will hold it here too, and becomes an admin if Administrator is applied to it.",
       "confirm": "Make them admins"
     },
     "ready": {
@@ -5964,9 +5966,10 @@
       "actions": "Actions",
       "never": "Never",
       "allowBack": "Allow back",
+      "leftHint": "Left Discord or was allowed back. Can link again.",
       "statuses": {
         "active": "Active",
-        "left": "Left Discord",
+        "left": "Not linked",
         "banned": "Banned",
         "kicked_on_harmony": "Kicked here"
       }

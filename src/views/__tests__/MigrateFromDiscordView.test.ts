@@ -27,6 +27,8 @@ const h = vi.hoisted(() => {
     router: { push: vi.fn(), replace: vi.fn() },
     auth: { isLoggedIn: false, session: null as any, login: vi.fn(), logout: vi.fn() },
     profile: { profile: null as any },
+    serverStore: { setCurrentServer: vi.fn(), fetchServersForUser: vi.fn() },
+    profileId: vi.fn(),
   }
 })
 
@@ -45,7 +47,8 @@ vi.mock('@/stores/auth', async () => {
   h.auth = reactive(h.auth)
   return { useAuthStore: () => h.auth }
 })
-vi.mock('@/stores/useServerChannel', () => ({ useServerChannelStore: () => ({ setCurrentServer: vi.fn() }) }))
+vi.mock('@/stores/useServerChannel', () => ({ useServerChannelStore: () => h.serverStore }))
+vi.mock('@/services/AuthContextService', () => ({ authContextService: { getCurrentProfileId: () => h.profileId() } }))
 vi.mock('@/stores/useProfile', async () => {
   const { reactive } = await import('vue')
   h.profile = reactive(h.profile)
@@ -78,6 +81,27 @@ beforeEach(() => {
 })
 
 describe('MigrateFromDiscordView', () => {
+  it('Open the server reloads the server list before routing to chat', async () => {
+    h.auth.isLoggedIn = true
+    h.profile.profile = { username: 'alice', is_local: true }
+    h.svc.claim.mockResolvedValue({ serverId: 'srv', rolesGranted: [] })
+    h.profileId.mockResolvedValue('prof-1')
+    h.router.push.mockReset()
+    h.serverStore.setCurrentServer.mockReset()
+    let release!: () => void
+    h.serverStore.fetchServersForUser.mockReset()
+    h.serverStore.fetchServersForUser.mockImplementation(() => new Promise<void>((r) => { release = r }))
+    const wrapper = await open({ ticket: 'tkt' })
+    await wrapper.get('[data-testid="migrate-open-server"]').trigger('click')
+    await flushPromises()
+    expect(h.serverStore.fetchServersForUser).toHaveBeenCalledWith('prof-1', true)
+    expect(h.router.push).not.toHaveBeenCalled()
+    release()
+    await flushPromises()
+    expect(h.serverStore.setCurrentServer).toHaveBeenCalledWith('srv')
+    expect(h.router.push).toHaveBeenCalledWith({ name: 'Chat' })
+  })
+
   it('signed out with no ticket offers both ways in', async () => {
     const wrapper = await open()
     expect(wrapper.text()).toContain('Lobby')

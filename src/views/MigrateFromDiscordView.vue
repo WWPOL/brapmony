@@ -224,10 +224,20 @@ async function signOutHere() {
   await init()
 }
 
-function openServer() {
-  if (!claimedServerId.value) return
+async function openServer() {
+  const serverId = claimedServerId.value
+  if (!serverId) return
+  const serverStore = useServerChannelStore()
+  try {
+    // The claim just added this account to the server: reload the list, as joining by invite does.
+    const { authContextService } = await import('@/services/AuthContextService')
+    const profileId = await authContextService.getCurrentProfileId()
+    if (profileId) await serverStore.fetchServersForUser(profileId, true)
+  } catch {
+    // Chat loads the list itself when it is empty; open the server anyway.
+  }
   // Same as picking the server in the sidebar; the chat route lands on its first channel.
-  useServerChannelStore().setCurrentServer(claimedServerId.value)
+  serverStore.setCurrentServer(serverId)
   void router.push({ name: 'Chat' })
 }
 
