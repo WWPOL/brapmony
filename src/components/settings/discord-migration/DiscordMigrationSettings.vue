@@ -1,6 +1,6 @@
 <template>
   <div class="dm-panel" data-testid="discord-migration">
-    <h3 class="db-card-title dm-title">{{ t('discordMigration.title') }}</h3>
+    <h2 class="section-title dm-title">{{ t('discordMigration.title') }}</h2>
     <p class="db-muted">{{ t('discordMigration.intro') }}</p>
 
     <p v-if="loading" class="db-muted" role="status" data-testid="dm-loading">{{ t('discordMigration.loading') }}</p>
@@ -15,7 +15,7 @@
     <template v-else-if="config">
       <!-- 1. Prerequisites -->
       <section class="db-card" data-testid="dm-prereq">
-        <h4 class="db-card-sub">{{ t('discordMigration.prereq.title') }}</h4>
+        <h3 class="db-card-sub">{{ t('discordMigration.prereq.title') }}</h3>
         <ul class="db-steps">
           <li>{{ t('discordMigration.prereq.cloneFirst') }}</li>
           <li>{{ t('discordMigration.prereq.botInServer') }}</li>
@@ -24,7 +24,7 @@
 
       <!-- 2-4. Credentials, Discord server, fetch -->
       <section class="db-card" data-testid="dm-source">
-        <h4 class="db-card-sub">{{ t('discordMigration.source.title') }}</h4>
+        <h3 class="db-card-sub">{{ t('discordMigration.source.title') }}</h3>
         <fieldset class="dm-fieldset" :disabled="busy !== ''">
           <legend class="db-sr-only">{{ t('discordMigration.source.title') }}</legend>
           <label v-for="option in sourceOptions" :key="option" class="dm-radio">
@@ -103,7 +103,7 @@
 
       <!-- 5. Role map -->
       <section class="db-card" data-testid="dm-roles">
-        <h4 class="db-card-sub">{{ t('discordMigration.roles.title') }}</h4>
+        <h3 class="db-card-sub">{{ t('discordMigration.roles.title') }}</h3>
         <p class="db-muted">{{ t('discordMigration.roles.intro') }}</p>
 
         <p v-if="!config.discord_roles.length" class="db-muted" data-testid="roles-empty">{{ t('discordMigration.roles.empty') }}</p>
@@ -162,7 +162,7 @@
 
       <!-- 6. Permission gaps -->
       <section v-if="config.permission_gaps.length" class="db-card" data-testid="dm-gaps">
-        <h4 class="db-card-sub">{{ t('discordMigration.gaps.title') }}</h4>
+        <h3 class="db-card-sub">{{ t('discordMigration.gaps.title') }}</h3>
         <p class="db-muted">{{ t('discordMigration.gaps.intro') }}</p>
         <div class="db-actions dm-bottom">
           <button type="button" class="btn btn-secondary btn-sm" :disabled="busy !== ''" data-testid="apply-all" @click="applyAll">
@@ -198,7 +198,7 @@
 
       <!-- 8. Readiness and open -->
       <section v-if="config.state !== 'open' && config.state !== 'finished'" class="db-card" data-testid="dm-ready">
-        <h4 class="db-card-sub">{{ t('discordMigration.ready.title') }}</h4>
+        <h3 class="db-card-sub">{{ t('discordMigration.ready.title') }}</h3>
         <ul v-if="blockers.length" class="db-steps" data-testid="blockers">
           <li v-for="blocker in blockers" :key="blocker">{{ blocker }}</li>
         </ul>
@@ -221,7 +221,7 @@
 
       <!-- 9. Open -->
       <section v-if="config.state === 'open'" class="db-card" data-testid="dm-open">
-        <h4 class="db-card-sub">{{ t('discordMigration.open.title') }}</h4>
+        <h3 class="db-card-sub">{{ t('discordMigration.open.title') }}</h3>
         <p class="db-muted">{{ t('discordMigration.open.lead') }}</p>
         <BridgeCopyBlock :text="inviteUrl" :label="t('discordMigration.open.linkLabel')" />
         <div class="db-actions dm-bottom">
@@ -257,7 +257,7 @@
 
       <!-- 10. Finished -->
       <section v-if="config.state === 'finished'" class="db-card" data-testid="dm-finished">
-        <h4 class="db-card-sub">{{ t('discordMigration.finished.title') }}</h4>
+        <h3 class="db-card-sub">{{ t('discordMigration.finished.title') }}</h3>
         <p class="db-muted">{{ t('discordMigration.finished.lead') }}</p>
         <p class="db-muted" data-testid="reopen-warning">{{ t('discordMigration.finished.warning') }}</p>
         <p v-if="stateError" class="dm-error" role="alert" data-testid="state-error">{{ stateError }}</p>
@@ -270,7 +270,7 @@
 
       <!-- Members -->
       <section v-if="config.state === 'open' || config.state === 'finished'" class="db-card" data-testid="dm-members">
-        <h4 class="db-card-sub">{{ t('discordMigration.members.title') }}</h4>
+        <h3 class="db-card-sub">{{ t('discordMigration.members.title') }}</h3>
         <p v-if="!members.length" class="db-muted" data-testid="members-empty">{{ t('discordMigration.members.empty') }}</p>
         <div v-else class="dm-table-wrap">
           <table class="dm-table">

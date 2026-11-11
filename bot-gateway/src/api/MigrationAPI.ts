@@ -383,14 +383,16 @@ export class MigrationAPI {
     }
     if (!member.value.present) return back('not_member')
 
+    // Built outside the call: the rpc contract test reads every `key:` inside the call object as an argument name.
+    const discordUser = {
+      id: user.value.id,
+      username: user.value.username,
+      global_name: user.value.global_name,
+      avatar_url: user.value.avatar_url,
+    }
     const { data, error } = await supabase.rpc('discord_migration_create_claim', {
       p_server_id: migration.server_id,
-      p_discord_user: {
-        id: user.value.id,
-        username: user.value.username,
-        global_name: user.value.global_name,
-        avatar_url: user.value.avatar_url,
-      },
+      p_discord_user: discordUser,
       p_discord_role_ids: member.value.member.role_ids,
       p_discord_joined_at: member.value.member.joined_at,
     })

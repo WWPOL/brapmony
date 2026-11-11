@@ -356,8 +356,8 @@
 - Modify: `src/views/NewProfile.vue` (after a successful `createProfile`, call `completePendingClaims()`; prefill the username from `?username=`)
 - Modify: the post-sign-in hook (where the session is established after login; find it from `LoginView.vue`/the auth store) to call `completePendingClaims()` when a profile exists
 - Modify: `src/components/settings/user/ServerProfilesSettings.vue` (below the fields: "Sync from Discord" with `DiscordSyncFields` when `discord_migration_my_link` returns a link for the selected server)
-- Modify: `src/components/common/UnifiedProfileCard.vue` (in a server context, "Joined on Discord <date>" from `discord_migration_member_joined_at`, next to "Member since")
-- Modify: `src/components/NotificationItem.vue`, `src/services/NotificationFormatter.ts` (type `discord_migration_admin_change`, icon `shield`, tone `system`: "<user> was given / lost the admin role <role> in <server> by the Discord migration")
+- Modify: `src/components/common/UnifiedProfileCard.vue` (in a server context, "Joined on Discord `<date>`" from `discord_migration_member_joined_at`, next to "Member since")
+- Modify: `src/components/NotificationItem.vue`, `src/services/NotificationFormatter.ts` (type `discord_migration_admin_change`, icon `shield`, tone `system`: "`<user>` was given / lost the admin role `<role>` in `<server>` by the Discord migration")
 - Modify: `src/locales/*.json` (7 files)
 - Add RPC: `discord_migration_preview(p_token text) RETURNS jsonb` (anon + authenticated) in the migration file: `{server_name, icon_url}` only when `state = 'open'`, else null. Add an assertion to `275`.
 

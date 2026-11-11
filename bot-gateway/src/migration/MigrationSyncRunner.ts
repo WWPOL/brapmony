@@ -227,9 +227,9 @@ export class MigrationSyncRunner {
     let complete = true
 
     while (!stop && this.now() - Date.parse(startedAt) < this.budgetMs) {
+      // Members that stayed unsynced (absent, failed) sort first on every read, so ask for the seen ones too and skip them.
       const { data, error } = await this.rpc('discord_migration_links_batch', {
         p_server_id: serverId,
-        // Members that stayed unsynced (absent, failed) sort first again: skip the ones already seen.
         p_limit: seen.size + this.batch,
       })
       if (error) {
