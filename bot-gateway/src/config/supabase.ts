@@ -31,6 +31,14 @@ export const supabase = createClient(supabaseUrl, supabaseServiceKey, {
   }
 })
 
+/** A client that runs as the user behind `jwt` (RLS and auth.uid() apply), for checks made with the caller's identity. */
+export function createUserClient(jwt: string) {
+  return createClient(supabaseUrl as string, supabaseServiceKey as string, {
+    auth: { autoRefreshToken: false, persistSession: false },
+    global: { headers: { apikey: supabaseServiceKey as string, Authorization: `Bearer ${jwt}` } },
+  })
+}
+
 /**
  * Express `trust proxy`. Default trusts loopback and private-network hops (nginx on the host or
  * in the compose network), so req.ip is the client address nginx forwarded. A number is a hop

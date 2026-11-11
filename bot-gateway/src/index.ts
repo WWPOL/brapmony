@@ -9,7 +9,8 @@ import { WebSocketGateway } from './gateway/WebSocketGateway.js'
 import { EventDispatcher } from './gateway/EventDispatcher.js'
 import { InteractionPoller } from './gateway/InteractionPoller.js'
 import { BotRestAPI } from './api/BotRestAPI.js'
-import { BridgeV2API, MIN_HOST_SECRET_LENGTH } from './api/BridgeV2API.js'
+import { MigrationAPI } from './api/MigrationAPI.js'
+import { BridgeV2API,MIN_HOST_SECRET_LENGTH } from './api/BridgeV2API.js'
 import { BridgeConfigWatcher } from './gateway/BridgeConfigWatcher.js'
 import { TTLCache } from './utils/TTLCache.js'
 import { getBridgeAttachmentMode, hasDiscordCdnFilePart } from './utils/mirrorExternalMedia.js'
@@ -56,6 +57,10 @@ interactionPoller.start()
 // Bot API routes require bot token authentication.
 const botAPI = new BotRestAPI(eventDispatcher)
 app.use('/api/v1', botAPI.router)
+
+// Migrate from Discord. Mounted before /bridge/v2 so the bridge router's middleware never sees these routes.
+// Task 7 replaces this with MigrationSyncRunner.syncOne
+app.use('/bridge/v2/migrate', new MigrationAPI({ syncOne: async () => {} }).router)
 
 // Discord bridge v2: setup-code redeem, hosted list, and the bridge bot's config, status and pairs.
 app.use('/bridge/v2', new BridgeV2API().router)
