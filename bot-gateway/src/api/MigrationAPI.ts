@@ -15,7 +15,7 @@ import {
   fetchGuildRoles,
   migrateAuthorizeUrl,
 } from '../migration/discordClient.js'
-import { toHarmonyMask } from '../migration/discordPermissions.js'
+import { buildRolesSnapshot } from '../migration/discordPermissions.js'
 
 const LINK_TOKEN = /^[0-9a-f]{48}$/
 const STATE = /^[0-9a-f]{64}$/
@@ -240,13 +240,7 @@ export class MigrationAPI {
       return res.status(500).json({ ok: false, error: 'lookup_failed' })
     }
 
-    const snapshot = roles.value.map((r) => ({
-      id: r.id,
-      name: r.name,
-      color: r.color,
-      position: r.position,
-      harmony_permissions: toHarmonyMask(r.permissions, names as string[]),
-    }))
+    const snapshot = buildRolesSnapshot(roles.value, names as string[])
     const stored = await supabase.rpc('discord_migration_store_discord_roles', { p_server_id: serverId, p_roles: snapshot })
     if (stored.error) {
       console.error('discord_migration_store_discord_roles failed:', stored.error.code, stored.error.message)

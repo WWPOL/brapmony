@@ -96,6 +96,15 @@ export const config = {
       Math.max(1_000, parseInt(process.env.BRIDGE_CONFIG_POLL_MS || '5000') || 5_000),
     ),
   },
+  migration: {
+    // ms between full syncs of one migrated server.
+    syncMs: Math.max(60_000, parseInt(process.env.DISCORD_MIGRATION_SYNC_MS || '21600000') || 21_600_000),
+    // ms between looks for a due server.
+    pollMs: 30_000,
+    // ms one server's pass may run before it is recorded and left for the next one.
+    budgetMs: 120_000,
+    batch: 100,
+  },
   websocket: {
     heartbeatInterval: parseInt(process.env.WS_HEARTBEAT_INTERVAL || '30000'),
     // Identified connections one bot may hold in this process; at least 1.

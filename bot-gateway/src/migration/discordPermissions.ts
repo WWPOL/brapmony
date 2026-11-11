@@ -42,6 +42,20 @@ export const DISCORD_TO_HARMONY: ReadonlyArray<[bigint, string]> = [
 ]
 
 /** Discord permission bitfield (decimal string) to a Harmony mask (decimal string). */
+/** The roles snapshot discord_migration_store_discord_roles stores: Discord roles with Harmony permission masks. */
+export function buildRolesSnapshot(
+  roles: Array<{ id: string; name: string; color: number; position: number; permissions: string }>,
+  bitNames: string[],
+) {
+  return roles.map((r) => ({
+    id: r.id,
+    name: r.name,
+    color: r.color,
+    position: r.position,
+    harmony_permissions: toHarmonyMask(r.permissions, bitNames),
+  }))
+}
+
 export function toHarmonyMask(discordPermissions: string, bitNames: string[]): string {
   const discordBits = BigInt(discordPermissions)
   const positions = new Map<string, number>()

@@ -10,6 +10,7 @@ import { EventDispatcher } from './gateway/EventDispatcher.js'
 import { InteractionPoller } from './gateway/InteractionPoller.js'
 import { BotRestAPI } from './api/BotRestAPI.js'
 import { MigrationAPI } from './api/MigrationAPI.js'
+import { MigrationSyncRunner } from './migration/MigrationSyncRunner.js'
 import { BridgeV2API,MIN_HOST_SECRET_LENGTH } from './api/BridgeV2API.js'
 import { BridgeConfigWatcher } from './gateway/BridgeConfigWatcher.js'
 import { TTLCache } from './utils/TTLCache.js'
@@ -59,14 +60,15 @@ const botAPI = new BotRestAPI(eventDispatcher)
 app.use('/api/v1', botAPI.router)
 
 // Migrate from Discord. Mounted before /bridge/v2 so the bridge router's middleware never sees these routes.
-// Task 7 replaces this with MigrationSyncRunner.syncOne
-app.use('/bridge/v2/migrate', new MigrationAPI({ syncOne: async () => {} }).router)
+const migrationSyncRunner = new MigrationSyncRunner()
+app.use('/bridge/v2/migrate', new MigrationAPI({ syncOne: migrationSyncRunner.syncOne }).router)
 
 // Discord bridge v2: setup-code redeem, hosted list, and the bridge bot's config, status and pairs.
 app.use('/bridge/v2', new BridgeV2API().router)
 
 const bridgeConfigWatcher = new BridgeConfigWatcher(gateway)
 bridgeConfigWatcher.start()
+migrationSyncRunner.start()
 if (config.bridge.hostSecret && config.bridge.hostSecret.length < MIN_HOST_SECRET_LENGTH) {
   console.warn(`BRIDGE_HOST_SECRET is shorter than ${MIN_HOST_SECRET_LENGTH} characters; GET /bridge/v2/hosted stays disabled`)
 }
@@ -377,6 +379,7 @@ async function shutdown() {
   }, 10000)
   
   bridgeConfigWatcher.stop()
+  migrationSyncRunner.stop()
   interactionPoller.stop()
 
   // Awaited: the exit in the server.close callback drops bot_presence writes still in flight.

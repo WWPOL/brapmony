@@ -79,7 +79,18 @@ function referenceUrl(storagePath: string): string {
  */
 export async function mirrorExternalMediaToStorage(
   sourceUrl: string,
-  opts: { botId: string; channelId: string; fileName?: string; contentType?: string },
+  opts: {
+    /** Required unless `target` is set. */
+    botId?: string
+    channelId?: string
+    fileName?: string
+    contentType?: string
+    /**
+     * Store in another bucket as `<folder>/<stem>-<ms>.<ext>` (the web app's naming for avatars and
+     * banners) instead of the channel's room of message_media. `url` is then the bucket's public URL.
+     */
+    target?: { bucket: string; folder: string; stem: string }
+  },
 ): Promise<{ path: string; url: string; contentType: string }> {
   if (!isAllowedSourceUrl(sourceUrl)) {
     throw new Error(`Refusing to mirror disallowed URL host`)
@@ -104,6 +115,19 @@ export async function mirrorExternalMediaToStorage(
     : opts.contentType || response.headers.get('content-type') || 'application/octet-stream'
   const extension = animatedPng ? 'apng' : extensionFrom(opts.fileName, contentType, sourceUrl)
 
+  if (opts.target) {
+    const { bucket, folder, stem } = opts.target
+    const targetPath = `${folder}/${stem}-${Date.now()}.${extension}`
+    const { error: targetError } = await supabase.storage.from(bucket).upload(targetPath, buffer, {
+      contentType,
+      upsert: false,
+      cacheControl: '31536000',
+    })
+    if (targetError) throw new Error(`Storage upload failed: ${targetError.message}`)
+    return { path: targetPath, url: supabase.storage.from(bucket).getPublicUrl(targetPath).data.publicUrl, contentType }
+  }
+
+  if (!opts.botId || !opts.channelId) throw new Error('botId and channelId are required without a target')
   const storagePath = `c/${opts.channelId.toLowerCase()}/bridge/${opts.botId}/${randomUUID()}.${extension}`
   const { error } = await supabase.storage.from(MESSAGE_MEDIA_BUCKET).upload(storagePath, buffer, {
     contentType,
