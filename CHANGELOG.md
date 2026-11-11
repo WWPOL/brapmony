@@ -102,6 +102,9 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   hold one keep it.
 
 ### Fixed
+- **Imported Discord threads archive like other threads.** A thread brought in by the history import
+  had no last message time, so it never auto-archived and stayed listed under its channel. Imported
+  replies now set it when it is missing, and existing threads are backfilled from their newest message.
 - **Pinned messages show bridged authors.** Pins of messages from the Discord bridge (live or
   imported), webhooks and bots listed "Unknown"; they now show the same name and avatar as in chat.
 - **Discord bridge import notices.** The bridge settings now explain "A history import is waiting for
