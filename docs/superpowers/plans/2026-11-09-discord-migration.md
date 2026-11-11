@@ -271,7 +271,7 @@
   - `me/:serverId/sync`: without a link → 404; with one → `syncOne` called once.
 - [ ] **Step 2: Run `cd bot-gateway && npx vitest run src/api/__tests__/MigrationAPI.test.ts`.** Expected: fail.
 - [ ] **Step 3: Implement and mount.**
-- [ ] **Step 4: Run the gateway tests and typecheck.** Expected: pass.
+- [ ] **Step 4: Run the gateway tests and `npm run type-check`.** Expected: pass.
 - [ ] **Step 5: Commit** `feat(gateway): discord migration OAuth and account API`.
 
 ### Task 7: Gateway sync runner
@@ -305,7 +305,7 @@
   - `runOnce` doesn't overlap when called twice concurrently. `syncOne` never calls `apply_removals`.
 - [ ] **Step 2: Run `cd bot-gateway && npx vitest run src/migration`.** Expected: fail.
 - [ ] **Step 3: Implement and wire into `index.ts`.**
-- [ ] **Step 4: Run the gateway tests and typecheck.** Expected: pass.
+- [ ] **Step 4: Run the gateway tests and `npm run type-check`.** Expected: pass.
 - [ ] **Step 5: Commit** `feat(gateway): scheduled discord migration sync`.
 
 ### Task 8: Server settings panel
