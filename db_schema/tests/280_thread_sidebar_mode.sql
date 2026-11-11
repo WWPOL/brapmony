@@ -3,7 +3,7 @@
 --   alice  owns S (MANAGE_SERVER)    bob  a member    carol  not a member
 BEGIN;
 SET LOCAL search_path = tests, public;
-SELECT plan(14);
+SELECT plan(31);
 
 INSERT INTO public.servers (id, name, owner, is_local_server) VALUES
   ('28000000-0000-0000-0000-000000000001', 'Sidebar', '11111111-0000-0000-0000-000000000001', true);
@@ -61,5 +61,119 @@ SELECT throws_ok($q$SELECT public.get_server_thread_sidebar('28000000-0000-0000-
 
 SELECT is(public.server_thread_sidebar_state('28000000-0000-0000-0000-000000000001')->>'mode', 'joined', 'service_role reads the state');
 
+-- A specific @mention in a thread reply adds the member --------------------------------------
+-- dave (the fixture's banned account) is no member of S; eve is a member who blocked bob;
+-- carol joins S here.
+SELECT tests.clear_authentication();
+INSERT INTO auth.users (id, instance_id, aud, role, email) VALUES
+  ('28000000-0000-0000-0000-0000000000a1', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'eve280@test.local')
+ON CONFLICT (id) DO NOTHING;
+INSERT INTO public.profiles (id, auth_user_id, username, display_name, is_local) VALUES
+  ('28000000-0000-0000-0000-0000000000b1', '28000000-0000-0000-0000-0000000000a1', 'eve280', 'Eve', true)
+ON CONFLICT (id) DO NOTHING;
+INSERT INTO public.user_servers (user_id, server_id, status) VALUES
+  ('33333333-0000-0000-0000-000000000003', '28000000-0000-0000-0000-000000000001', 'accepted'),
+  ('28000000-0000-0000-0000-0000000000b1', '28000000-0000-0000-0000-000000000001', 'accepted')
+ON CONFLICT DO NOTHING;
+INSERT INTO public.user_blocks (blocker_id, blocked_user_id) VALUES
+  ('28000000-0000-0000-0000-0000000000b1', '22222222-0000-0000-0000-000000000002');
+INSERT INTO public.server_roles (id, server_id, name, position, permissions, is_default)
+SELECT '28000000-0000-0000-0000-000000000006', '28000000-0000-0000-0000-000000000001', 'everyone', 0, 0, true
+ WHERE NOT EXISTS (SELECT 1 FROM public.server_roles WHERE server_id = '28000000-0000-0000-0000-000000000001' AND is_default);
+INSERT INTO public.server_roles (id, server_id, name, position, permissions) VALUES
+  ('28000000-0000-0000-0000-000000000007', '28000000-0000-0000-0000-000000000001', 'crew', 1, 0);
+INSERT INTO public.messages (id, channel_id, user_id, content) VALUES
+  ('28000000-0000-0000-0000-000000000005', '28000000-0000-0000-0000-000000000002', '11111111-0000-0000-0000-000000000001',
+   '[{"type":"text","text":"starter"}]'::jsonb);
+INSERT INTO public.threads (id, channel_id, parent_message_id, name, created_by) VALUES
+  ('28000000-0000-0000-0000-000000000004', '28000000-0000-0000-0000-000000000002', '28000000-0000-0000-0000-000000000005', 'T', '11111111-0000-0000-0000-000000000001');
+
+CREATE FUNCTION pg_temp.joined(p_user uuid) RETURNS int LANGUAGE sql AS $fn$
+  SELECT count(*)::int FROM public.thread_members
+   WHERE thread_id = '28000000-0000-0000-0000-000000000004' AND user_id = p_user;
+$fn$;
+CREATE FUNCTION pg_temp.members() RETURNS int LANGUAGE sql AS $fn$
+  SELECT count(*)::int FROM public.thread_members WHERE thread_id = '28000000-0000-0000-0000-000000000004';
+$fn$;
+CREATE FUNCTION pg_temp.member_count() RETURNS int LANGUAGE sql AS $fn$
+  SELECT member_count FROM public.threads WHERE id = '28000000-0000-0000-0000-000000000004';
+$fn$;
+-- Posts a reply in T (a channel message when p_thread is false) with the given content.
+CREATE FUNCTION pg_temp.reply(p_user uuid, p_content jsonb, p_thread boolean DEFAULT true, p_system boolean DEFAULT false)
+RETURNS void LANGUAGE sql AS $fn$
+  INSERT INTO public.messages (channel_id, thread_id, user_id, content, is_system)
+  VALUES ('28000000-0000-0000-0000-000000000002',
+          CASE WHEN p_thread THEN '28000000-0000-0000-0000-000000000004'::uuid END,
+          p_user, p_content, p_system);
+$fn$;
+CREATE FUNCTION pg_temp.mention(p_user uuid) RETURNS jsonb LANGUAGE sql AS $fn$
+  SELECT jsonb_build_array(jsonb_build_object('type', 'mention', 'username', (SELECT username FROM public.profiles WHERE id = p_user)));
+$fn$;
+
+SELECT is(pg_temp.joined('33333333-0000-0000-0000-000000000003'), 0, 'carol is not in T to start');
+SELECT pg_temp.reply('22222222-0000-0000-0000-000000000002', pg_temp.mention('33333333-0000-0000-0000-000000000003'));
+SELECT is(pg_temp.joined('33333333-0000-0000-0000-000000000003'), 1, 'a mention joins a viewer');
+SELECT is(pg_temp.member_count(), pg_temp.members(), 'and member_count counts the new member');
+
+-- Carol leaves; a mention brings her back.
+SELECT tests.authenticate_as('cccccccc-0000-0000-0000-000000000003');
+SELECT public.leave_thread('28000000-0000-0000-0000-000000000004');
+SELECT tests.clear_authentication();
+SELECT is(pg_temp.joined('33333333-0000-0000-0000-000000000003'), 0, 'carol left');
+SELECT pg_temp.reply('22222222-0000-0000-0000-000000000002', pg_temp.mention('33333333-0000-0000-0000-000000000003'));
+SELECT is(pg_temp.joined('33333333-0000-0000-0000-000000000003'), 1, 'a mention brings back someone who left');
+SELECT is((SELECT count(*)::int FROM public.thread_departures
+            WHERE thread_id = '28000000-0000-0000-0000-000000000004' AND user_id = '33333333-0000-0000-0000-000000000003'),
+          0, 'and ends the departure');
+
+-- Someone who cannot view the channel.
+SELECT pg_temp.reply('22222222-0000-0000-0000-000000000002', pg_temp.mention('44444444-0000-0000-0000-000000000004'));
+SELECT is(pg_temp.joined('44444444-0000-0000-0000-000000000004'), 0, 'mention of a non-viewer joins no one');
+SELECT ok(NOT EXISTS (SELECT 1 FROM public.notifications WHERE user_id = '44444444-0000-0000-0000-000000000004' AND type = 'mention'),
+          'and notifies no one');
+
+-- Carol and a blocker in one reply.
+DELETE FROM public.thread_members WHERE thread_id = '28000000-0000-0000-0000-000000000004' AND user_id = '33333333-0000-0000-0000-000000000003';
+SELECT pg_temp.reply('22222222-0000-0000-0000-000000000002', jsonb_build_array(
+  jsonb_build_object('type', 'mention', 'username', 'mallory'),
+  jsonb_build_object('type', 'mention', 'username', 'eve280')));
+SELECT is(pg_temp.joined('33333333-0000-0000-0000-000000000003'), 1, 'a blocker is not joined, the others are (the others)');
+SELECT is(pg_temp.joined('28000000-0000-0000-0000-0000000000b1'), 0, 'a blocker is not joined, the others are (the blocker)');
+
+-- Role and @everyone mentions add no one.
+SELECT pg_temp.reply('11111111-0000-0000-0000-000000000001', jsonb_build_array(
+  jsonb_build_object('type', 'role_mention', 'roleId', '28000000-0000-0000-0000-000000000007'),
+  jsonb_build_object('type', 'role_mention', 'roleId', (SELECT id FROM public.server_roles WHERE server_id = '28000000-0000-0000-0000-000000000001' AND is_default))));
+SELECT is(pg_temp.members(), 3, 'a role or @everyone mention joins no one (alice, bob and carol only)');
+
+-- History import joins no one.
+DELETE FROM public.thread_members WHERE thread_id = '28000000-0000-0000-0000-000000000004' AND user_id = '33333333-0000-0000-0000-000000000003';
+SELECT set_config('harmony.history_import', 'true', true);
+SELECT pg_temp.reply('22222222-0000-0000-0000-000000000002', pg_temp.mention('33333333-0000-0000-0000-000000000003'));
+SELECT set_config('harmony.history_import', 'false', true);
+SELECT is(pg_temp.joined('33333333-0000-0000-0000-000000000003'), 0, 'a mention under the history-import flag joins no one');
+
+-- A channel message, a system reply and a self-mention.
+SELECT pg_temp.reply('22222222-0000-0000-0000-000000000002', pg_temp.mention('33333333-0000-0000-0000-000000000003'), false);
+SELECT is(pg_temp.joined('33333333-0000-0000-0000-000000000003'), 0, 'a channel message mention joins no thread');
+SELECT pg_temp.reply(NULL, pg_temp.mention('33333333-0000-0000-0000-000000000003'), true, true);
+SELECT is(pg_temp.joined('33333333-0000-0000-0000-000000000003'), 0, 'a system reply joins no one');
+SELECT pg_temp.reply('22222222-0000-0000-0000-000000000002', pg_temp.mention('22222222-0000-0000-0000-000000000002'));
+SELECT is(pg_temp.member_count(), pg_temp.members(), 'an author mentioning themselves changes nothing');
+
+-- The mention notification names the thread.
+INSERT INTO public.messages (id, channel_id, thread_id, user_id, content) VALUES
+  ('28000000-0000-0000-0000-0000000000c1', '28000000-0000-0000-0000-000000000002', '28000000-0000-0000-0000-000000000004',
+   '22222222-0000-0000-0000-000000000002', pg_temp.mention('33333333-0000-0000-0000-000000000003')),
+  ('28000000-0000-0000-0000-0000000000c2', '28000000-0000-0000-0000-000000000002', NULL,
+   '22222222-0000-0000-0000-000000000002', pg_temp.mention('33333333-0000-0000-0000-000000000003'));
+SELECT is((SELECT data->'thread'->>'id' FROM public.notifications
+            WHERE user_id = '33333333-0000-0000-0000-000000000003' AND type = 'mention'
+              AND data->>'message_id' = '28000000-0000-0000-0000-0000000000c1'),
+          '28000000-0000-0000-0000-000000000004', 'a thread reply''s mention notification names the thread');
+SELECT ok((SELECT COALESCE(jsonb_typeof(data->'thread'), 'null') = 'null' FROM public.notifications
+            WHERE user_id = '33333333-0000-0000-0000-000000000003' AND type = 'mention'
+              AND data->>'message_id' = '28000000-0000-0000-0000-0000000000c2'),
+          'and a channel message''s does not');
 SELECT * FROM finish();
 ROLLBACK;

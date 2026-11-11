@@ -893,7 +893,7 @@ reset_daily_hashtag_counters	definer	void	service_role	cron	cron 0 0 * * * (rese
 reset_my_encryption_identity	definer	void	anon+authenticated+service_role	client	rpc in src/services/encryption/MegolmMessageEncryptionService.ts
 reset_unread_on_join	definer	trigger	service_role	trigger	trigger public.conversation_participants AFTER INSERT/UPDATE (trg_reset_unread_on_join), public.user_servers AFTER INSERT/UPDATE (trg_reset_unread_on_join)
 reset_user_encryption	definer	jsonb	service_role	service key	nothing references it
-resolve_mention_profile_id	invoker	uuid	anon+authenticated+service_role	trigger	called by handle_message_federation
+resolve_mention_profile_id	invoker	uuid	anon+authenticated+service_role	trigger	called by handle_message_federation, thread_message_handler
 resolve_soundboard_sound	definer	TABLE(id uuid, server_id uuid, name text, emoji text, emoji_id uuid, emoji_name text, emoji_url text, volume numeric, duration_ms integer, storage_path text)	authenticated+service_role	client	rpc in src/services/soundboard/sounds.ts
 restore_emoji	definer	void	authenticated+service_role	client	rpc in src/services/InstanceEmojiAdminService.ts
 review_suspicious_activity	definer	jsonb	authenticated+service_role	client	rpc in src/services/AutoModService.ts
