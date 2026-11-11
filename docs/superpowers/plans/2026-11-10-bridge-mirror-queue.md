@@ -12,7 +12,7 @@
 
 ## Global Constraints
 
-- Migration file `db_schema/migrations/20261112200001_bridge_mirror_queue.sql`; pgTAP `db_schema/tests/274_bridge_mirror_queue.sql`. Do not use 20261111950001–950006 or pgTAP 269–272 (open PR brapmony#3).
+- Migration file `db_schema/migrations/20261112200001_bridge_mirror_queue.sql`; pgTAP `db_schema/tests/277_bridge_mirror_queue.sql`. Do not use 20261111950001–950006 or pgTAP 269–272 (open PR brapmony#3).
 - Queue and state are `service_role` only: RLS on, no client policies, `REVOKE ALL ... FROM PUBLIC, anon, authenticated`, like `discord_bridge_threads` (`20261013300001_bridge_threads.sql:32-37`).
 - Every new RPC the app or gateway calls must pass `scripts/check-rpc-coverage.sh`, `scripts/check-plpgsql.sh` and `check-fresh-install`; regenerate `SURFACE.tsv`/`REACHABILITY.tsv` with `scripts/generate-surface.sh` and `scripts/generate-reachability.sh`.
 - Discord-CDN host test: reuse `isAllowedSourceUrl` / `hasDiscordCdnFilePart` in `bot-gateway/src/utils/mirrorExternalMedia.ts` (hosts `discordapp.com`, `discordapp.net`). Same storage path scheme: `c/<channel id lowercased>/bridge/<bot id>/<uuid>.<ext>` in `MESSAGE_MEDIA_BUCKET`, `cacheControl: '31536000'`, `upsert: false`.
@@ -38,7 +38,7 @@
 
 **Files:**
 - Create: `db_schema/migrations/20261112200001_bridge_mirror_queue.sql`
-- Create: `db_schema/tests/274_bridge_mirror_queue.sql`
+- Create: `db_schema/tests/277_bridge_mirror_queue.sql`
 - Modify: `SURFACE.tsv`, `REACHABILITY.tsv` (regenerated)
 
 **Interfaces:**
@@ -54,7 +54,7 @@
   - `bridge_mirror_restart_walk() RETURNS void`: resets cursor and `walk_done` (called once at gateway start while in mirror; spec call 3).
   - `bridge_mirror_status() RETURNS jsonb` `{"queued":n,"done":n,"too_large":n,"too_large_bytes":n,"failed":n}`: EXECUTE to `authenticated` too; raises `42501` unless `public.is_current_user_admin()`.
 
-- [ ] **Step 1: Write the pgTAP tests** in `274_bridge_mirror_queue.sql` (follow `265_history_import_functions.sql` for fixtures: a server, channel, bridge bot in `discord_bridges`, a non-bridge bot). Assertions:
+- [ ] **Step 1: Write the pgTAP tests** in `277_bridge_mirror_queue.sql` (follow `265_history_import_functions.sql` for fixtures: a server, channel, bridge bot in `discord_bridges`, a non-bridge bot). Assertions:
   - `authenticated` and `anon` cannot select either table; `bridge_mirror_status()` raises 42501 for a non-admin and returns counts for an admin.
   - enqueue ignores a non-bridge bot's message and a user's message; returns 1 for a bridge-bot message; re-enqueue of a `failed` row resets attempts to 0.
   - claim returns the due row once; a second claim inside the lease returns nothing; after `bridge_mirror_finish(..., 'queued', 1, 0, null, 'x')` it is claimable again.

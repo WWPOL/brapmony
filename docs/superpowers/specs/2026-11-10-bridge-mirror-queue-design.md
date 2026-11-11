@@ -51,7 +51,7 @@ Measured on the user's production server: 54 Discord attachments over 50 MB (5.8
 
 ### Queue (one migration)
 
-Numbering: fork master's latest is `20261111900001` (pgTAP 268), and the open WWPOL/brapmony#3 holds `20261111950001`–`950006` and pgTAP 269–272. Use `20261112200001` and pgTAP 274 onward.
+Numbering: fork master's latest is `20261111900001` (pgTAP 268), and the open WWPOL/brapmony#3 holds `20261111950001`–`950006` and pgTAP 269–272. Use `20261112200001` and pgTAP 277 onward.
 
 `public.bridge_mirror_queue`, service_role only (RLS on, no client policies):
 - `message_id uuid PRIMARY KEY REFERENCES messages(id) ON DELETE CASCADE`
