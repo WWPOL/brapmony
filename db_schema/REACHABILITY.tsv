@@ -320,7 +320,7 @@ detect_embed_provider	invoker	text	anon+authenticated+service_role	client, trigg
 detect_message_features	invoker	jsonb	service_role	trigger	called by message_search_flags
 determine_message_federation_type	invoker	text	anon+authenticated+service_role	trigger	called by handle_message_federation
 disable_federation_triggers	definer	void	service_role	service key	nothing references it
-discord_bridge_assert_vault	invoker	void	-	client	called by discord_bridge_create, discord_bridge_hosted_list, discord_bridge_instance_bot_secrets, +4
+discord_bridge_assert_vault	invoker	void	-	client	called by discord_bridge_create, discord_bridge_hosted_list, discord_bridge_instance_bot_secrets, +6
 discord_bridge_bot_pair	definer	uuid	service_role	client	rpc in bot-gateway/src/api/BridgeV2API.ts
 discord_bridge_bot_unpair	definer	boolean	service_role	client	rpc in bot-gateway/src/api/BridgeV2API.ts
 discord_bridge_channels_check	definer	trigger	-	trigger	trigger public.discord_bridge_channels BEFORE INSERT/UPDATE (discord_bridge_channels_check)
@@ -339,7 +339,7 @@ discord_bridge_import_start	definer	SETOF discord_bridge_imports	authenticated	c
 discord_bridge_import_start_internal	definer	SETOF discord_bridge_imports	service_role	client	rpc in bot-gateway/src/bridge/historyImport.ts
 discord_bridge_import_update	definer	discord_bridge_imports	service_role	client	rpc in bot-gateway/src/bridge/historyImport.ts
 discord_bridge_instance_bot_clear	definer	void	authenticated	client	rpc in src/components/settings/discord-bridge/bridgeApi.ts
-discord_bridge_instance_bot_configured	definer	boolean	-	client	called by discord_bridge_instance_bot_secrets, discord_bridge_instance_bot_status, discord_bridge_instance_hosted, +2
+discord_bridge_instance_bot_configured	definer	boolean	-	client	called by discord_bridge_instance_bot_secrets, discord_bridge_instance_bot_status, discord_bridge_instance_hosted, +3
 discord_bridge_instance_bot_enabled	definer	boolean	-	client	named in src/components/settings/discord-bridge/__tests__/BridgeInstance.test.ts, src/components/settings/discord-bridge/bridgeApi.ts
 discord_bridge_instance_bot_limit	definer	integer	-	client	named in src/components/settings/discord-bridge/__tests__/BridgeInstance.test.ts, src/components/settings/discord-bridge/bridgeApi.ts
 discord_bridge_instance_bot_purge	definer	trigger	-	trigger	trigger public.discord_bridge_instance_bot AFTER DELETE (discord_bridge_instance_bot_purge)
@@ -367,6 +367,15 @@ discord_bridge_unpair	definer	boolean	authenticated	client	rpc in src/components
 discord_bridge_update_settings	definer	jsonb	authenticated	client	rpc in src/components/settings/discord-bridge/bridgeApi.ts
 discord_bridges_retire_bot	definer	trigger	-	trigger	trigger public.discord_bridges AFTER DELETE (discord_bridges_retire_bot)
 discord_bridges_touch	invoker	trigger	-	trigger	trigger public.discord_bridges BEFORE UPDATE (discord_bridges_touch)
+discord_migration_assert_manager	definer	uuid	-	nothing	called by discord_migration_get, discord_migration_regenerate_token, discord_migration_save, +1
+discord_migration_credentials	definer	jsonb	service_role	service key	nothing references it
+discord_migration_get	definer	jsonb	authenticated	http authenticated	called by discord_migration_save
+discord_migration_regenerate_token	definer	text	authenticated	http authenticated	nothing references it
+discord_migration_save	definer	jsonb	authenticated	http authenticated	nothing references it
+discord_migration_secrets_purge	definer	trigger	-	trigger	trigger public.discord_migration_secrets AFTER DELETE (discord_migration_secrets_purge)
+discord_migration_set_own_credentials	definer	void	authenticated	http authenticated	nothing references it
+discord_migration_store_discord_roles	definer	void	service_role	service key	nothing references it
+discord_migration_store_warnings	definer	void	service_role	service key	nothing references it
 dismiss_server_automod_prompt	definer	jsonb	authenticated+service_role	client	rpc in src/services/AutoModService.ts
 dm_policy_allows	definer	boolean	service_role	client	called by dm_recipients_allowing, dm_start_guard
 dm_recipients_allowing	definer	uuid[]	service_role	client	rpc in federation-backend/src/activitypub/ActivityProcessor.ts

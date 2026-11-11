@@ -367,6 +367,15 @@ discord_bridge_unpair	p_bridge_id uuid, p_harmony_channel_id uuid	boolean	define
 discord_bridge_update_settings	p_bridge_id uuid, p_settings jsonb	jsonb	definer	public, pg_temp	authenticated	client
 discord_bridges_retire_bot		trigger	definer	public, pg_temp		trigger
 discord_bridges_touch		trigger	invoker	public, pg_temp		trigger
+discord_migration_assert_manager	p_server_id uuid	uuid	definer	public, extensions, pg_temp		unreferenced
+discord_migration_credentials	p_server_id uuid	jsonb	definer	public, extensions, pg_temp	service_role	unreferenced
+discord_migration_get	p_server_id uuid	jsonb	definer	public, extensions, pg_temp	authenticated	unreferenced
+discord_migration_regenerate_token	p_server_id uuid	text	definer	public, extensions, pg_temp	authenticated	unreferenced
+discord_migration_save	p_server_id uuid, p_discord_guild_id text, p_credential_source text	jsonb	definer	public, extensions, pg_temp	authenticated	unreferenced
+discord_migration_secrets_purge		trigger	definer	public, extensions, pg_temp		trigger
+discord_migration_set_own_credentials	p_server_id uuid, p_client_id text, p_client_secret text, p_bot_token text	void	definer	public, extensions, pg_temp	authenticated	unreferenced
+discord_migration_store_discord_roles	p_server_id uuid, p_roles jsonb	void	definer	public, extensions, pg_temp	service_role	unreferenced
+discord_migration_store_warnings	p_server_id uuid, p_warnings jsonb	void	definer	public, extensions, pg_temp	service_role	unreferenced
 dismiss_server_automod_prompt	p_server_id uuid	jsonb	definer	public, pg_temp	authenticated+service_role	client
 dm_policy_allows	p_recipient uuid, p_relation text	boolean	definer	public, pg_temp	service_role	unreferenced
 dm_recipients_allowing	p_sender uuid, p_recipients uuid[]	uuid[]	definer	public, pg_temp	service_role	client
