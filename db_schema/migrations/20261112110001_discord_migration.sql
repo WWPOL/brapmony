@@ -1037,6 +1037,478 @@ BEGIN
 END;
 $$;
 
+-- ---------------------------------------------------------------------------
+-- Claims, joining and Harmony moderation precedence
+-- ---------------------------------------------------------------------------
+-- A Discord member signs in with Discord (gateway), gets a one-time ticket, and claims it with their
+-- Harmony account. A Harmony ban or kick is never undone by a claim. Errors (P0001 unless noted):
+-- HARMONY_BANNED, KICKED_ON_HARMONY, DISCORD_ACCOUNT_TAKEN, ALREADY_LINKED_OTHER_DISCORD,
+-- DISCORD_BANNED_HERE, MIGRATION_CLOSED, TICKET_EXPIRED; 42501 for a ticket bound to another user.
+
+-- A role change the migration makes writes its own audit row (source system, via discord_migration);
+-- the generic trigger stays quiet while harmony.via is set.
+CREATE OR REPLACE FUNCTION public.server_audit_user_roles()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $$
+DECLARE
+    v_row public.user_roles := CASE WHEN TG_OP = 'DELETE' THEN OLD ELSE NEW END;
+    v_role text;
+BEGIN
+    IF pg_trigger_depth() > 1 THEN
+        RETURN NULL;
+    END IF;
+    IF current_setting('harmony.via', true) = 'discord_migration' THEN
+        RETURN NULL;
+    END IF;
+    IF TG_OP = 'DELETE' AND NOT EXISTS (
+        SELECT 1 FROM public.user_servers us
+         WHERE us.server_id = v_row.server_id AND us.user_id = v_row.user_id) THEN
+        RETURN NULL;
+    END IF;
+
+    SELECT sr.name INTO v_role FROM public.server_roles sr WHERE sr.id = v_row.role_id;
+    IF NOT FOUND THEN
+        RETURN NULL;
+    END IF;
+
+    PERFORM public.server_audit_write(
+        v_row.server_id,
+        CASE WHEN TG_OP = 'DELETE' THEN 'member.role_remove' ELSE 'member.role_add' END,
+        'user', v_row.user_id::text,
+        (SELECT p.username FROM public.profiles p WHERE p.id = v_row.user_id),
+        NULL,
+        jsonb_build_object('role_id', v_row.role_id, 'role_name', v_role));
+    RETURN NULL;
+END;
+$$;
+
+-- Makes the member's mapped Harmony roles match the Discord roles: adds the missing target roles and
+-- removes every mapped Harmony role not in the target, hand-granted ones included. Unmapped roles and
+-- the server owner are never touched. Returns {added: [role ids], removed: [role ids]}. An
+-- Administrator-bearing change is flagged in the audit row and notifies the owner.
+CREATE OR REPLACE FUNCTION public.discord_migration_apply_roles(
+    p_server_id uuid, p_user_id uuid, p_discord_role_ids text[])
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, extensions, pg_temp
+AS $$
+DECLARE
+    v_owner uuid;
+    v_server_name text;
+    v_username text;
+    v_prev_via text := current_setting('harmony.via', true);
+    v_target uuid[];
+    v_held uuid[];
+    v_add uuid[];
+    v_remove uuid[];
+    v_role uuid;
+    v_role_name text;
+    v_admin boolean;
+BEGIN
+    SELECT s.owner, s.name INTO v_owner, v_server_name FROM public.servers s WHERE s.id = p_server_id;
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'Server not found' USING ERRCODE = 'P0002';
+    END IF;
+    IF v_owner IS NOT DISTINCT FROM p_user_id THEN
+        RETURN jsonb_build_object('added', '[]'::jsonb, 'removed', '[]'::jsonb);
+    END IF;
+    SELECT p.username INTO v_username FROM public.profiles p WHERE p.id = p_user_id;
+
+    SELECT COALESCE(array_agg(DISTINCT m.harmony_role_id), '{}') INTO v_target
+      FROM public.discord_migration_role_map m
+     WHERE m.server_id = p_server_id AND m.discord_role_id = ANY (COALESCE(p_discord_role_ids, '{}'));
+    SELECT COALESCE(array_agg(ur.role_id), '{}') INTO v_held
+      FROM public.user_roles ur
+     WHERE ur.server_id = p_server_id AND ur.user_id = p_user_id
+       AND ur.role_id IN (SELECT m.harmony_role_id FROM public.discord_migration_role_map m
+                           WHERE m.server_id = p_server_id);
+    SELECT COALESCE(array_agg(t), '{}') INTO v_add FROM unnest(v_target) t WHERE NOT (t = ANY (v_held));
+    SELECT COALESCE(array_agg(h), '{}') INTO v_remove FROM unnest(v_held) h WHERE NOT (h = ANY (v_target));
+
+    PERFORM set_config('harmony.via', 'discord_migration', true);
+
+    FOREACH v_role IN ARRAY v_add LOOP
+        INSERT INTO public.user_roles (user_id, role_id, server_id)
+        VALUES (p_user_id, v_role, p_server_id)
+        ON CONFLICT (user_id, role_id) DO NOTHING;
+        SELECT sr.name INTO v_role_name FROM public.server_roles sr WHERE sr.id = v_role;
+        SELECT COALESCE(bool_or(public.discord_migration_admin_bearing(p_server_id, m.discord_role_id, m.harmony_role_id)), false)
+          INTO v_admin
+          FROM public.discord_migration_role_map m
+         WHERE m.server_id = p_server_id AND m.harmony_role_id = v_role;
+        PERFORM public.server_audit_write(p_server_id, 'member.role_add', 'user', p_user_id::text, v_username, NULL,
+            jsonb_build_object('role_id', v_role, 'role_name', v_role_name, 'via', 'discord_migration',
+                               'administrator', CASE WHEN v_admin THEN true END),
+            NULL, NULL, 'system');
+        IF v_admin AND v_owner IS NOT NULL THEN
+            INSERT INTO public.notifications (user_id, type, data)
+            VALUES (v_owner, 'discord_migration_admin_change', jsonb_build_object(
+                'server', jsonb_build_object('id', p_server_id, 'name', v_server_name),
+                'user', jsonb_build_object('id', p_user_id, 'username', v_username),
+                'role', jsonb_build_object('id', v_role, 'name', v_role_name),
+                'change', 'granted'));
+        END IF;
+    END LOOP;
+
+    FOREACH v_role IN ARRAY v_remove LOOP
+        DELETE FROM public.user_roles ur
+         WHERE ur.server_id = p_server_id AND ur.user_id = p_user_id AND ur.role_id = v_role;
+        SELECT sr.name INTO v_role_name FROM public.server_roles sr WHERE sr.id = v_role;
+        SELECT COALESCE(bool_or(public.discord_migration_admin_bearing(p_server_id, m.discord_role_id, m.harmony_role_id)), false)
+          INTO v_admin
+          FROM public.discord_migration_role_map m
+         WHERE m.server_id = p_server_id AND m.harmony_role_id = v_role;
+        PERFORM public.server_audit_write(p_server_id, 'member.role_remove', 'user', p_user_id::text, v_username, NULL,
+            jsonb_build_object('role_id', v_role, 'role_name', v_role_name, 'via', 'discord_migration',
+                               'administrator', CASE WHEN v_admin THEN true END),
+            NULL, NULL, 'system');
+        IF v_admin AND v_owner IS NOT NULL THEN
+            INSERT INTO public.notifications (user_id, type, data)
+            VALUES (v_owner, 'discord_migration_admin_change', jsonb_build_object(
+                'server', jsonb_build_object('id', p_server_id, 'name', v_server_name),
+                'user', jsonb_build_object('id', p_user_id, 'username', v_username),
+                'role', jsonb_build_object('id', v_role, 'name', v_role_name),
+                'change', 'removed'));
+        END IF;
+    END LOOP;
+
+    PERFORM set_config('harmony.via', COALESCE(v_prev_via, ''), true);
+    RETURN jsonb_build_object('added', to_jsonb(v_add), 'removed', to_jsonb(v_remove));
+END;
+$$;
+
+-- Gateway: a ticket for a Discord member who signed in. p_discord_user is {id, username, global_name,
+-- avatar_url}; an optional harmony_user_id says which Harmony account is already signed in, so a Discord
+-- account linked to another member is refused up front (claim checks again). Returns {ticket} or
+-- {error}: MIGRATION_CLOSED, DISCORD_BANNED_HERE, ALREADY_LINKED_ELSEWHERE. Purges expired rows.
+CREATE OR REPLACE FUNCTION public.discord_migration_create_claim(
+    p_server_id uuid, p_discord_user jsonb, p_discord_role_ids text[], p_discord_joined_at timestamptz)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, extensions, pg_temp
+AS $$
+DECLARE
+    v_discord text := p_discord_user ->> 'id';
+    v_harmony text := p_discord_user ->> 'harmony_user_id';
+    v_state text;
+    v_link record;
+    v_ticket text;
+BEGIN
+    DELETE FROM public.discord_migration_claims WHERE expires_at < now();
+    DELETE FROM public.discord_migration_link_states WHERE expires_at < now();
+
+    IF v_discord IS NULL OR v_discord !~ '^[0-9]{1,20}$' THEN
+        RAISE EXCEPTION 'invalid_discord_user' USING ERRCODE = '22023';
+    END IF;
+    IF EXISTS (SELECT 1 FROM unnest(COALESCE(p_discord_role_ids, '{}')) r WHERE r !~ '^[0-9]{1,20}$') THEN
+        RAISE EXCEPTION 'invalid_discord_role_ids' USING ERRCODE = '22023';
+    END IF;
+
+    SELECT m.state INTO v_state FROM public.discord_migrations m WHERE m.server_id = p_server_id;
+    IF v_state IS DISTINCT FROM 'open' THEN
+        RETURN jsonb_build_object('error', 'MIGRATION_CLOSED');
+    END IF;
+
+    SELECT l.user_id, l.status INTO v_link
+      FROM public.discord_migration_links l
+     WHERE l.server_id = p_server_id AND l.discord_user_id = v_discord;
+    IF FOUND THEN
+        IF v_link.status = 'banned' THEN
+            RETURN jsonb_build_object('error', 'DISCORD_BANNED_HERE');
+        END IF;
+        IF v_link.status = 'active' AND v_harmony IS NOT NULL AND v_link.user_id::text <> v_harmony THEN
+            RETURN jsonb_build_object('error', 'ALREADY_LINKED_ELSEWHERE');
+        END IF;
+    END IF;
+
+    v_ticket := encode(extensions.gen_random_bytes(32), 'hex');
+    INSERT INTO public.discord_migration_claims
+        (ticket, server_id, discord_user_id, discord_username, discord_global_name, discord_avatar_url,
+         discord_role_ids, discord_joined_at, expires_at)
+    VALUES (v_ticket, p_server_id, v_discord, left(p_discord_user ->> 'username', 100),
+            left(p_discord_user ->> 'global_name', 100), left(p_discord_user ->> 'avatar_url', 500),
+            COALESCE(p_discord_role_ids, '{}'), p_discord_joined_at, now() + interval '7 days');
+    RETURN jsonb_build_object('ticket', v_ticket);
+END;
+$$;
+
+-- Gateway: binds a ticket to the GoTrue user it just created. A ticket bound to another user stays so.
+CREATE OR REPLACE FUNCTION public.discord_migration_bind_claim(p_ticket text, p_auth_user_id uuid)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, extensions, pg_temp
+AS $$
+BEGIN
+    UPDATE public.discord_migration_claims c
+       SET auth_user_id = p_auth_user_id
+     WHERE c.ticket = p_ticket AND c.expires_at > now()
+       AND (c.auth_user_id IS NULL OR c.auth_user_id = p_auth_user_id);
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'TICKET_EXPIRED';
+    END IF;
+END;
+$$;
+
+-- The caller claims a ticket: links their account to the Discord member, joins the server (accepted, no
+-- invite needed) and applies the mapped roles. Returns {server_id, roles_granted: [role names]}.
+CREATE OR REPLACE FUNCTION public.discord_migration_claim(p_ticket text)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, extensions, pg_temp
+AS $$
+DECLARE
+    v_uid uuid := auth.uid();
+    v_me uuid := public.get_current_profile_id();
+    v_claim public.discord_migration_claims;
+    v_state text;
+    v_mine record;
+    v_status text;
+    v_names text[];
+BEGIN
+    IF v_uid IS NULL OR v_me IS NULL THEN
+        RAISE EXCEPTION 'Authentication required' USING ERRCODE = '42501';
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM public.profiles p WHERE p.id = v_me AND p.is_local IS TRUE) THEN
+        RAISE EXCEPTION 'Only local accounts can claim' USING ERRCODE = '42501';
+    END IF;
+
+    SELECT c.* INTO v_claim FROM public.discord_migration_claims c WHERE c.ticket = p_ticket FOR UPDATE;
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'TICKET_EXPIRED';
+    END IF;
+    IF v_claim.auth_user_id IS NOT NULL AND v_claim.auth_user_id <> v_uid THEN
+        RAISE EXCEPTION 'This ticket belongs to another account' USING ERRCODE = '42501';
+    END IF;
+    IF v_claim.expires_at < now() THEN
+        RAISE EXCEPTION 'TICKET_EXPIRED';
+    END IF;
+
+    SELECT m.state INTO v_state FROM public.discord_migrations m WHERE m.server_id = v_claim.server_id FOR SHARE;
+    IF v_state IS DISTINCT FROM 'open' THEN
+        RAISE EXCEPTION 'MIGRATION_CLOSED';
+    END IF;
+
+    -- Harmony moderation first: nothing below undoes a ban or a kick.
+    IF EXISTS (SELECT 1 FROM public.server_bans b WHERE b.server_id = v_claim.server_id AND b.user_id = v_me)
+       OR EXISTS (SELECT 1 FROM public.user_servers us
+                   WHERE us.server_id = v_claim.server_id AND us.user_id = v_me AND us.status = 'banned') THEN
+        RAISE EXCEPTION 'HARMONY_BANNED';
+    END IF;
+
+    SELECT l.discord_user_id, l.status INTO v_mine
+      FROM public.discord_migration_links l
+     WHERE l.server_id = v_claim.server_id AND l.user_id = v_me;
+    IF FOUND THEN
+        IF v_mine.status = 'kicked_on_harmony' THEN
+            RAISE EXCEPTION 'KICKED_ON_HARMONY';
+        END IF;
+        IF v_mine.discord_user_id <> v_claim.discord_user_id THEN
+            RAISE EXCEPTION 'ALREADY_LINKED_OTHER_DISCORD';
+        END IF;
+    END IF;
+
+    IF EXISTS (SELECT 1 FROM public.discord_migration_links l
+                WHERE l.server_id = v_claim.server_id AND l.discord_user_id = v_claim.discord_user_id
+                  AND l.user_id <> v_me) THEN
+        RAISE EXCEPTION 'DISCORD_ACCOUNT_TAKEN';
+    END IF;
+    IF v_mine.status = 'banned' THEN
+        RAISE EXCEPTION 'DISCORD_BANNED_HERE';
+    END IF;
+
+    BEGIN
+        INSERT INTO public.discord_migration_links
+            (server_id, user_id, discord_user_id, status, discord_role_ids, discord_joined_at)
+        VALUES (v_claim.server_id, v_me, v_claim.discord_user_id, 'active',
+                v_claim.discord_role_ids, v_claim.discord_joined_at)
+        ON CONFLICT (server_id, user_id) DO UPDATE
+           SET status = 'active', discord_role_ids = EXCLUDED.discord_role_ids,
+               discord_joined_at = COALESCE(EXCLUDED.discord_joined_at, discord_migration_links.discord_joined_at);
+    EXCEPTION WHEN unique_violation THEN
+        RAISE EXCEPTION 'DISCORD_ACCOUNT_TAKEN';
+    END;
+
+    -- Joins as an accepted member, as redeem_invite does; the join triggers (membership event, rate
+    -- limit) run for the caller.
+    SELECT us.status INTO v_status
+      FROM public.user_servers us WHERE us.server_id = v_claim.server_id AND us.user_id = v_me;
+    IF NOT FOUND THEN
+        INSERT INTO public.user_servers (server_id, user_id, status)
+        VALUES (v_claim.server_id, v_me, 'accepted');
+    ELSIF v_status <> 'accepted' THEN
+        UPDATE public.user_servers SET status = 'accepted'
+         WHERE server_id = v_claim.server_id AND user_id = v_me;
+    END IF;
+
+    PERFORM public.discord_migration_apply_roles(v_claim.server_id, v_me, v_claim.discord_role_ids);
+
+    SELECT COALESCE(array_agg(DISTINCT sr.name), '{}') INTO v_names
+      FROM public.discord_migration_role_map m
+      JOIN public.server_roles sr ON sr.id = m.harmony_role_id
+     WHERE m.server_id = v_claim.server_id AND m.discord_role_id = ANY (v_claim.discord_role_ids)
+       AND NOT EXISTS (SELECT 1 FROM public.servers s WHERE s.id = v_claim.server_id AND s.owner = v_me);
+
+    DELETE FROM public.discord_migration_claims WHERE ticket = p_ticket;
+    RETURN jsonb_build_object('server_id', v_claim.server_id, 'roles_granted', to_jsonb(v_names));
+END;
+$$;
+
+-- The caller's unexpired tickets: [{ticket, server_id, server_name, discord_username, discord_global_name,
+-- discord_avatar_url, expires_at}].
+CREATE OR REPLACE FUNCTION public.discord_migration_my_pending_claims()
+RETURNS jsonb
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public, extensions, pg_temp
+AS $$
+    SELECT COALESCE(jsonb_agg(jsonb_build_object(
+               'ticket', c.ticket, 'server_id', c.server_id, 'server_name', s.name,
+               'discord_username', c.discord_username, 'discord_global_name', c.discord_global_name,
+               'discord_avatar_url', c.discord_avatar_url, 'expires_at', c.expires_at)
+           ORDER BY c.created_at), '[]'::jsonb)
+      FROM public.discord_migration_claims c
+      JOIN public.servers s ON s.id = c.server_id
+     WHERE auth.uid() IS NOT NULL AND c.auth_user_id = auth.uid() AND c.expires_at > now()
+$$;
+
+-- The caller sets which profile fields their link lets the migration copy. Clearing last_synced_at puts
+-- the link first in the next batch. 22023 for a field outside the seven; P0002 without a link.
+CREATE OR REPLACE FUNCTION public.discord_migration_set_my_sync(p_server_id uuid, p_fields text[])
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, extensions, pg_temp
+AS $$
+DECLARE
+    v_me uuid := public.get_current_profile_id();
+    v_fields text[];
+BEGIN
+    IF v_me IS NULL THEN
+        RAISE EXCEPTION 'Authentication required' USING ERRCODE = '42501';
+    END IF;
+    v_fields := COALESCE((SELECT array_agg(DISTINCT f ORDER BY f) FROM unnest(COALESCE(p_fields, '{}')) f), '{}');
+    IF NOT (v_fields <@ ARRAY['avatar', 'display_name', 'banner', 'accent_color',
+                              'server_nickname', 'server_avatar', 'server_banner']::text[]) THEN
+        RAISE EXCEPTION 'invalid_sync_field' USING ERRCODE = '22023';
+    END IF;
+    UPDATE public.discord_migration_links l
+       SET sync_fields = v_fields, last_synced_at = NULL
+     WHERE l.server_id = p_server_id AND l.user_id = v_me;
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'link_not_found' USING ERRCODE = 'P0002';
+    END IF;
+END;
+$$;
+
+-- The caller's own link {status, sync_fields, discord_joined_at}, or null.
+CREATE OR REPLACE FUNCTION public.discord_migration_my_link(p_server_id uuid)
+RETURNS jsonb
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public, extensions, pg_temp
+AS $$
+    SELECT jsonb_build_object('status', l.status, 'sync_fields', to_jsonb(l.sync_fields),
+                              'discord_joined_at', l.discord_joined_at)
+      FROM public.discord_migration_links l
+     WHERE l.server_id = p_server_id AND l.user_id = public.get_current_profile_id()
+$$;
+
+-- A member's Discord join date, shown to other members of the server; null for a non-member caller.
+CREATE OR REPLACE FUNCTION public.discord_migration_member_joined_at(p_server_id uuid, p_user_id uuid)
+RETURNS timestamptz
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public, extensions, pg_temp
+AS $$
+    SELECT l.discord_joined_at
+      FROM public.discord_migration_links l
+     WHERE l.server_id = p_server_id AND l.user_id = p_user_id
+       AND EXISTS (SELECT 1 FROM public.user_servers us
+                    WHERE us.server_id = p_server_id AND us.status = 'accepted'
+                      AND us.user_id = public.get_current_profile_id())
+       AND EXISTS (SELECT 1 FROM public.user_servers us
+                    WHERE us.server_id = p_server_id AND us.status = 'accepted' AND us.user_id = p_user_id)
+$$;
+
+-- A manager lets a member kicked on Harmony claim again: kicked_on_harmony becomes left.
+CREATE OR REPLACE FUNCTION public.discord_migration_allow_back(p_server_id uuid, p_user_id uuid)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, extensions, pg_temp
+AS $$
+BEGIN
+    PERFORM public.discord_migration_assert_manager(p_server_id);
+    UPDATE public.discord_migration_links l
+       SET status = 'left'
+     WHERE l.server_id = p_server_id AND l.user_id = p_user_id AND l.status = 'kicked_on_harmony';
+END;
+$$;
+
+-- A kick on Harmony marks the member's link kicked_on_harmony, so neither claim nor sync brings them
+-- back. Kicks the migration itself makes (harmony.via = discord_migration) leave the link alone.
+CREATE OR REPLACE FUNCTION public.discord_migration_note_kick()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, extensions, pg_temp
+AS $$
+BEGIN
+    IF current_setting('harmony.via', true) = 'discord_migration' THEN
+        RETURN NULL;
+    END IF;
+    UPDATE public.discord_migration_links l
+       SET status = 'kicked_on_harmony'
+     WHERE l.server_id = NEW.server_id AND l.user_id = NEW.user_id AND l.status <> 'banned';
+    RETURN NULL;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS z_membership_events_discord_migration ON public.server_membership_events;
+CREATE TRIGGER z_membership_events_discord_migration
+    AFTER INSERT ON public.server_membership_events
+    FOR EACH ROW WHEN (NEW.event_type = 'kick')
+    EXECUTE FUNCTION public.discord_migration_note_kick();
+
+DO $$
+DECLARE
+    fn regprocedure;
+BEGIN
+    FOREACH fn IN ARRAY ARRAY[
+        'public.discord_migration_claim(text)',
+        'public.discord_migration_my_pending_claims()',
+        'public.discord_migration_set_my_sync(uuid, text[])',
+        'public.discord_migration_my_link(uuid)',
+        'public.discord_migration_member_joined_at(uuid, uuid)',
+        'public.discord_migration_allow_back(uuid, uuid)'
+    ]::regprocedure[] LOOP
+        EXECUTE format('REVOKE ALL ON FUNCTION %s FROM PUBLIC, anon, authenticated, service_role', fn);
+        EXECUTE format('GRANT EXECUTE ON FUNCTION %s TO authenticated', fn);
+    END LOOP;
+
+    FOREACH fn IN ARRAY ARRAY[
+        'public.discord_migration_create_claim(uuid, jsonb, text[], timestamptz)',
+        'public.discord_migration_bind_claim(text, uuid)',
+        'public.discord_migration_apply_roles(uuid, uuid, text[])'
+    ]::regprocedure[] LOOP
+        EXECUTE format('REVOKE ALL ON FUNCTION %s FROM PUBLIC, anon, authenticated', fn);
+        EXECUTE format('GRANT EXECUTE ON FUNCTION %s TO service_role', fn);
+    END LOOP;
+
+    REVOKE ALL ON FUNCTION public.discord_migration_note_kick() FROM PUBLIC, anon, authenticated, service_role;
+END;
+$$;
+
 COMMIT;
 
 NOTIFY pgrst, 'reload schema';

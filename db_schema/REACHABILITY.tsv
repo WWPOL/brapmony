@@ -367,13 +367,22 @@ discord_bridge_unpair	definer	boolean	authenticated	client	rpc in src/components
 discord_bridge_update_settings	definer	jsonb	authenticated	client	rpc in src/components/settings/discord-bridge/bridgeApi.ts
 discord_bridges_retire_bot	definer	trigger	-	trigger	trigger public.discord_bridges AFTER DELETE (discord_bridges_retire_bot)
 discord_bridges_touch	invoker	trigger	-	trigger	trigger public.discord_bridges BEFORE UPDATE (discord_bridges_touch)
-discord_migration_admin_bearing	definer	boolean	-	nothing	called by discord_migration_save_role_map
+discord_migration_admin_bearing	definer	boolean	-	nothing	called by discord_migration_apply_roles, discord_migration_save_role_map
 discord_migration_admin_impact	definer	jsonb	authenticated	http authenticated	nothing references it
+discord_migration_allow_back	definer	void	authenticated	http authenticated	nothing references it
 discord_migration_apply_permissions	invoker	jsonb	authenticated	http authenticated	nothing references it
-discord_migration_assert_manager	definer	uuid	-	nothing	called by discord_migration_admin_impact, discord_migration_auto_match, discord_migration_get, +8
+discord_migration_apply_roles	definer	jsonb	service_role	service key	called by discord_migration_claim
+discord_migration_assert_manager	definer	uuid	-	nothing	called by discord_migration_admin_impact, discord_migration_allow_back, discord_migration_auto_match, +9
 discord_migration_auto_match	definer	jsonb	authenticated	http authenticated	nothing references it
+discord_migration_bind_claim	definer	void	service_role	service key	nothing references it
+discord_migration_claim	definer	jsonb	authenticated	http authenticated	nothing references it
+discord_migration_create_claim	definer	jsonb	service_role	service key	nothing references it
 discord_migration_credentials	definer	jsonb	service_role	service key	nothing references it
 discord_migration_get	definer	jsonb	authenticated	http authenticated	called by discord_migration_save, discord_migration_set_state
+discord_migration_member_joined_at	definer	timestamp with time zone	authenticated	http authenticated	nothing references it
+discord_migration_my_link	definer	jsonb	authenticated	http authenticated	nothing references it
+discord_migration_my_pending_claims	definer	jsonb	authenticated	http authenticated	nothing references it
+discord_migration_note_kick	definer	trigger	-	trigger	trigger public.server_membership_events AFTER INSERT (z_membership_events_discord_migration)
 discord_migration_permission_gaps	definer	jsonb	authenticated	http authenticated	called by discord_migration_apply_permissions, discord_migration_get
 discord_migration_readiness	definer	jsonb	authenticated	http authenticated	called by discord_migration_get, discord_migration_save_role_map, discord_migration_set_state
 discord_migration_regenerate_token	definer	text	authenticated	http authenticated	nothing references it
@@ -381,6 +390,7 @@ discord_migration_request_sync	definer	void	authenticated	http authenticated	not
 discord_migration_save	definer	jsonb	authenticated	http authenticated	nothing references it
 discord_migration_save_role_map	definer	jsonb	authenticated	http authenticated	nothing references it
 discord_migration_secrets_purge	definer	trigger	-	trigger	trigger public.discord_migration_secrets AFTER DELETE (discord_migration_secrets_purge)
+discord_migration_set_my_sync	definer	void	authenticated	http authenticated	nothing references it
 discord_migration_set_own_credentials	definer	void	authenticated	http authenticated	nothing references it
 discord_migration_set_state	definer	jsonb	authenticated	http authenticated	nothing references it
 discord_migration_store_discord_roles	definer	void	service_role	service key	nothing references it
@@ -963,7 +973,7 @@ server_audit_stickers	definer	trigger	service_role	trigger	trigger public.sticke
 server_audit_timeouts	definer	trigger	service_role	trigger	trigger public.server_member_timeouts AFTER INSERT/DELETE/UPDATE (z_server_member_timeouts_audit)
 server_audit_user_roles	definer	trigger	service_role	trigger	trigger public.user_roles AFTER INSERT/DELETE (z_user_roles_audit)
 server_audit_value	invoker	jsonb	service_role	trigger	called by server_audit_diff
-server_audit_write	definer	uuid	service_role	client, trigger	called by moderate_server_profile, move_voice_member, remove_suspended_remote_members, +19
+server_audit_write	definer	uuid	service_role	client, trigger	called by discord_migration_apply_roles, moderate_server_profile, move_voice_member, +20
 server_emoji_limit	invoker	integer	anon+authenticated+service_role	client	rpc in bot-gateway/src/api/BotRestAPI.ts
 server_has_remote_members	invoker	boolean	service_role	service key	nothing references it
 server_host_domain	invoker	text	service_role	client	called by apply_server_report_resolution, create_report, get_reports_with_details
