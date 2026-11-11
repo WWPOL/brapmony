@@ -1,4 +1,4 @@
--- 20261111950003_server_profile_broadcast.sql: user_servers changes broadcast to
+-- 20261112100003_server_profile_broadcast.sql: user_servers changes broadcast to
 -- server-presence:<server> as presence_event: member:join, member:leave and member:update (the
 -- five server profile fields, only when one changes); account pronouns in profile:updated.
 BEGIN;
@@ -67,7 +67,7 @@ SELECT is(
       AND payload ->> 'type' = 'member:update'),
   1, 'writing the same values broadcasts nothing');
 
--- Account pronouns (20261111950006): profile:updated on each of the member's servers.
+-- Account pronouns (20261112100006): profile:updated on each of the member's servers.
 UPDATE public.profiles SET pronouns = 'they/them' WHERE id = '11111111-0000-0000-0000-000000000001';
 
 SELECT is(

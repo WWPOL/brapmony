@@ -1,4 +1,4 @@
--- CHANGE_NICKNAME (bit 32) and MANAGE_NICKNAMES (bit 33), 20261111950001_nickname_permissions.sql.
+-- CHANGE_NICKNAME (bit 32) and MANAGE_NICKNAMES (bit 33), 20261112100001_nickname_permissions.sql.
 --
 -- New servers' @everyone carries CHANGE_NICKNAME, not MANAGE_NICKNAMES. A server made from a
 -- template does too, whatever the template's mask says. Existing local servers' @everyone gains
@@ -63,9 +63,9 @@ $$;
 
 -- The block is read from the migration file at /db_schema/migrations, where
 -- scripts/run-db-tests.sh copies db_schema.
-\! sed -n '/^-- Existing @everyone roles$/,/^\$\$;$/p' /db_schema/migrations/20261111950001_nickname_permissions.sql > /tmp/converge269.sql
-\! test -s /tmp/converge269.sql || echo 'ERROR: /db_schema/migrations/20261111950001_nickname_permissions.sql is not in the container; copy db_schema to /db_schema'
-\i /tmp/converge269.sql
+\! sed -n '/^-- Existing @everyone roles$/,/^\$\$;$/p' /db_schema/migrations/20261112100001_nickname_permissions.sql > /tmp/converge270.sql
+\! test -s /tmp/converge270.sql || echo 'ERROR: /db_schema/migrations/20261112100001_nickname_permissions.sql is not in the container; copy db_schema to /db_schema'
+\i /tmp/converge270.sql
 SELECT is((SELECT permissions FROM public.server_roles
             WHERE server_id = 'f2464000-0000-0000-0000-000000000001' AND is_default),
           7638839554::bigint, 'an existing server''s @everyone gains CHANGE_NICKNAME');
@@ -87,7 +87,7 @@ AS $$ SELECT ARRAY[
 $$;
 UPDATE public.server_roles SET permissions = 3343872258
  WHERE server_id = 'f2464000-0000-0000-0000-000000000001' AND is_default;
-\i /tmp/converge269.sql
+\i /tmp/converge270.sql
 SELECT is((SELECT permissions FROM public.server_roles
             WHERE server_id = 'f2464000-0000-0000-0000-000000000001' AND is_default),
           3343872258::bigint, 'a rerun leaves a removed bit removed');

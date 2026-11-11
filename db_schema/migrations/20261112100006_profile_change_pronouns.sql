@@ -2,7 +2,7 @@
 --
 -- broadcast_profile_change (baseline) sends profile:updated on each server-presence topic when a
 -- profile field changes, and since 1.9.5 it is the only path: clients no longer broadcast their own
--- profile. It did not know profiles.pronouns (20261111950002), so a change to pronouns alone sent
+-- profile. It did not know profiles.pronouns (20261112100002), so a change to pronouns alone sent
 -- nothing and other members kept the old value until a reload. It now compares and sends pronouns;
 -- the client's handleProfileUpdate already reads the field. Otherwise as the baseline.
 --

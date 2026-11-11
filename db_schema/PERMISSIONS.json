@@ -906,7 +906,7 @@
         "src/services/RoleService.ts"
       ],
       "pgtap": [
-        "db_schema/tests/269_nickname_permissions.sql"
+        "db_schema/tests/270_nickname_permissions.sql"
       ],
       "e2e": [
         "e2e/specs/server-profiles.spec.ts"
@@ -927,7 +927,7 @@
         "src/services/RoleService.ts"
       ],
       "pgtap": [
-        "db_schema/tests/269_nickname_permissions.sql"
+        "db_schema/tests/270_nickname_permissions.sql"
       ],
       "e2e": [
         "e2e/specs/server-profiles.spec.ts"
