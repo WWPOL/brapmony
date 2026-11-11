@@ -88,6 +88,10 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   hold one keep it.
 
 ### Fixed
+- **Discord bridge import notices.** The bridge settings now explain "A history import is waiting for
+  the Message Content Intent" and "The import left out N private threads of #channel" instead of
+  "The bridge reported a problem (…)". Left-out private threads are shown as a note and no longer
+  mark the bridge "online, with problems".
 - **The message field no longer locks after switching servers.** A switch could leave "You do not
   have permission to send messages in this channel" in place of the field until a reload, on 1.9.5
   instances.
