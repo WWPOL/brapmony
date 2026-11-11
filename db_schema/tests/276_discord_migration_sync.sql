@@ -1,4 +1,4 @@
--- "Migrate from Discord": the sync RPCs the gateway calls, 20261112110001_discord_migration.sql.
+-- "Migrate from Discord": the sync RPCs the gateway calls, 20261112500001_discord_migration.sql.
 --
 --   alice   owner of s1 (a1), s2 (a2), s3 (a3); linked on s1 and s2
 --   bob     member of s1, Discord account U1

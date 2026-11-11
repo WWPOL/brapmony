@@ -324,7 +324,7 @@ Decided with the user after server profiles (WWPOL/brapmony#3) and history impor
 
 ### Numbering
 
-Migrations after master's last (`20261112100006`): `20261112110001_discord_migration.sql`. pgTAP files
+Migrations after master's last (`20261112100006`): `20261112500001_discord_migration.sql`. pgTAP files
 274-276.
 
 ### Role permissions: "Apply Discord permissions"

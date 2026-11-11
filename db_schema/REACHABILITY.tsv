@@ -148,8 +148,17 @@ bridge_import_messages	definer	jsonb	service_role	client	rpc in bot-gateway/src/
 bridge_import_present_ids	definer	text[]	service_role	client	rpc in bot-gateway/src/bridge/historyImport.ts
 bridge_import_server_emoji	definer	TABLE(status text, id uuid, name text, url text, discord_emoji_id text, removed boolean)	service_role	client	rpc in bot-gateway/src/api/BotRestAPI.ts
 bridge_import_server_sound	definer	TABLE(status text, id uuid, name text, emoji text, emoji_id uuid, volume numeric, discord_sound_id text)	service_role	client	rpc in bot-gateway/src/api/BotRestAPI.ts
+bridge_import_server_sticker	definer	TABLE(status text, id uuid, name text, description text, url text, discord_sticker_id text, removed boolean)	service_role	client	rpc in bot-gateway/src/api/BotRestAPI.ts
 bridge_import_thread	definer	uuid	service_role	client	rpc in bot-gateway/src/bridge/historyImport.ts
+bridge_mirror_backfill	definer	integer	service_role	client	rpc in bot-gateway/src/bridge/mirrorWorker.ts
+bridge_mirror_claim	definer	TABLE(message_id uuid, bot_id uuid, channel_id uuid, attempts integer)	service_role	client	rpc in bot-gateway/src/bridge/mirrorWorker.ts
+bridge_mirror_enqueue	definer	integer	service_role	client	rpc in bot-gateway/src/bridge/mirrorEnqueue.ts
+bridge_mirror_finish	definer	void	service_role	client	rpc in bot-gateway/src/bridge/mirrorWorker.ts
+bridge_mirror_observe	definer	jsonb	service_role	client	rpc in bot-gateway/src/bridge/mirrorWorker.ts
+bridge_mirror_restart_walk	definer	void	service_role	client	rpc in bot-gateway/src/bridge/mirrorWorker.ts
+bridge_mirror_status	definer	jsonb	authenticated+service_role	client	rpc in src/components/admin/InstanceConfig.vue
 bridge_remove_server_emoji	definer	text	service_role	client	rpc in bot-gateway/src/api/BotRestAPI.ts
+bridge_retire_server_sticker	definer	text	service_role	client	rpc in bot-gateway/src/api/BotRestAPI.ts
 broadcast_bot_installation_change	definer	trigger	service_role	trigger	trigger public.bot_server_permissions AFTER INSERT/DELETE/UPDATE (broadcast_bot_installation_change)
 broadcast_bot_presence_change	definer	trigger	service_role	trigger	trigger public.bot_presence AFTER INSERT/UPDATE (broadcast_bot_presence_change)
 broadcast_category_change	definer	trigger	anon+authenticated+service_role	trigger	trigger public.channel_categories AFTER INSERT/DELETE/UPDATE (trg_broadcast_category_change)
@@ -740,7 +749,7 @@ is_history_import	invoker	boolean	service_role	client, trigger	called by broadca
 is_muted_by	definer	boolean	service_role	service key	nothing references it
 is_plaintext_mention_part	invoker	boolean	authenticated+service_role	trigger	called by is_encrypted_channel_content
 is_room_member	definer	boolean	authenticated+service_role	client, policy, trigger	policy public.megolm_session_shares INSERT on megolm_session_shares_insert, public.megolm_session_shares UPDATE on megolm_session_shares_update, public.room_epoch_state SELECT on room_epoch_state_select; rpc in src/services/encryption/MegolmKeyBackupService.ts
-is_storage_public_url	invoker	boolean	service_role	client	called by create_instance_emoji, create_my_emoji, create_server_emoji, +3
+is_storage_public_url	invoker	boolean	service_role	client	called by bridge_import_server_sticker, create_instance_emoji, create_my_emoji, +4
 is_user_viewing_context	definer	boolean	service_role	client, trigger	called by is_user_viewing_push_context, send_notification
 is_user_viewing_push_context	definer	boolean	service_role	client	rpc in federation-backend/src/services/PushNotificationService.ts
 is_user_viewing_thread	definer	boolean	service_role	client, trigger	called by send_notification
@@ -1056,9 +1065,9 @@ staff_signup_groups	definer	TABLE(kind text, key text, label text, size integer,
 stamp_post_federate_image_cap	definer	trigger	service_role	trigger	trigger public.posts BEFORE INSERT/UPDATE (posts_federate_image_cap)
 start_dm_call_message	definer	uuid	authenticated+service_role	client	rpc in src/services/DMCallSignaling.ts
 start_following_import	definer	jsonb	authenticated+service_role	client	rpc in src/services/AccountMigrationService.ts
-sticker_check_text	invoker	void	service_role	client	called by create_sticker, update_sticker
+sticker_check_text	invoker	void	service_role	client	called by bridge_import_server_sticker, create_sticker, update_sticker
 sticker_folder_has_room	definer	boolean	service_role	policy	called by can_write_sticker_object
-sticker_limit	invoker	integer	anon+authenticated+service_role	policy, trigger	called by enforce_sticker_limit, sticker_folder_has_room
+sticker_limit	invoker	integer	anon+authenticated+service_role	client, policy, trigger	rpc in bot-gateway/src/api/BotRestAPI.ts
 storage_upload_limit	definer	trigger	service_role	trigger	trigger storage.objects BEFORE INSERT/UPDATE (storage_upload_limit)
 store_federated_message_poll	definer	uuid	service_role	client	rpc in federation-backend/src/activitypub/messagePolls.ts
 supporter_message_problem	invoker	text	authenticated+service_role	client, declarative	check public.instance_supporter_messages instance_supporter_messages_body_valid
@@ -1137,7 +1146,7 @@ update_group_name	definer	jsonb	authenticated+service_role	client	rpc in src/com
 update_hashtag_trending_scores	definer	integer	anon+authenticated+service_role	client, cron	cron 0 * * * * (update-hashtag-scores); rpc in src/services/TrendingService.ts
 update_instance_antispam_settings	definer	jsonb	authenticated+service_role	client	rpc in src/services/AutoModService.ts
 update_megolm_backup_timestamp	invoker	trigger	anon+authenticated+service_role	trigger	trigger public.megolm_key_backups BEFORE UPDATE (update_megolm_backup_timestamp)
-update_message_content_silent	definer	boolean	service_role	client	rpc in bot-gateway/src/api/BotRestAPI.ts
+update_message_content_silent	definer	boolean	service_role	client	rpc in bot-gateway/src/api/BotRestAPI.ts, bot-gateway/src/bridge/mirrorWorker.ts
 update_message_embeds	definer	void	service_role	client	rpc in federation-backend/src/listeners/DatabaseListener.ts
 update_outgoing_webhook	definer	jsonb	authenticated+service_role	client	named in src/components/__tests__/OutgoingWebhooksPanel.test.ts, src/services/outgoingWebhookService.ts
 update_post_embeds	definer	void	service_role	client	rpc in federation-backend/src/listeners/DatabaseListener.ts
@@ -1155,7 +1164,7 @@ update_status_timestamp	invoker	trigger	anon+authenticated+service_role	trigger	
 update_sticker	definer	stickers	authenticated+service_role	client	rpc in src/services/stickerService.ts
 update_threads_updated_at	invoker	trigger	anon+authenticated+service_role	trigger	trigger public.threads BEFORE UPDATE (trigger_threads_updated_at)
 update_trending_posts	definer	void	anon+authenticated+service_role	client, cron	cron */15 * * * * (update-trending-posts); rpc in src/services/TrendingService.ts
-upload_ceiling_bytes	definer	bigint	service_role	client, trigger	called by admin_get_upload_limit, admin_set_upload_limit, admin_set_upload_limits, +2
+upload_ceiling_bytes	definer	bigint	service_role	client, trigger	named in bot-gateway/src/utils/mirrorExternalMedia.ts
 upload_limit_bytes	definer	bigint	service_role	client, trigger	called by admin_get_upload_limit, get_my_upload_limit, storage_upload_limit
 upload_tier	definer	text	service_role	client, trigger	called by admin_get_upload_limit, upload_limit_bytes
 upload_tier_limit_bytes	definer	bigint	service_role	client, trigger	called by admin_get_upload_limit, upload_limit_bytes

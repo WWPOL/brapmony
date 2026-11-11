@@ -19,6 +19,11 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   a removal brake pauses a suspicious sync, and **Finish migration** hands control back to Harmony.
   Operators can turn off account creation for migrations with `harmony migration account-creation off`
   and set the sync interval with `DISCORD_MIGRATION_SYNC_MS`. See Run a server → Migrate from Discord.
+- **Discord files are stored in the background.** With **Mirror to storage**, the gateway now also
+  stores the Discord files of messages already in Harmony, and files over 50 MB: the cap is the
+  instance's upload ceiling (`harmony config --upload-ceiling`). Large files are downloaded one at a
+  time through a temporary file. Expired links are refreshed through the bridge. **Instance admin** →
+  **Config** shows how many files are waiting, stored, too large or failed.
 - **Slash commands for bots.** Bots register commands with `PUT /commands`; members pick them from
   the `/` list in server channels and threads, fill in typed options (text, numbers, true or false,
   choices, members, channels, roles) and the bot receives `INTERACTION_CREATE`. It answers within
@@ -38,6 +43,15 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   bot-gateway endpoints for the server's bridge bot: `GET
   /servers/{id}/sounds`, `POST /servers/{id}/sounds/discord` and `DELETE
   /servers/{id}/sounds/{soundId}`.
+- **Discord bridge sticker sync.** The same bridge bot can sync a server's
+  stickers through `GET /servers/{id}/stickers/discord` (the sticker limit and
+  the Discord-linked stickers, removed ones included), `POST
+  /servers/{id}/stickers/discord` (copies a PNG, APNG or GIF sticker from
+  Discord's CDN; Lottie stickers are refused with `422` `STICKER_FILE`) and
+  `DELETE /servers/{id}/stickers/{stickerId}`, which retires the sticker: it
+  leaves the picker and the list and no new message can use it, while old
+  messages keep showing it. A message that names a removed or unknown sticker
+  now answers `422` `STICKER_REFUSED`.
 - **Discord bridge emoji sync.** The same bridge bot can sync a server's emoji
   through `GET /servers/{id}/emojis/discord` (the server's emoji limit and its
   Discord-linked emoji, removed ones included), an `update` flag on `POST
@@ -99,6 +113,15 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   hold one keep it.
 
 ### Fixed
+- **Imported Discord threads archive like other threads.** A thread brought in by the history import
+  had no last message time, so it never auto-archived and stayed listed under its channel. Imported
+  replies now set it when it is missing, and existing threads are backfilled from their newest message.
+- **Pinned messages show bridged authors.** Pins of messages from the Discord bridge (live or
+  imported), webhooks and bots listed "Unknown"; they now show the same name and avatar as in chat.
+- **Discord bridge import notices.** The bridge settings now explain "A history import is waiting for
+  the Message Content Intent" and "The import left out N private threads of #channel" instead of
+  "The bridge reported a problem (…)". Left-out private threads are shown as a note and no longer
+  mark the bridge "online, with problems".
 - **The message field no longer locks after switching servers.** A switch could leave "You do not
   have permission to send messages in this channel" in place of the field until a reload, on 1.9.5
   instances.

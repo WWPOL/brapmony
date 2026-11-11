@@ -14,7 +14,7 @@
 
 ## Global Constraints
 
-- Migration file: `db_schema/migrations/20261112110001_discord_migration.sql`. If master has a later migration when work starts, renumber past it. Follow the house style: idempotent ("converges by state"), `BEGIN; SET LOCAL lock_timeout …; … COMMIT;`, ends with `NOTIFY pgrst, 'reload schema'`, and `SET search_path = public, extensions, pg_temp` on every `SECURITY DEFINER`. Later DB tasks append to this same file.
+- Migration file: `db_schema/migrations/20261112500001_discord_migration.sql`. If master has a later migration when work starts, renumber past it. Follow the house style: idempotent ("converges by state"), `BEGIN; SET LOCAL lock_timeout …; … COMMIT;`, ends with `NOTIFY pgrst, 'reload schema'`, and `SET search_path = public, extensions, pg_temp` on every `SECURITY DEFINER`. Later DB tasks append to this same file.
 - pgTAP tests: `db_schema/tests/274_discord_migration_config.sql`, `275_discord_migration_claim.sql`, `276_discord_migration_sync.sql` (renumber past master's highest when work starts). Run with `bash scripts/run-db-tests.sh`; on Windows use Docker in WSL on an LF copy of the tree.
 - After adding RPCs, regenerate `db_schema/SURFACE.tsv` (`scripts/generate-surface.sh`) and `db_schema/REACHABILITY.tsv` (`scripts/generate-reachability.sh`), run `scripts/check-published-no-caller.sh`, `scripts/check-rpc-coverage.sh` and `scripts/check-plpgsql.sh`. CI fails on stale census files.
 - Snowflakes are validated with `^[0-9]{1,20}$` everywhere.
@@ -45,7 +45,7 @@
 ### Task 1: Schema and admin configuration RPCs
 
 **Files:**
-- Create: `db_schema/migrations/20261112110001_discord_migration.sql`
+- Create: `db_schema/migrations/20261112500001_discord_migration.sql`
 - Create: `db_schema/tests/274_discord_migration_config.sql`
 - Modify: `db_schema/SURFACE.tsv`, `db_schema/REACHABILITY.tsv`, `db_schema/PUBLISHED-NO-CALLER.tsv`, `db_schema/PERMISSIONS.json` (as the census scripts require)
 
@@ -88,7 +88,7 @@
 ### Task 2: Role map, permission gaps, Administrator safeguards, lifecycle
 
 **Files:**
-- Modify: `db_schema/migrations/20261112110001_discord_migration.sql`
+- Modify: `db_schema/migrations/20261112500001_discord_migration.sql`
 - Modify: `db_schema/tests/274_discord_migration_config.sql`
 
 **Interfaces:**
@@ -128,7 +128,7 @@
 ### Task 3: Claims, joining and Harmony moderation precedence
 
 **Files:**
-- Modify: `db_schema/migrations/20261112110001_discord_migration.sql`
+- Modify: `db_schema/migrations/20261112500001_discord_migration.sql`
 - Create: `db_schema/tests/275_discord_migration_claim.sql`
 
 **Interfaces:**
@@ -167,7 +167,7 @@
 ### Task 4: Sync RPCs (roles, profile fields, timeouts, removals, brake)
 
 **Files:**
-- Modify: `db_schema/migrations/20261112110001_discord_migration.sql`
+- Modify: `db_schema/migrations/20261112500001_discord_migration.sql`
 - Create: `db_schema/tests/276_discord_migration_sync.sql`
 
 **Interfaces:**

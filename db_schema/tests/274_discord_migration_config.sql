@@ -1,4 +1,4 @@
--- "Migrate from Discord": schema and configuration RPCs, 20261112110001_discord_migration.sql.
+-- "Migrate from Discord": schema and configuration RPCs, 20261112500001_discord_migration.sql.
 --
 --   alice  owner of server_1 (fixture) and of s2 and s3 below
 --   bob    accepted member of server_1 without MANAGE_SERVER

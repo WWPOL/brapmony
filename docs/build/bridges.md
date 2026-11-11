@@ -207,6 +207,8 @@ The app explains these problem codes, using the `params` shown:
 | `rate_limited` | Discord or this instance is slowing the bridge down. | |
 | `discord_unreachable` | The bridge can't reach Discord. | |
 | `harmony_unreachable` | The bridge can't reach the instance. | |
+| `message_content_needed_for_import` | A history import is waiting for the Message Content Intent. | |
+| `private_threads_skipped` | A notice: the import left out a channel's private threads. It doesn't count as a problem to fix, and the bridge stays "online". | `discord_channel_id`, optional `count` |
 
 Any other code shows as "The bridge reported a problem" with the code. The app derives `intent_missing`, `no_guild` and `bot_not_in_guild` from the status on its own as well.
 
@@ -326,7 +328,7 @@ Discord CDN attachment URLs expire. The instance administrator chooses how Harmo
 |---|---|
 | `link` (default) | URLs are stored as the bridge sends them. |
 | `refresh` | When a member views a bridged message whose Discord links have expired, the gateway sends the authoring bot [`REFRESH_ATTACHMENTS`](/build/gateway#refresh-attachments). The bridge renews the URLs with Discord and writes the parts back with [`PATCH /messages/{message.id}/content-silent`](/build/rest#patch-content-silently). |
-| `mirror` | `file` and `url` parts pointing at `discordapp.com` or `discordapp.net` in created or edited messages are copied into the instance's storage, up to 50 MB each, and become `file` parts there. Photos and videos are stored without their location, camera and other metadata ([Photo and video metadata](/build/rest#photo-and-video-metadata)). A failed copy keeps the Discord URL. |
+| `mirror` | `file` and `url` parts pointing at `discordapp.com` or `discordapp.net` in created or edited messages are copied into the instance's storage, up to the instance's upload ceiling each, and become `file` parts there. Photos and videos are stored without their location, camera and other metadata ([Photo and video metadata](/build/rest#photo-and-video-metadata)). A failed copy keeps the Discord URL. |
 
 The gateway applies `mirror` on its own, so a bridge sends Discord URLs in every mode. Only `refresh` needs the bridge's help: it must answer `REFRESH_ATTACHMENTS`.
 

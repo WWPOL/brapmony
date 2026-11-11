@@ -1,5 +1,5 @@
 -- "Migrate from Discord": claims, joining, Harmony moderation precedence and role application,
--- 20261112110001_discord_migration.sql.
+-- 20261112500001_discord_migration.sql.
 --
 --   alice   owner of s2 (and a member)
 --   bob     not a member of s2 at first; Discord account U1
