@@ -12,8 +12,10 @@ so this is a setting, not a replacement.
 
 - Two sidebar modes:
   - `all`: today's behaviour. Every active thread of the channel except ones the account left.
-  - `joined`: only threads the account is a member of, plus the thread currently open. The rest
-    stay reachable from the channel's Threads button (`AllThreadsModal.vue`), which is unchanged.
+  - `joined`: only threads the account is a member of. A thread you open without joining is not
+    added to the sidebar (decided by the user); joining, posting or being mentioned adds it. The
+    rest stay reachable from the channel's Threads button (`AllThreadsModal.vue`), which is
+    unchanged.
 - The instance admin sets the default. Each server can follow the instance or choose a mode.
 - An @mention of a specific member in a thread reply adds that member to the thread, in **both**
   modes (decided by the user), like Discord. It also brings back someone who had left the thread
@@ -133,7 +135,8 @@ at `20261112400001` / 279. Re-check before writing.
   indicator.
 - `ChannelSidebar.vue` `getChannelActiveThreads(channelId)`:
   - `all`: unchanged, `activeChannelThreads(channelId).filter(t => !t.left)`.
-  - `joined`: `activeChannelThreads(channelId).filter(t => t.is_member || t.id === selectedThreadId)`.
+  - `joined`: `activeChannelThreads(channelId).filter(t => t.is_member)`; the open thread gets no
+    exception.
 - A member added by mention should see the thread appear without reloading. My call: the mention
   notification payload gets an additive `thread: { id }` for thread replies (newcomer alerts
   already use this shape), and when the client receives a mention notification carrying it, it
@@ -149,6 +152,19 @@ at `20261112400001` / 279. Re-check before writing.
   - Strings in all 7 locales.
 - Tests: sidebar filter in both modes (member, non-member, left, open thread); service RPC calls;
   both settings components (load, save, follow-instance).
+
+### Decided after review (the user)
+
+- A mention of someone who can't view the channel does nothing: no join, and no notification
+  (`send_notification` already skips recipients without VIEW_CHANNEL and recipients who blocked
+  the sender). If they gain access later, the thread is not added to their sidebar
+  retroactively; they find it in the Threads list.
+- Someone who blocked the author is never pulled into a thread by that author's mention.
+- If the mode lookup fails, the sidebar uses `all` for that session (today's behaviour), never an
+  empty list.
+- Switching a server back to "Instance default" clears its choice; its sidebar follows the
+  instance from the next load (immediately for the admin who changed it). Memberships are
+  untouched.
 
 ## Constraints
 

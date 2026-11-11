@@ -24,7 +24,7 @@
 
 1. A mention of someone who is not a member of the server, or can't view the channel: no row in `thread_members` (Task 2 test `mention of a non-viewer joins no one`).
 2. A thread reply mentioning several people where one blocked the author: the others join, the blocker doesn't (Task 2 test `a blocker is not joined, the others are`).
-3. `joined` mode with the open thread being one the member never joined: it still shows, and disappears once another thread is opened (Task 3 test `keeps the open thread, drops it once closed`).
+3. `joined` mode with the open thread being one the member never joined: it is not in the sidebar (Task 3 test `an open thread you haven't joined stays out`).
 4. The effective-mode RPC failing (remote server, network error): the sidebar behaves as `all` and logs, never empty (Task 3 test `falls back to all when the lookup fails`).
 5. Switching the server back to "Instance default": `server_value` becomes NULL and the mode follows the instance (Task 1 test `NULL returns the server to the instance default`).
 
@@ -76,7 +76,7 @@
 - [ ] **Step 1: Append failing assertions** (a thread `T` in the Task 1 server, with parent message; `dave` = a profile you add who is a server member but denied VIEW_CHANNEL on the channel via a channel permission overwrite, or not a server member at all, whichever the fixtures make simpler):
   - Bob posts in T mentioning carol after carol joins the server: carol is in `thread_members` (`a mention joins a viewer`).
   - Carol `leave_thread(T)`, bob mentions her again: membership is back and `thread_departures` has no row for her (`a mention brings back someone who left`).
-  - A mention of a non-member / non-viewer: no row (`mention of a non-viewer joins no one`).
+  - A mention of a non-member / non-viewer: no row and no `mention` notification for them (`mention of a non-viewer joins no one`).
   - One reply mentioning carol and a profile that has a `user_blocks` row blocking bob: carol joined, the blocker not (`a blocker is not joined, the others are`).
   - A reply whose only mention parts are `{"type":"role_mention","roleId":<a role id>}` and a `role_mention` of the server's default role (@everyone is the `is_default` role; see `handle_role_mention_notifications`), posted by the owner so the permission guard allows it: no new members.
   - With `set_config('harmony.history_import','true',true)`, a reply mentioning a new viewer: no row; reset the flag after.
@@ -104,19 +104,19 @@
 **Interfaces:**
 - Consumes: Task 1 RPC names.
 - Produces:
-  - `src/utils/threadSidebar.ts`: `export type ThreadSidebarMode = 'all' | 'joined'`; `export function parseThreadSidebarMode(value: unknown): ThreadSidebarMode` (`'joined'` or JSON `"joined"` → `'joined'`, anything else `'all'`); `export function sidebarThreads<T extends { id: string; is_member?: boolean; left?: boolean }>(threads: T[], mode: ThreadSidebarMode, openThreadId: string | null): T[]`.
+  - `src/utils/threadSidebar.ts`: `export type ThreadSidebarMode = 'all' | 'joined'`; `export function parseThreadSidebarMode(value: unknown): ThreadSidebarMode` (`'joined'` or JSON `"joined"` → `'joined'`, anything else `'all'`); `export function sidebarThreads<T extends { id: string; is_member?: boolean; left?: boolean }>(threads: T[], mode: ThreadSidebarMode): T[]`.
   - `src/services/ThreadSidebarService.ts` (shape of `NewcomerAlertService.ts`): `THREAD_SIDEBAR_DEFAULT_KEY = 'thread_sidebar_default'`; `interface ThreadSidebarState { mode: ThreadSidebarMode; server_value: ThreadSidebarMode | null; instance_default: ThreadSidebarMode }`; `getServerThreadSidebar(serverId)`, `setServerThreadSidebar(serverId, mode: ThreadSidebarMode | null)`, `getInstanceThreadSidebarDefault(): Promise<ThreadSidebarMode>`, `setInstanceThreadSidebarDefault(mode)` (via `set_instance_config`, description `'Which threads the channel sidebar lists for servers whose server_settings.thread_sidebar is NULL'`), and `getThreadSidebarMode(serverId): Promise<ThreadSidebarMode>` calling `server_thread_sidebar_mode`, returning `'all'` on any error (logged with `debug.error`).
   - A per-server cache: `useThreadSidebarMode(serverId: Ref<string | null>, isLocal: Ref<boolean>)` composable in the service file or a small Pinia store (builder's choice) exposing `mode: Ref<ThreadSidebarMode>` (starts `'all'`, set after load, not called for `isLocal === false`) and `setCached(serverId, mode)` so Task 5's save updates it immediately.
 
 - [ ] **Step 1: Write failing unit tests** in `threadSidebar.test.ts`:
   - `all` mode keeps every thread except `left: true`.
   - `joined` mode keeps `is_member: true` threads only (`left` irrelevant: a member who left has `is_member` false).
-  - `keeps the open thread, drops it once closed`: joined mode, open id = a non-member thread → included; `openThreadId` null → excluded.
+  - `an open thread you haven't joined stays out`: joined mode drops a non-member thread whatever is open (the function takes no open-thread argument).
   - `parseThreadSidebarMode`: `'joined'`, `"joined"` JSON value → joined; `undefined`, `'all'`, `'x'`, `false` → all.
 - [ ] **Step 2: Write failing service tests** (mock `@/supabase` like `src/components/settings/server/__tests__/ServerNewcomerAlerts.test.ts` does): each function calls the RPC name and args above; `getThreadSidebarMode` returns `'all'` when the RPC errors (`falls back to all when the lookup fails`).
 - [ ] **Step 3: Run** `npx vitest run src/utils/__tests__/threadSidebar.test.ts src/services/__tests__/ThreadSidebarService.test.ts` — FAIL (modules missing).
 - [ ] **Step 4: Implement both files and the cache.**
-- [ ] **Step 5: Wire `ChannelSidebar.vue`**: `getChannelActiveThreads(channelId)` returns `sidebarThreads(threadsStore.activeChannelThreads(channelId), mode.value, selectedThreadId.value)`; the mode comes from the cache keyed by `currentServer.id`, with `isLocal = currentServer.is_local_server !== false`.
+- [ ] **Step 5: Wire `ChannelSidebar.vue`**: `getChannelActiveThreads(channelId)` returns `sidebarThreads(threadsStore.activeChannelThreads(channelId), mode.value)`; the mode comes from the cache keyed by `currentServer.id`, with `isLocal = currentServer.is_local_server !== false`.
 - [ ] **Step 6: Run** the two new test files plus `npx vitest run src/components/__tests__/ChannelSidebar` — PASS (existing sidebar tests unchanged: default mode `all`).
 - [ ] **Step 7: Regenerate REACHABILITY** (`server_thread_sidebar_mode` now `client`).
 - [ ] **Step 8: Commit** `feat(sidebar): list only joined threads when the server says so`.
