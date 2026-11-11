@@ -8,7 +8,7 @@
 --   s1  roles Mod (c1), Helper (c4), Artist (c3, unmapped), Admins (c2, ADMINISTRATOR); map D1 -> Mod, D2 -> Admins
 BEGIN;
 SET LOCAL search_path = tests, public;
-SELECT plan(61);
+SELECT plan(72);
 
 CREATE TEMP TABLE out (k text PRIMARY KEY, v jsonb) ON COMMIT DROP;
 GRANT ALL ON out TO PUBLIC;
@@ -65,7 +65,7 @@ INSERT INTO service_fns VALUES
   ('public.discord_migration_sync_member(uuid, uuid, jsonb)'),
   ('public.discord_migration_apply_removals(uuid, jsonb)'),
   ('public.discord_migration_pause(uuid, text)'),
-  ('public.discord_migration_record_sync(uuid, jsonb, timestamptz)');
+  ('public.discord_migration_record_sync(uuid, jsonb, timestamptz, timestamptz)');
 SELECT is_empty($q$SELECT fn FROM service_fns WHERE has_function_privilege('anon', fn, 'EXECUTE')
                                                 OR has_function_privilege('authenticated', fn, 'EXECUTE')
                                                 OR NOT has_function_privilege('service_role', fn, 'EXECUTE')$q$,
@@ -210,6 +210,15 @@ RESET role;
 SELECT ok((SELECT nickname IS NULL FROM public.user_servers WHERE user_id = '22222222-0000-0000-0000-000000000002'
               AND server_id = 'f2760000-0000-0000-0000-0000000000a1'), 'profile: a Discord null clears the nickname');
 
+SET LOCAL role service_role;
+SELECT public.discord_migration_sync_member('f2760000-0000-0000-0000-0000000000a1',
+  '22222222-0000-0000-0000-000000000002', '{"present": true, "profile": {"accent_color": 1.5}}');
+SELECT public.discord_migration_sync_member('f2760000-0000-0000-0000-0000000000a1',
+  '22222222-0000-0000-0000-000000000002', '{"present": true, "profile": {"accent_color": 99999999999}}');
+RESET role;
+SELECT is((SELECT color FROM public.profiles WHERE id = '22222222-0000-0000-0000-000000000002'), '#ff0000',
+  'profile: a non-integer or out-of-range accent colour is ignored, not an error');
+
 -- timeouts_respect_harmony -----------------------------------------------------------------------------
 SET LOCAL role service_role;
 SELECT public.discord_migration_sync_member('f2760000-0000-0000-0000-0000000000a1',
@@ -340,6 +349,11 @@ SELECT ok(EXISTS (SELECT 1 FROM public.discord_migration_due(100) d WHERE d ->> 
 SELECT ok(NOT EXISTS (SELECT 1 FROM public.discord_migration_due(100) d WHERE d ->> 'server_id' = 'f2760000-0000-0000-0000-0000000000a2'),
   'due: a finished one is not');
 SET LOCAL role service_role;
+SELECT public.discord_migration_record_sync('f2760000-0000-0000-0000-0000000000a1', '{"members": 1}', NULL, now() - interval '1 minute');
+RESET role;
+SELECT ok((SELECT sync_requested_at IS NOT NULL FROM public.discord_migrations WHERE server_id = 'f2760000-0000-0000-0000-0000000000a1'),
+  'record_sync: a Sync now asked for after the pass started stays pending');
+SET LOCAL role service_role;
 SELECT public.discord_migration_record_sync('f2760000-0000-0000-0000-0000000000a1', '{"members": 2}', '2026-11-01 00:00:00+00');
 RESET role;
 SELECT results_eq($q$SELECT sync_requested_at IS NULL, last_sync_at > now() - interval '1 minute', last_sync_result, sync_cursor
@@ -356,6 +370,68 @@ SELECT is((SELECT d ->> 'user_id' FROM public.discord_migration_links_batch('f27
   '11111111-0000-0000-0000-000000000001', 'links_batch: never-synced links come first');
 SELECT is((SELECT count(*)::int FROM public.discord_migration_links_batch('f2760000-0000-0000-0000-0000000000a3', 100)), 30,
   'links_batch: returns the active links');
+
+-- paused migrations apply nothing; already banned; per-candidate isolation (s3 stays paused, s2 reopened) ---
+SET LOCAL role service_role;
+INSERT INTO out VALUES ('pz', public.discord_migration_apply_removals('f2760000-0000-0000-0000-0000000000a3',
+  '[{"user_id": "f2760000-0000-0000-0000-000000001021", "kind": "left"}]'));
+RESET role;
+SELECT is((SELECT v FROM out WHERE k = 'pz'), '{"paused": true}'::jsonb, 'paused: a paused migration refuses removals');
+SELECT ok(EXISTS (SELECT 1 FROM public.user_servers WHERE server_id = 'f2760000-0000-0000-0000-0000000000a3'
+                     AND user_id = 'f2760000-0000-0000-0000-000000001021'), 'paused: and the candidate is still a member');
+
+UPDATE public.discord_migrations SET state = 'open', removal_brake_pct = 100 WHERE server_id = 'f2760000-0000-0000-0000-0000000000a2';
+INSERT INTO public.server_bans (server_id, user_id, reason) VALUES
+  ('f2760000-0000-0000-0000-0000000000a2', 'f2760000-0000-0000-0000-000000001004', 'banned earlier');
+SET LOCAL role service_role;
+INSERT INTO out VALUES ('ab', public.discord_migration_apply_removals('f2760000-0000-0000-0000-0000000000a2',
+  '[{"user_id": "not-a-uuid", "kind": "left"}, {"user_id": "f2760000-0000-0000-0000-000000001004", "kind": "banned"},
+    {"user_id": "f2760000-0000-0000-0000-000000001005", "kind": "left"}]'));
+RESET role;
+SELECT ok(NOT EXISTS (SELECT 1 FROM public.user_servers WHERE server_id = 'f2760000-0000-0000-0000-0000000000a2'
+                         AND user_id = 'f2760000-0000-0000-0000-000000001004'), 'already banned: the user is no longer a member');
+SELECT results_eq($q$SELECT l.status, (SELECT count(*)::int FROM public.server_bans b WHERE b.server_id = l.server_id AND b.user_id = l.user_id)
+                       FROM public.discord_migration_links l WHERE l.server_id = 'f2760000-0000-0000-0000-0000000000a2'
+                        AND l.user_id = 'f2760000-0000-0000-0000-000000001004'$q$,
+  $q$VALUES ('banned'::text, 1)$q$, 'already banned: the link is banned and there is still one ban row');
+SELECT is((SELECT v -> 'skipped' -> 0 ->> 'reason' FROM out WHERE k = 'ab'), 'error', 'isolation: a bad candidate is reported as an error');
+SELECT is((SELECT v ->> 'applied' FROM out WHERE k = 'ab'), '2', 'isolation: the others still apply');
+SELECT is((SELECT status FROM public.discord_migration_links WHERE server_id = 'f2760000-0000-0000-0000-0000000000a2'
+              AND user_id = 'f2760000-0000-0000-0000-000000001005'), 'left', 'isolation: the later candidate was removed');
+
+-- a claim records what it granted, so a remap takes it back (s4) -------------------------------------------
+INSERT INTO public.servers (id, name, owner) VALUES
+  ('f2760000-0000-0000-0000-0000000000a4', 'S4 276', '11111111-0000-0000-0000-000000000001');
+INSERT INTO public.user_servers (user_id, server_id, status) VALUES
+  ('11111111-0000-0000-0000-000000000001', 'f2760000-0000-0000-0000-0000000000a4', 'accepted');
+INSERT INTO public.server_roles (id, server_id, name, position, permissions) VALUES
+  ('f2760000-0000-0000-0000-0000000000d1', 'f2760000-0000-0000-0000-0000000000a4', 'ModC276', 2, 8),
+  ('f2760000-0000-0000-0000-0000000000d2', 'f2760000-0000-0000-0000-0000000000a4', 'HelperC276', 1, 0);
+INSERT INTO public.discord_migrations (server_id, discord_guild_id, credential_source, state, opened_at) VALUES
+  ('f2760000-0000-0000-0000-0000000000a4', '900000000000000279', 'instance_bot', 'open', now());
+INSERT INTO public.discord_migration_discord_roles (server_id, discord_role_id, name, position, harmony_permissions) VALUES
+  ('f2760000-0000-0000-0000-0000000000a4', '700000000000000011', 'D1c', 2, 0);
+INSERT INTO public.discord_migration_role_map (server_id, discord_role_id, harmony_role_id) VALUES
+  ('f2760000-0000-0000-0000-0000000000a4', '700000000000000011', 'f2760000-0000-0000-0000-0000000000d1');
+SET LOCAL role service_role;
+INSERT INTO out VALUES ('t4', public.discord_migration_create_claim('f2760000-0000-0000-0000-0000000000a4',
+  '{"id":"600000000000000099","username":"malloryd"}'::jsonb, ARRAY['700000000000000011'], NULL));
+RESET role;
+SELECT tests.authenticate_as('cccccccc-0000-0000-0000-000000000003');
+SELECT public.discord_migration_claim(v ->> 'ticket') FROM out WHERE k = 't4';
+SELECT tests.clear_authentication();
+SELECT is((SELECT array_agg(sr.name) FROM public.user_roles ur JOIN public.server_roles sr ON sr.id = ur.role_id AND sr.name LIKE '%C276'
+            WHERE ur.server_id = 'f2760000-0000-0000-0000-0000000000a4' AND ur.user_id = '33333333-0000-0000-0000-000000000003'),
+  ARRAY['ModC276'], 'claim remap: the claim grants Mod');
+UPDATE public.discord_migration_role_map SET harmony_role_id = 'f2760000-0000-0000-0000-0000000000d2'
+ WHERE server_id = 'f2760000-0000-0000-0000-0000000000a4';
+SET LOCAL role service_role;
+SELECT public.discord_migration_sync_member('f2760000-0000-0000-0000-0000000000a4',
+  '33333333-0000-0000-0000-000000000003', '{"present": true, "role_ids": ["700000000000000011"]}');
+RESET role;
+SELECT is((SELECT array_agg(sr.name) FROM public.user_roles ur JOIN public.server_roles sr ON sr.id = ur.role_id AND sr.name LIKE '%C276'
+            WHERE ur.server_id = 'f2760000-0000-0000-0000-0000000000a4' AND ur.user_id = '33333333-0000-0000-0000-000000000003'),
+  ARRAY['HelperC276'], 'claim remap: after D1 -> Helper the member holds Helper and Mod is gone');
 
 SELECT * FROM finish();
 ROLLBACK;

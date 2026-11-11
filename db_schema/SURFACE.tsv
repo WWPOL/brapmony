@@ -391,7 +391,7 @@ discord_migration_note_kick		trigger	definer	public, extensions, pg_temp		trigge
 discord_migration_pause	p_server_id uuid, p_reason text	void	definer	public, extensions, pg_temp	service_role	unreferenced
 discord_migration_permission_gaps	p_server_id uuid	jsonb	definer	public, extensions, pg_temp	authenticated	unreferenced
 discord_migration_readiness	p_server_id uuid	jsonb	definer	public, extensions, pg_temp	authenticated	unreferenced
-discord_migration_record_sync	p_server_id uuid, p_result jsonb, p_cursor timestamp with time zone	void	definer	public, extensions, pg_temp	service_role	unreferenced
+discord_migration_record_sync	p_server_id uuid, p_result jsonb, p_cursor timestamp with time zone, p_started_at timestamp with time zone	void	definer	public, extensions, pg_temp	service_role	unreferenced
 discord_migration_regenerate_token	p_server_id uuid	text	definer	public, extensions, pg_temp	authenticated	unreferenced
 discord_migration_request_sync	p_server_id uuid	void	definer	public, extensions, pg_temp	authenticated	unreferenced
 discord_migration_save	p_server_id uuid, p_discord_guild_id text, p_credential_source text	jsonb	definer	public, extensions, pg_temp	authenticated	unreferenced

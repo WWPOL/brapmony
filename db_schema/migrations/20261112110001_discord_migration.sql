@@ -106,7 +106,7 @@ CREATE TABLE IF NOT EXISTS public.discord_migration_links (
     status text NOT NULL DEFAULT 'active',
     sync_fields text[] NOT NULL DEFAULT '{}',
     discord_role_ids text[] NOT NULL DEFAULT '{}',
-    applied_roles jsonb NOT NULL DEFAULT '{}',
+    applied_roles jsonb NOT NULL DEFAULT '{}',   -- {discord role id: Harmony role id} last granted; a remap takes the old role back
     discord_joined_at timestamptz,
     linked_at timestamptz NOT NULL DEFAULT now(),
     last_synced_at timestamptz,
@@ -119,10 +119,6 @@ CREATE TABLE IF NOT EXISTS public.discord_migration_links (
         CHECK (sync_fields <@ ARRAY['avatar', 'display_name', 'banner', 'accent_color',
                                     'server_nickname', 'server_avatar', 'server_banner']::text[])
 );
-
--- applied_roles {discord role id: Harmony role id} is what the last role application granted, so a remap
--- can take the old Harmony role back.
-ALTER TABLE public.discord_migration_links ADD COLUMN IF NOT EXISTS applied_roles jsonb NOT NULL DEFAULT '{}';
 
 CREATE TABLE IF NOT EXISTS public.discord_migration_claims (
     ticket text PRIMARY KEY,
@@ -1930,9 +1926,12 @@ BEGIN
 END;
 $$;
 
--- Ends a sync pass: when it ran, what it found, where the next one starts.
+-- Ends a sync pass: when it ran, what it found, where the next one starts. p_started_at is when the pass
+-- began: a "Sync now" asked for after that moment stays pending (sync_requested_at is cleared only when it
+-- is not later than p_started_at; a null p_started_at clears it).
+DROP FUNCTION IF EXISTS public.discord_migration_record_sync(uuid, jsonb, timestamptz);
 CREATE OR REPLACE FUNCTION public.discord_migration_record_sync(
-    p_server_id uuid, p_result jsonb, p_cursor timestamptz)
+    p_server_id uuid, p_result jsonb, p_cursor timestamptz, p_started_at timestamptz DEFAULT NULL)
 RETURNS void
 LANGUAGE plpgsql
 SECURITY DEFINER
@@ -1941,7 +1940,9 @@ AS $$
 BEGIN
     UPDATE public.discord_migrations
        SET last_sync_at = now(), last_sync_result = p_result, sync_cursor = p_cursor,
-           sync_requested_at = NULL, updated_at = now()
+           sync_requested_at = CASE WHEN p_started_at IS NULL OR sync_requested_at <= p_started_at
+                                    THEN NULL ELSE sync_requested_at END,
+           updated_at = now()
      WHERE server_id = p_server_id;
     IF NOT FOUND THEN
         RAISE EXCEPTION 'migration_not_configured' USING ERRCODE = 'P0002';
@@ -2027,7 +2028,8 @@ BEGIN
     IF 'banner' = ANY (v_fields) AND jsonb_typeof(v_profile -> 'banner_url') = 'string' THEN
         UPDATE public.profiles SET banner_url = v_profile ->> 'banner_url' WHERE id = p_user_id;
     END IF;
-    IF 'accent_color' = ANY (v_fields) AND jsonb_typeof(v_profile -> 'accent_color') = 'number' THEN
+    IF 'accent_color' = ANY (v_fields) AND jsonb_typeof(v_profile -> 'accent_color') = 'number'
+       AND (v_profile ->> 'accent_color') ~ '^[0-9]{1,8}$' AND (v_profile ->> 'accent_color')::bigint <= 16777215 THEN
         v_color := (v_profile ->> 'accent_color')::integer;
         UPDATE public.profiles SET color = '#' || lpad(to_hex(v_color & 16777215), 6, '0') WHERE id = p_user_id;
     END IF;
@@ -2109,6 +2111,7 @@ DECLARE
     v_link public.discord_migration_links;
     v_username text;
     v_applied integer := 0;
+    v_res jsonb;
     v_skipped jsonb := '[]'::jsonb;
 BEGIN
     IF p_candidates IS NULL OR jsonb_typeof(p_candidates) <> 'array' THEN
@@ -2120,6 +2123,9 @@ BEGIN
     END IF;
     IF v_mig.state <> 'open' THEN
         RETURN jsonb_build_object('applied', 0, 'skipped', '[]'::jsonb, 'closed', true);
+    END IF;
+    IF v_mig.sync_paused_reason IS NOT NULL THEN
+        RETURN jsonb_build_object('paused', true);
     END IF;
 
     v_count := jsonb_array_length(p_candidates);
@@ -2134,6 +2140,8 @@ BEGIN
     PERFORM set_config('harmony.via', 'discord_migration', true);
 
     FOR v_cand IN SELECT * FROM jsonb_array_elements(p_candidates) LOOP
+      v_user := NULL;
+      BEGIN
         v_user := NULLIF(v_cand ->> 'user_id', '')::uuid;
         v_kind := v_cand ->> 'kind';
         IF v_user IS NULL OR v_kind IS NULL OR v_kind NOT IN ('left', 'banned') THEN
@@ -2157,9 +2165,18 @@ BEGIN
 
         SELECT p.username INTO v_username FROM public.profiles p WHERE p.id = v_user;
         IF v_kind = 'banned' THEN
-            PERFORM public._ban_server_member_internal(p_server_id, v_user, 'Banned on the Discord server');
-            PERFORM public.server_audit_write(p_server_id, 'member.ban', 'user', v_user::text, v_username, NULL,
-                jsonb_build_object('via', 'discord_migration'), 'Banned on the Discord server', NULL, 'system');
+            v_res := public._ban_server_member_internal(p_server_id, v_user, 'Banned on the Discord server');
+            -- A ban row that already existed returns early; the user must still end up not a member.
+            IF EXISTS (SELECT 1 FROM public.user_servers us WHERE us.server_id = p_server_id AND us.user_id = v_user) THEN
+                PERFORM set_config('harmony.skip_leave_message', '1', true);
+                DELETE FROM public.user_servers WHERE server_id = p_server_id AND user_id = v_user;
+                DELETE FROM public.user_roles WHERE server_id = p_server_id AND user_id = v_user;
+                v_res := v_res - 'already_banned';
+            END IF;
+            IF v_res ->> 'already_banned' IS DISTINCT FROM 'true' THEN
+                PERFORM public.server_audit_write(p_server_id, 'member.ban', 'user', v_user::text, v_username, NULL,
+                    jsonb_build_object('via', 'discord_migration'), 'Banned on the Discord server', NULL, 'system');
+            END IF;
             UPDATE public.discord_migration_links SET status = 'banned'
              WHERE server_id = p_server_id AND user_id = v_user;
         ELSE
@@ -2173,6 +2190,9 @@ BEGIN
              WHERE server_id = p_server_id AND user_id = v_user;
         END IF;
         v_applied := v_applied + 1;
+      EXCEPTION WHEN OTHERS THEN
+        v_skipped := v_skipped || jsonb_build_object('user_id', v_user, 'reason', 'error');
+      END;
     END LOOP;
 
     PERFORM set_config('harmony.via', COALESCE(v_prev_via, ''), true);
@@ -2205,7 +2225,7 @@ BEGIN
         'public.discord_migration_sync_member(uuid, uuid, jsonb)',
         'public.discord_migration_apply_removals(uuid, jsonb)',
         'public.discord_migration_pause(uuid, text)',
-        'public.discord_migration_record_sync(uuid, jsonb, timestamptz)'
+        'public.discord_migration_record_sync(uuid, jsonb, timestamptz, timestamptz)'
     ]::regprocedure[] LOOP
         EXECUTE format('REVOKE ALL ON FUNCTION %s FROM PUBLIC, anon, authenticated', fn);
         EXECUTE format('GRANT EXECUTE ON FUNCTION %s TO service_role', fn);
