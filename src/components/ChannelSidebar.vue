@@ -1141,7 +1141,7 @@ const { mode: threadSidebarMode } = useThreadSidebarMode(
 );
 
 const getChannelActiveThreads = (channelId: string): ThreadWithDetails[] => {
-  return sidebarThreads(threadsStore.activeChannelThreads(channelId), threadSidebarMode.value, selectedThreadId.value);
+  return sidebarThreads(threadsStore.activeChannelThreads(channelId), threadSidebarMode.value, selectedThreadId.value ?? threadsStore.panelThreadId);
 };
 
 // An optimistic thread has no server id to route to yet.
