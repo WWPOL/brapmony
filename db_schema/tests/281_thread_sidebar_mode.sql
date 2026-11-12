@@ -1,4 +1,4 @@
--- 20261112600001_thread_sidebar_mode.sql: which threads the channel sidebar lists, per server.
+-- 20261112700001_thread_sidebar_mode.sql: which threads the channel sidebar lists, per server.
 --
 --   alice  owns S (MANAGE_SERVER)    bob  a member    carol  not a member
 BEGIN;

@@ -8,6 +8,17 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 ## [Unreleased]
 
 ### Added
+- **Migrate from Discord.** Owners and members with Manage Server can bring a Discord community over
+  from **Server settings** → **Migrate from Discord**. Match each Discord role to a Harmony role, then
+  share the invitation link. Members sign in with Discord (the `identify` scope only), create or link a
+  Harmony account and join with their mapped roles. While the migration is open, roles, membership,
+  timeouts and each member's chosen profile fields (picture, name, banner, accent colour, and their
+  nickname, picture and banner in the server) follow Discord, and profile cards show **Joined on
+  Discord**. **Apply Discord permissions** gives cloned roles the moderator permissions the bridge
+  can't; Administrator roles are owner-only with a confirmation. Harmony bans and kicks always win,
+  a removal brake pauses a suspicious sync, and **Finish migration** hands control back to Harmony.
+  Operators can turn off account creation for migrations with `harmony migration account-creation off`
+  and set the sync interval with `DISCORD_MIGRATION_SYNC_MS`. See Run a server → Migrate from Discord.
 - **Discord files are stored in the background.** With **Mirror to storage**, the gateway now also
   stores the Discord files of messages already in Harmony, and files over 50 MB: the cap is the
   instance's upload ceiling (`harmony config --upload-ceiling`). Large files are downloaded one at a
@@ -27,6 +38,13 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - **Backslash escapes in messages.** `\*not italic\*`, `\@name`, `\#channel`, `\:emoji:`, `\> line`
   and `\https://link` show as typed, and an escaped mention pings nobody. Inline code keeps its
   backslashes.
+- **Discord bridge server profile sync.** The Discord bridge bot can copy a
+  Discord server's name, description, icon and banner onto its paired Harmony
+  server through `GET /servers/{id}/profile/discord` and `PATCH
+  /servers/{id}/profile/discord`. Images are copied from Discord's CDN using
+  the guild ID stored on the bridge, and a replaced image Harmony stored is
+  deleted. A description or banner is written only as sent: the bridge decides
+  whether the Discord server has one.
 - **Discord bridge soundboard sync.** The Discord bridge can sync a server's
   soundboard (`/bridge sync-sounds` in harmony-discord-bridge) through three
   bot-gateway endpoints for the server's bridge bot: `GET

@@ -1,4 +1,4 @@
-/** Which threads the channel sidebar lists (20261112600001_thread_sidebar_mode.sql). */
+/** Which threads the channel sidebar lists (20261112700001_thread_sidebar_mode.sql). */
 export type ThreadSidebarMode = 'all' | 'joined'
 
 /** Values arrive as plain strings, JSON strings (instance_config) or not at all. */

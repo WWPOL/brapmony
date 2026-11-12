@@ -137,7 +137,7 @@ test('an @mention in a thread reply adds the bystander, and the thread shows for
   await expect.poll(() => membership(bystander), { timeout: 15000 }).toBe(1)
 
   // No notification check here: the bystander was just viewing this channel, and a recipient
-  // viewing the channel gets none (send_notification). pgTAP 280 checks its thread id.
+  // viewing the channel gets none (send_notification). pgTAP 281 checks its thread id.
 
   await open(page, bystander)
   await expect(row(page)).toBeVisible({ timeout: 30000 })

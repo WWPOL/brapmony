@@ -1,5 +1,5 @@
 /**
- * Thread sidebar visibility (20261112600001_thread_sidebar_mode.sql): which threads the channel
+ * Thread sidebar visibility (20261112700001_thread_sidebar_mode.sql): which threads the channel
  * sidebar lists. The mode is per server, with an instance default.
  */
 import { ref, watch, type Ref } from 'vue'

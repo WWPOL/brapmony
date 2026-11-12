@@ -12,7 +12,7 @@
 
 ## Global Constraints
 
-- Migration file `db_schema/migrations/20261112600001_thread_sidebar_mode.sql`; pgTAP file `db_schema/tests/280_thread_sidebar_mode.sql` (`20261112500001` and pgTAP 274–276 belong to `feat/discord-migration`).
+- Migration file `db_schema/migrations/20261112700001_thread_sidebar_mode.sql`; pgTAP file `db_schema/tests/281_thread_sidebar_mode.sql` (`20261112500001` and pgTAP 274–276 belong to `feat/discord-migration`).
 - Modes are exactly the strings `'all'` and `'joined'`. `instance_config` key `thread_sidebar_default`; absent or any other value reads as `'all'`.
 - Migration style: `BEGIN; SET LOCAL lock_timeout = '5s'; … COMMIT; NOTIFY pgrst, 'reload schema';`, header comment describing every object, converges on rerun (`IF NOT EXISTS`, `CREATE OR REPLACE`).
 - No mention join under `public.is_history_import()`.
@@ -33,8 +33,8 @@
 ### Task 1: Setting column and RPCs
 
 **Files:**
-- Create: `db_schema/migrations/20261112600001_thread_sidebar_mode.sql`
-- Create: `db_schema/tests/280_thread_sidebar_mode.sql`
+- Create: `db_schema/migrations/20261112700001_thread_sidebar_mode.sql`
+- Create: `db_schema/tests/281_thread_sidebar_mode.sql`
 - Modify (regenerated, never by hand): `db_schema/SURFACE.tsv`, `db_schema/REACHABILITY.tsv`
 
 **Interfaces:**
@@ -54,7 +54,7 @@
   - As bob (no MANAGE_SERVER): get and set → 42501; `server_thread_sidebar_mode(s)` returns the effective mode.
   - As carol: `server_thread_sidebar_mode(s)` → 42501.
   - Signed out (`tests.clear_authentication()`): get → 42501.
-- [ ] **Step 2: Run the suite and see 280 fail.** Run: `… wsl-run.sh … scripts/run-db-tests.sh` Expected: `280_thread_sidebar_mode.sql` errors (functions missing); others pass.
+- [ ] **Step 2: Run the suite and see 280 fail.** Run: `… wsl-run.sh … scripts/run-db-tests.sh` Expected: `281_thread_sidebar_mode.sql` errors (functions missing); others pass.
 - [ ] **Step 3: Write the migration's column and four functions** (signatures above; header comment lists them).
 - [ ] **Step 4: Run the suite.** Expected: all files pass, 280 included.
 - [ ] **Step 5: Regenerate the manifests.** Run `… wsl-run.sh … scripts/generate-surface.sh` and `… scripts/generate-reachability.sh`. Expected: new rows for the four functions only. `server_thread_sidebar_mode` and `get/set_server_thread_sidebar` will read `unreferenced` until Task 3/5 call them; rerun after those tasks.
@@ -63,8 +63,8 @@
 ### Task 2: Mention joins a thread; mention payload names the thread
 
 **Files:**
-- Modify: `db_schema/migrations/20261112600001_thread_sidebar_mode.sql` (append)
-- Modify: `db_schema/tests/280_thread_sidebar_mode.sql` (append, bump `plan(n)`)
+- Modify: `db_schema/migrations/20261112700001_thread_sidebar_mode.sql` (append)
+- Modify: `db_schema/tests/281_thread_sidebar_mode.sql` (append, bump `plan(n)`)
 - Modify (regenerated): `db_schema/SURFACE.tsv`, `db_schema/REACHABILITY.tsv`
 
 **Interfaces:**

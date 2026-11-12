@@ -71,7 +71,7 @@ so this is a setting, not a replacement.
 
 ## Design
 
-### Database (migration `20261112600001_thread_sidebar_mode.sql`, pgTAP `280_thread_sidebar_mode.sql`)
+### Database (migration `20261112700001_thread_sidebar_mode.sql`, pgTAP `281_thread_sidebar_mode.sql`)
 
 Numbers: `20261112500001` and pgTAP 274–276 are taken by `feat/discord-migration`; fork master is
 at `20261112400001` / 279. Re-check before writing.
