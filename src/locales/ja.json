@@ -5764,7 +5764,7 @@
       "settingsLead": "移行が開いている間、オンにした項目はDiscordのプロフィールからHarmonyにコピーされます。",
       "accountGroup": "アカウントのプロフィール",
       "serverGroup": "このサーバーでのプロフィール",
-      "hint": "スイッチを切り替えたときと、その後数時間ごとにコピーされます。項目をオフにするとコピーが止まります。コピー済みの内容はそのまま残ります。",
+      "hint": "チェックを入れた項目は、「同期」を押したときにコピーされ、移行が開いている間は数時間ごとに最新の状態に保たれます。チェックを外すとコピーを止めます。すでにコピーされたものはそのまま残ります。",
       "saveFailed": "保存できませんでした。もう一度お試しください。",
       "fields": {
         "avatar": "プロフィール画像",
@@ -5774,7 +5774,13 @@
         "server_nickname": "このサーバーでのニックネーム",
         "server_avatar": "このサーバーでの画像",
         "server_banner": "このサーバーでのバナー"
-      }
+      },
+      "selectAll": "すべて選択",
+      "clearAll": "すべて解除",
+      "syncButton": "同期",
+      "syncing": "同期中…",
+      "saveAndSync": "保存して同期",
+      "done": "Discordから同期しました。"
     },
     "migrate": {
       "title": "Discordから移行",
@@ -5825,7 +5831,11 @@
         "invalid_ticket": "このサインインは期限切れです。最初からやり直してください。",
         "network": "サーバーに接続できませんでした。もう一度お試しください。",
         "unknown": "問題が発生しました。もう一度お試しください。"
-      }
+      },
+      "ownerRoles": "あなたはこのサーバーのオーナーなので、同期ではロールが追加されるだけで、削除されることはありません。",
+      "continue": "続ける",
+      "skipSyncTitle": "同期せずに続けますか?",
+      "skipSyncMessage": "Discordからまだ何も同期していません。このまま続けますか?あとで「設定」→「サーバープロフィール」で同期できます。"
     },
     "navLabel": "Discordから移行",
     "title": "Discordから移行",
@@ -5866,7 +5876,8 @@
     "guild": {
       "label": "DiscordサーバーID",
       "hint": "Discordで開発者モードをオンにし、サーバーを右クリックして「サーバーIDをコピー」を選びます。",
-      "locked": "移行を開いた後は、Discordサーバーを変更できません。"
+      "locked": "移行を開いた後は、Discordサーバーを変更できません。",
+      "fromBridge": "このサーバーのDiscordブリッジから入力されました。"
     },
     "refresh": {
       "button": "Discordから取得",
@@ -5902,6 +5913,19 @@
       "apply": "Discordの権限を適用",
       "applyAll": "すべて適用"
     },
+    "overrides": {
+      "title": "メンバー別のチャンネル上書き",
+      "intro": "Discordでは、チャンネルごとに個別のメンバーへ権限を許可または拒否できます。連携したメンバーは、対応するHarmonyのチャンネルでこれらを受け取ります。Harmonyで管理者が作成した上書きが置き換えられることはありません。",
+      "member": "Discordメンバー {id}",
+      "allows": "許可: {list}",
+      "denies": "拒否: {list}",
+      "nothing": "なし",
+      "linked": "{'@'}{username} と連携済み",
+      "notLinked": "未連携",
+      "unpaired": "チャンネル未対応",
+      "showAll": "すべて表示({count})",
+      "showFewer": "表示を減らす"
+    },
     "errors": {
       "needManageRoles": "権限を適用するには「ロールの管理」権限が必要です",
       "cannotGrant": "{permission}はあなた自身が持っていないため付与できません",
@@ -5924,11 +5948,15 @@
       "blockers": {
         "credentials": "Discordの認証情報を追加してください。",
         "guild": "DiscordサーバーIDを入力してください。",
-        "roles": "Discordからロールを取得してください。"
+        "roles": "Discordからロールを取得してください。",
+        "redirect": "DiscordアプリケーションにリダイレクトURLを追加する"
       },
       "warnings": {
-        "unpaired": "Discordのチャンネル{count}件がHarmonyのチャンネルとペアになっていません。",
-        "overrides": "Discordのチャンネル{count}件に、個別メンバー向けの権限上書きがあります。これらは移行されません。"
+        "unpaired": "Discordのチャンネル{count}件がHarmonyのチャンネルとペアになっていません。"
+      },
+      "redirect": {
+        "intro": "このリダイレクトURLをDiscordアプリケーションのOAuth2設定に追加してください。追加しないと、Discordに「Invalid OAuth2 redirect_uri」と表示されます。認証情報の取得元にかかわらず同じで、このインスタンスのボットも含みます。",
+        "added": "追加しました"
       }
     },
     "open": {

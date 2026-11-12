@@ -33,6 +33,20 @@ export interface Readiness {
   roles_fetched: boolean
 }
 
+/** A Discord channel overwrite for a single member, from the last fetch. */
+export interface MemberOverride {
+  discord_channel_id: string
+  channel_name: string | null
+  discord_user_id: string
+  /** Permission names such as VIEW_CHANNEL. */
+  allow: string[]
+  deny: string[]
+  /** unpaired: the channel has no Harmony pair; linked: the member claimed an account; not_linked: not yet. */
+  status: 'unpaired' | 'linked' | 'not_linked'
+  /** The linked Harmony account's username. */
+  username?: string | null
+}
+
 export interface PermissionGap {
   discord_role_id: string
   harmony_role_id: string
@@ -67,6 +81,8 @@ export interface MigrationConfig {
   readiness_warnings?: { unpaired_channels?: string[]; member_overrides?: number } | null
   has_own_credentials: boolean
   bridge_available: boolean
+  /** The guild of this server's Discord bridge (any mode), null without one. */
+  bridge_discord_guild_id?: string | null
   instance_bot_available: boolean
   caller_is_owner: boolean
   discord_roles: DiscordRoleRow[]
@@ -74,6 +90,7 @@ export interface MigrationConfig {
   link_counts: Record<LinkStatus, number>
   readiness: Readiness
   permission_gaps: PermissionGap[]
+  member_overrides?: MemberOverride[]
 }
 
 export interface MigrationMember {

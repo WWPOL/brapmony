@@ -5764,7 +5764,7 @@
       "settingsLead": "Solange die Migration offen ist, werden die markierten Felder aus deinem Discord-Profil nach Harmony kopiert.",
       "accountGroup": "Dein Kontoprofil",
       "serverGroup": "Dein Profil auf diesem Server",
-      "hint": "Kopiert wird, wenn du einen Schalter änderst, und danach alle paar Stunden. Entferne das Häkchen, um ein Feld nicht mehr zu kopieren; bereits Kopiertes bleibt.",
+      "hint": "Angehakte Felder werden kopiert, wenn du auf Synchronisieren drückst, und solange die Migration offen ist alle paar Stunden aktualisiert. Entferne den Haken, um ein Feld nicht mehr zu kopieren; bereits Kopiertes bleibt.",
       "saveFailed": "Das konnte nicht gespeichert werden. Versuche es erneut.",
       "fields": {
         "avatar": "Profilbild",
@@ -5774,7 +5774,13 @@
         "server_nickname": "Spitzname auf diesem Server",
         "server_avatar": "Bild auf diesem Server",
         "server_banner": "Banner auf diesem Server"
-      }
+      },
+      "selectAll": "Alle auswählen",
+      "clearAll": "Alle abwählen",
+      "syncButton": "Synchronisieren",
+      "syncing": "Synchronisiere …",
+      "saveAndSync": "Speichern und synchronisieren",
+      "done": "Von Discord synchronisiert."
     },
     "migrate": {
       "title": "Von Discord umziehen",
@@ -5825,7 +5831,11 @@
         "invalid_ticket": "Diese Anmeldung ist abgelaufen. Starte neu.",
         "network": "Der Server ist nicht erreichbar. Versuche es erneut.",
         "unknown": "Etwas ist schiefgelaufen. Versuche es erneut."
-      }
+      },
+      "ownerRoles": "Dir gehört dieser Server, daher fügt die Synchronisierung dir nur Rollen hinzu. Sie entfernt nie welche.",
+      "continue": "Weiter",
+      "skipSyncTitle": "Ohne Synchronisierung fortfahren?",
+      "skipSyncMessage": "Du hast noch nichts von Discord synchronisiert. Trotzdem fortfahren? Du kannst später unter Einstellungen → Serverprofile synchronisieren."
     },
     "navLabel": "Von Discord umziehen",
     "title": "Von Discord umziehen",
@@ -5866,7 +5876,8 @@
     "guild": {
       "label": "Discord-Server-ID",
       "hint": "Aktiviere in Discord den Entwicklermodus, klicke den Server mit der rechten Maustaste an und wähle „Server-ID kopieren“.",
-      "locked": "Der Discord-Server kann nicht mehr geändert werden, nachdem die Migration geöffnet wurde."
+      "locked": "Der Discord-Server kann nicht mehr geändert werden, nachdem die Migration geöffnet wurde.",
+      "fromBridge": "Aus der Discord-Bridge dieses Servers übernommen."
     },
     "refresh": {
       "button": "Von Discord abrufen",
@@ -5902,6 +5913,19 @@
       "apply": "Discord-Berechtigungen anwenden",
       "applyAll": "Alle anwenden"
     },
+    "overrides": {
+      "title": "Kanalüberschreibungen für Mitglieder",
+      "intro": "Discord kann Berechtigungen in einem Kanal für einzelne Mitglieder erlauben oder verweigern. Verknüpfte Mitglieder erhalten diese im zugeordneten Harmony-Kanal. Überschreibungen, die ein Admin in Harmony angelegt hat, werden nie ersetzt.",
+      "member": "Discord-Mitglied {id}",
+      "allows": "Erlaubt: {list}",
+      "denies": "Verweigert: {list}",
+      "nothing": "nichts",
+      "linked": "Verknüpft mit {'@'}{username}",
+      "notLinked": "Noch nicht verknüpft",
+      "unpaired": "Kanal nicht zugeordnet",
+      "showAll": "Alle {count} anzeigen",
+      "showFewer": "Weniger anzeigen"
+    },
     "errors": {
       "needManageRoles": "Du brauchst die Berechtigung „Rollen verwalten“, um Berechtigungen anzuwenden",
       "cannotGrant": "Du kannst {permission} nicht vergeben, weil du sie selbst nicht hast",
@@ -5924,11 +5948,15 @@
       "blockers": {
         "credentials": "Discord-Zugangsdaten hinzufügen.",
         "guild": "Discord-Server-ID eingeben.",
-        "roles": "Rollen von Discord abrufen."
+        "roles": "Rollen von Discord abrufen.",
+        "redirect": "Redirect-URL in der Discord-Anwendung eintragen"
       },
       "warnings": {
-        "unpaired": "{count} Discord-Kanal ist keinem Harmony-Kanal zugeordnet. | {count} Discord-Kanäle sind keinem Harmony-Kanal zugeordnet.",
-        "overrides": "{count} Discord-Kanal hat Berechtigungsüberschreibungen für einzelne Mitglieder. Sie werden nicht migriert. | {count} Discord-Kanäle haben Berechtigungsüberschreibungen für einzelne Mitglieder. Sie werden nicht migriert."
+        "unpaired": "{count} Discord-Kanal ist keinem Harmony-Kanal zugeordnet. | {count} Discord-Kanäle sind keinem Harmony-Kanal zugeordnet."
+      },
+      "redirect": {
+        "intro": "Trage diese Redirect-URL in den OAuth2-Einstellungen der Discord-Anwendung ein, sonst zeigt Discord „Invalid OAuth2 redirect_uri“. Sie gilt für jede Zugangsdatenquelle, auch für den Bot dieser Instanz.",
+        "added": "Ich habe sie eingetragen"
       }
     },
     "open": {

@@ -5764,7 +5764,7 @@
       "settingsLead": "마이그레이션이 열려 있는 동안 선택한 항목이 Discord 프로필에서 Harmony로 복사됩니다.",
       "accountGroup": "계정 프로필",
       "serverGroup": "이 서버에서의 프로필",
-      "hint": "스위치를 바꿀 때와 그 이후 몇 시간마다 복사됩니다. 항목을 끄면 더 이상 복사하지 않으며, 이미 복사된 내용은 그대로 남습니다.",
+      "hint": "선택한 항목은 동기화를 누를 때 복사되며, 이전이 열려 있는 동안 몇 시간마다 최신 상태로 유지됩니다. 항목 선택을 해제하면 더 이상 복사하지 않으며, 이미 복사된 내용은 그대로 남습니다.",
       "saveFailed": "저장하지 못했습니다. 다시 시도하세요.",
       "fields": {
         "avatar": "프로필 사진",
@@ -5774,7 +5774,13 @@
         "server_nickname": "이 서버에서의 별명",
         "server_avatar": "이 서버에서의 사진",
         "server_banner": "이 서버에서의 배너"
-      }
+      },
+      "selectAll": "모두 선택",
+      "clearAll": "모두 해제",
+      "syncButton": "동기화",
+      "syncing": "동기화 중…",
+      "saveAndSync": "저장 후 동기화",
+      "done": "Discord에서 동기화했습니다."
     },
     "migrate": {
       "title": "Discord에서 이전",
@@ -5825,7 +5831,11 @@
         "invalid_ticket": "이 로그인이 만료되었습니다. 다시 시작하세요.",
         "network": "서버에 연결할 수 없습니다. 다시 시도하세요.",
         "unknown": "문제가 발생했습니다. 다시 시도하세요."
-      }
+      },
+      "ownerRoles": "이 서버의 소유자이므로 동기화는 역할을 추가만 하고 절대 제거하지 않습니다.",
+      "continue": "계속",
+      "skipSyncTitle": "동기화하지 않고 계속할까요?",
+      "skipSyncMessage": "Discord에서 아직 아무것도 동기화하지 않았습니다. 그래도 계속할까요? 나중에 설정 → 서버 프로필에서 동기화할 수 있습니다."
     },
     "navLabel": "Discord에서 이전하기",
     "title": "Discord에서 이전하기",
@@ -5866,7 +5876,8 @@
     "guild": {
       "label": "Discord 서버 ID",
       "hint": "Discord에서 개발자 모드를 켜고, 서버를 마우스 오른쪽 버튼으로 클릭해 서버 ID 복사를 선택하세요.",
-      "locked": "이전을 연 후에는 Discord 서버를 바꿀 수 없습니다."
+      "locked": "이전을 연 후에는 Discord 서버를 바꿀 수 없습니다.",
+      "fromBridge": "이 서버의 Discord 브리지에서 채워졌습니다."
     },
     "refresh": {
       "button": "Discord에서 가져오기",
@@ -5902,6 +5913,19 @@
       "apply": "Discord 권한 적용",
       "applyAll": "모두 적용"
     },
+    "overrides": {
+      "title": "멤버별 채널 재정의",
+      "intro": "Discord는 채널에서 특정 멤버에게만 권한을 허용하거나 거부할 수 있습니다. 연결된 멤버는 짝지어진 Harmony 채널에서 이를 받습니다. Harmony에서 관리자가 만든 재정의는 절대 바뀌지 않습니다.",
+      "member": "Discord 멤버 {id}",
+      "allows": "허용: {list}",
+      "denies": "거부: {list}",
+      "nothing": "없음",
+      "linked": "{'@'}{username}에 연결됨",
+      "notLinked": "아직 연결되지 않음",
+      "unpaired": "채널이 짝지어지지 않음",
+      "showAll": "{count}개 모두 보기",
+      "showFewer": "간단히 보기"
+    },
     "errors": {
       "needManageRoles": "권한을 적용하려면 역할 관리 권한이 필요합니다",
       "cannotGrant": "{permission} 권한이 없으므로 부여할 수 없습니다",
@@ -5924,11 +5948,15 @@
       "blockers": {
         "credentials": "Discord 자격 증명을 추가하세요.",
         "guild": "Discord 서버 ID를 입력하세요.",
-        "roles": "Discord에서 역할을 가져오세요."
+        "roles": "Discord에서 역할을 가져오세요.",
+        "redirect": "Discord 애플리케이션에 리디렉션 URL 추가"
       },
       "warnings": {
-        "unpaired": "Discord 채널 {count}개가 Harmony 채널과 짝지어지지 않았습니다.",
-        "overrides": "Discord 채널 {count}개에 개별 멤버용 권한 재정의가 있습니다. 이는 이전되지 않습니다."
+        "unpaired": "Discord 채널 {count}개가 Harmony 채널과 짝지어지지 않았습니다."
+      },
+      "redirect": {
+        "intro": "이 리디렉션 URL을 Discord 애플리케이션의 OAuth2 설정에 추가하세요. 추가하지 않으면 Discord에 \"Invalid OAuth2 redirect_uri\"가 표시됩니다. 자격 증명 출처와 관계없이 같으며, 이 인스턴스의 봇도 포함됩니다.",
+        "added": "추가했습니다"
       }
     },
     "open": {

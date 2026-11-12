@@ -29,6 +29,7 @@ const h = vi.hoisted(() => {
     profile: { profile: null as any },
     serverStore: { setCurrentServer: vi.fn(), fetchServersForUser: vi.fn() },
     profileId: vi.fn(),
+    confirm: vi.fn(async () => true),
   }
 })
 
@@ -47,6 +48,7 @@ vi.mock('@/stores/auth', async () => {
   h.auth = reactive(h.auth)
   return { useAuthStore: () => h.auth }
 })
+vi.mock('@/composables/useConfirmDialog', () => ({ useConfirmDialog: () => ({ confirm: h.confirm }) }))
 vi.mock('@/stores/useServerChannel', () => ({ useServerChannelStore: () => h.serverStore }))
 vi.mock('@/services/AuthContextService', () => ({ authContextService: { getCurrentProfileId: () => h.profileId() } }))
 vi.mock('@/stores/useProfile', async () => {
@@ -73,6 +75,8 @@ beforeEach(() => {
   h.svc.preview.mockResolvedValue({ serverId: 'srv', serverName: 'Lobby', iconUrl: null })
   h.svc.setMySync.mockResolvedValue(undefined)
   h.svc.myLink.mockResolvedValue(null)
+  h.confirm.mockReset()
+  h.confirm.mockResolvedValue(true)
   h.auth.isLoggedIn = false
   h.auth.session = null
   h.profile.profile = null
@@ -81,7 +85,7 @@ beforeEach(() => {
 })
 
 describe('MigrateFromDiscordView', () => {
-  it('Open the server reloads the server list before routing to chat', async () => {
+  it('Continue after a sync reloads the server list before routing to chat', async () => {
     h.auth.isLoggedIn = true
     h.profile.profile = { username: 'alice', is_local: true }
     h.svc.claim.mockResolvedValue({ serverId: 'srv', rolesGranted: [] })
@@ -92,8 +96,11 @@ describe('MigrateFromDiscordView', () => {
     h.serverStore.fetchServersForUser.mockReset()
     h.serverStore.fetchServersForUser.mockImplementation(() => new Promise<void>((r) => { release = r }))
     const wrapper = await open({ ticket: 'tkt' })
-    await wrapper.get('[data-testid="migrate-open-server"]').trigger('click')
+    await wrapper.get('[data-testid="migrate-sync"]').trigger('click')
     await flushPromises()
+    await wrapper.get('[data-testid="migrate-continue"]').trigger('click')
+    await flushPromises()
+    expect(h.confirm).not.toHaveBeenCalled()
     expect(h.serverStore.fetchServersForUser).toHaveBeenCalledWith('prof-1', true)
     expect(h.router.push).not.toHaveBeenCalled()
     release()
@@ -148,6 +155,22 @@ describe('MigrateFromDiscordView', () => {
     expect(wrapper.get('[data-testid="migrate-roles"]').text()).toContain('Mod')
     expect(wrapper.get('[data-testid="migrate-roles"]').text()).toContain('Artist')
     expect(wrapper.find('[data-testid="sync-avatar"]').exists()).toBe(true)
+  })
+
+  it('tells the server owner that roles are only added', async () => {
+    h.auth.isLoggedIn = true
+    h.profile.profile = { username: 'alice', is_local: true }
+    h.svc.claim.mockResolvedValue({ serverId: 'srv', rolesGranted: ['Mod'], isOwner: true })
+    const wrapper = await open({ ticket: 'tkt' })
+    expect(wrapper.get('[data-testid="migrate-owner-roles"]').text()).toContain('discordMigration.migrate.ownerRoles')
+  })
+
+  it('says nothing about owner roles to other members', async () => {
+    h.auth.isLoggedIn = true
+    h.profile.profile = { username: 'bob', is_local: true }
+    h.svc.claim.mockResolvedValue({ serverId: 'srv', rolesGranted: ['Mod'], isOwner: false })
+    const wrapper = await open({ ticket: 'tkt' })
+    expect(wrapper.find('[data-testid="migrate-owner-roles"]').exists()).toBe(false)
   })
 
   it('asks the gateway for a fresh sync after a successful claim, whatever the toggles', async () => {
@@ -344,5 +367,123 @@ describe('MigrateFromDiscordView', () => {
     const wrapper = await open({ ticket: 'tkt' })
     await fillForm(wrapper)
     expect(wrapper.get('[data-testid="migrate-field-error"]').text()).toContain('discordMigration.migrate.errors.account_creation_disabled')
+  })
+})
+
+describe('MigrateFromDiscordView server icon', () => {
+  it('resolves the stored icon path to a public URL instead of using it as the image source', async () => {
+    h.svc.preview.mockResolvedValue({ serverId: 'srv', serverName: 'Lobby', iconUrl: 'srv/icon-1700000000.gif' })
+    const w = await open()
+    const src = w.get('[data-testid="migrate-server-icon"]').attributes('src') ?? ''
+    expect(src).not.toBe('srv/icon-1700000000.gif')
+    expect(src).toContain('/storage/v1/')
+  })
+
+  it('shows the server monogram when there is no icon', async () => {
+    const w = await open()
+    expect(w.get('[data-testid="migrate-server-icon"]').attributes('src')).toBeTruthy()
+  })
+
+  it('keeps an absolute icon URL as it is', async () => {
+    h.svc.preview.mockResolvedValue({ serverId: 'srv', serverName: 'Lobby', iconUrl: 'https://cdn.example/icon.png' })
+    const w = await open()
+    expect(w.get('[data-testid="migrate-server-icon"]').attributes('src')).toBe('https://cdn.example/icon.png')
+  })
+})
+
+describe('MigrateFromDiscordView sync choice', () => {
+  const claimed = async (link: unknown = null) => {
+    h.auth.isLoggedIn = true
+    h.profile.profile = { username: 'alice', is_local: true }
+    h.svc.claim.mockResolvedValue({ serverId: 'srv', rolesGranted: [], isOwner: false })
+    h.svc.myLink.mockResolvedValue(link)
+    h.profileId.mockResolvedValue('prof-1')
+    h.serverStore.fetchServersForUser.mockReset()
+    h.serverStore.fetchServersForUser.mockResolvedValue(undefined)
+    h.router.push.mockReset()
+    return open({ ticket: 'tkt' })
+  }
+  const checked = (w: any, field: string) => (w.get(`[data-testid="sync-${field}"]`).element as HTMLInputElement).checked
+
+  it('ticks every field when the member has no saved choice', async () => {
+    const w = await claimed({ status: 'active', syncFields: [], syncChosen: false, discordJoinedAt: null })
+    for (const f of ['avatar', 'display_name', 'banner', 'accent_color', 'server_nickname', 'server_avatar', 'server_banner']) {
+      expect(checked(w, f)).toBe(true)
+    }
+  })
+
+  it('keeps a saved choice', async () => {
+    const w = await claimed({ status: 'active', syncFields: ['avatar'], syncChosen: true, discordJoinedAt: null })
+    expect(checked(w, 'avatar')).toBe(true)
+    expect(checked(w, 'banner')).toBe(false)
+  })
+
+  it('toggling saves nothing; Sync saves the chosen fields and says it synced', async () => {
+    const w = await claimed({ status: 'active', syncFields: ['avatar'], syncChosen: true, discordJoinedAt: null })
+    await w.get('[data-testid="sync-banner"]').setValue(true)
+    expect(h.svc.setMySync).not.toHaveBeenCalled()
+    await w.get('[data-testid="migrate-sync"]').trigger('click')
+    await flushPromises()
+    expect(h.svc.setMySync).toHaveBeenCalledWith('srv', ['avatar', 'banner'])
+    expect(w.get('[data-testid="migrate-sync-done"]').exists()).toBe(true)
+  })
+
+  it('shows a failed sync and lets the member try again', async () => {
+    const w = await claimed()
+    h.svc.setMySync.mockRejectedValueOnce(new Error('x'))
+    await w.get('[data-testid="migrate-sync"]').trigger('click')
+    await flushPromises()
+    expect(w.get('[data-testid="migrate-sync-error"]').exists()).toBe(true)
+    expect(w.find('[data-testid="migrate-sync-done"]').exists()).toBe(false)
+  })
+
+  it('puts Sync and Continue on one row', async () => {
+    const w = await claimed()
+    const row = w.get('[data-testid="migrate-actions"]')
+    expect(row.findAll('button')).toHaveLength(2)
+    expect(row.find('[data-testid="migrate-sync"]').exists()).toBe(true)
+    expect(row.find('[data-testid="migrate-continue"]').exists()).toBe(true)
+  })
+
+  it('asks before continuing when nothing was synced, and stays on Go back', async () => {
+    const w = await claimed()
+    h.confirm.mockResolvedValueOnce(false)
+    await w.get('[data-testid="migrate-continue"]').trigger('click')
+    await flushPromises()
+    expect(h.confirm).toHaveBeenCalledTimes(1)
+    expect(h.serverStore.fetchServersForUser).not.toHaveBeenCalled()
+    expect(h.router.push).not.toHaveBeenCalled()
+  })
+
+  it('does not ask a member who already chose their fields', async () => {
+    const w = await claimed({ status: 'active', syncFields: [], syncChosen: true, discordJoinedAt: null })
+    await w.get('[data-testid="migrate-continue"]').trigger('click')
+    await flushPromises()
+    expect(h.confirm).not.toHaveBeenCalled()
+    expect(h.router.push).toHaveBeenCalledWith({ name: 'Chat' })
+  })
+
+  it('does not ask a member whose account was already linked', async () => {
+    h.auth.isLoggedIn = true
+    h.profile.profile = { username: 'alice', is_local: true }
+    h.svc.claim.mockRejectedValue(new h.DiscordMigrationError('ticket_expired'))
+    h.svc.myLink.mockResolvedValue({ status: 'active', syncFields: [], syncChosen: false, discordJoinedAt: null })
+    h.profileId.mockResolvedValue('prof-1')
+    h.serverStore.fetchServersForUser.mockReset()
+    h.serverStore.fetchServersForUser.mockResolvedValue(undefined)
+    h.router.push.mockReset()
+    const w = await open({ ticket: 'tkt' })
+    await w.get('[data-testid="migrate-continue"]').trigger('click')
+    await flushPromises()
+    expect(h.confirm).not.toHaveBeenCalled()
+    expect(h.router.push).toHaveBeenCalledWith({ name: 'Chat' })
+  })
+
+  it('continues to the server once the member confirms', async () => {
+    const w = await claimed()
+    await w.get('[data-testid="migrate-continue"]').trigger('click')
+    await flushPromises()
+    expect(h.confirm).toHaveBeenCalledTimes(1)
+    expect(h.router.push).toHaveBeenCalledWith({ name: 'Chat' })
   })
 })

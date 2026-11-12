@@ -5764,7 +5764,7 @@
       "settingsLead": "Mientras la migración esté abierta, los campos marcados se copian de tu perfil de Discord a Harmony.",
       "accountGroup": "El perfil de tu cuenta",
       "serverGroup": "Tu perfil en este servidor",
-      "hint": "Se copia al cambiar un interruptor y después cada pocas horas. Desmarca un campo para dejar de copiarlo; lo ya copiado se queda.",
+      "hint": "Los campos marcados se copian al pulsar Sincronizar y se mantienen al día cada pocas horas mientras la migración esté abierta. Desmarca un campo para dejar de copiarlo; lo ya copiado se queda.",
       "saveFailed": "No se pudo guardar. Inténtalo de nuevo.",
       "fields": {
         "avatar": "Foto de perfil",
@@ -5774,7 +5774,13 @@
         "server_nickname": "Apodo en este servidor",
         "server_avatar": "Foto en este servidor",
         "server_banner": "Banner en este servidor"
-      }
+      },
+      "selectAll": "Seleccionar todo",
+      "clearAll": "Quitar todo",
+      "syncButton": "Sincronizar",
+      "syncing": "Sincronizando…",
+      "saveAndSync": "Guardar y sincronizar",
+      "done": "Sincronizado desde Discord."
     },
     "migrate": {
       "title": "Migrar desde Discord",
@@ -5825,7 +5831,11 @@
         "invalid_ticket": "Este inicio de sesión caducó. Empieza de nuevo.",
         "network": "No se pudo contactar con el servidor. Inténtalo de nuevo.",
         "unknown": "Algo salió mal. Inténtalo de nuevo."
-      }
+      },
+      "ownerRoles": "Eres el propietario de este servidor, así que la sincronización solo te añade roles. Nunca te los quita.",
+      "continue": "Continuar",
+      "skipSyncTitle": "¿Continuar sin sincronizar?",
+      "skipSyncMessage": "No has sincronizado nada desde Discord. ¿Continuar de todos modos? Puedes sincronizar más tarde en Ajustes → Perfiles de servidor."
     },
     "navLabel": "Migrar desde Discord",
     "title": "Migrar desde Discord",
@@ -5866,7 +5876,8 @@
     "guild": {
       "label": "ID del servidor de Discord",
       "hint": "Activa el modo desarrollador en Discord, haz clic derecho en el servidor y elige Copiar ID del servidor.",
-      "locked": "El servidor de Discord no se puede cambiar después de abrir la migración."
+      "locked": "El servidor de Discord no se puede cambiar después de abrir la migración.",
+      "fromBridge": "Rellenado desde el puente de Discord de este servidor."
     },
     "refresh": {
       "button": "Obtener de Discord",
@@ -5902,6 +5913,19 @@
       "apply": "Aplicar permisos de Discord",
       "applyAll": "Aplicar todos"
     },
+    "overrides": {
+      "title": "Anulaciones de canal por miembro",
+      "intro": "Discord puede permitir o denegar permisos en un canal para un solo miembro. Cuando un miembro vinculado entra, los recibe en el canal de Harmony emparejado. Las anulaciones que un administrador creó en Harmony nunca se reemplazan.",
+      "member": "Miembro de Discord {id}",
+      "allows": "Permite: {list}",
+      "denies": "Deniega: {list}",
+      "nothing": "nada",
+      "linked": "Vinculado a {'@'}{username}",
+      "notLinked": "Aún no vinculado",
+      "unpaired": "Canal sin emparejar",
+      "showAll": "Mostrar los {count}",
+      "showFewer": "Mostrar menos"
+    },
     "errors": {
       "needManageRoles": "Necesitas el permiso Gestionar roles para aplicar permisos",
       "cannotGrant": "No puedes conceder {permission} porque no lo tienes",
@@ -5924,11 +5948,15 @@
       "blockers": {
         "credentials": "Añade las credenciales de Discord.",
         "guild": "Introduce el ID del servidor de Discord.",
-        "roles": "Obtén tus roles de Discord."
+        "roles": "Obtén tus roles de Discord.",
+        "redirect": "Añade la URL de redirección a la aplicación de Discord"
       },
       "warnings": {
-        "unpaired": "{count} canal de Discord no está emparejado con un canal de Harmony. | {count} canales de Discord no están emparejados con canales de Harmony.",
-        "overrides": "{count} canal de Discord tiene excepciones de permisos para miembros concretos. No se migran. | {count} canales de Discord tienen excepciones de permisos para miembros concretos. No se migran."
+        "unpaired": "{count} canal de Discord no está emparejado con un canal de Harmony. | {count} canales de Discord no están emparejados con canales de Harmony."
+      },
+      "redirect": {
+        "intro": "Añade esta URL de redirección a los ajustes OAuth2 de la aplicación de Discord, o Discord mostrará «Invalid OAuth2 redirect_uri». Es la misma para cualquier origen de credenciales, incluido el bot de esta instancia.",
+        "added": "Ya la añadí"
       }
     },
     "open": {

@@ -68,8 +68,12 @@
             autocomplete="off"
             :disabled="guildLocked"
             data-testid="guild-input"
+            @input="guildFromBridge = false"
           />
           <span class="db-muted">{{ guildLocked ? t('discordMigration.guild.locked') : t('discordMigration.guild.hint') }}</span>
+          <span v-if="guildFromBridge && !guildLocked" class="db-muted" data-testid="guild-from-bridge">
+            {{ t('discordMigration.guild.fromBridge') }}
+          </span>
         </div>
 
         <p v-if="saveError" class="dm-error" role="alert" data-testid="save-error">{{ saveError }}</p>
@@ -196,9 +200,37 @@
         </ul>
       </section>
 
+      <!-- 7. Member channel overrides -->
+      <section v-if="memberOverrides.length" class="db-card" data-testid="dm-overrides">
+        <h3 class="db-card-sub">{{ t('discordMigration.overrides.title') }}</h3>
+        <p class="db-muted">{{ t('discordMigration.overrides.intro') }}</p>
+        <ul class="dm-gaps">
+          <li v-for="o in shownOverrides" :key="`${o.discord_channel_id}:${o.discord_user_id}`" class="dm-override" data-testid="override-row">
+            <span class="db-ui">#{{ o.channel_name || o.discord_channel_id }}</span>
+            <span class="db-muted">{{ t('discordMigration.overrides.member', { id: o.discord_user_id }) }}</span>
+            <span class="db-muted">{{ t('discordMigration.overrides.allows', { list: permissionList(o.allow) }) }}</span>
+            <span class="db-muted">{{ t('discordMigration.overrides.denies', { list: permissionList(o.deny) }) }}</span>
+            <span class="dm-override-status" :data-status="o.status" data-testid="override-status">{{ overrideStatus(o) }}</span>
+          </li>
+        </ul>
+        <div v-if="memberOverrides.length > OVERRIDES_COLLAPSED" class="db-actions">
+          <button type="button" class="btn btn-secondary btn-sm" data-testid="overrides-toggle" @click="showAllOverrides = !showAllOverrides">
+            {{ showAllOverrides ? t('discordMigration.overrides.showFewer') : t('discordMigration.overrides.showAll', { count: memberOverrides.length }) }}
+          </button>
+        </div>
+      </section>
+
       <!-- 8. Readiness and open -->
       <section v-if="config.state !== 'open' && config.state !== 'finished'" class="db-card" data-testid="dm-ready">
         <h3 class="db-card-sub">{{ t('discordMigration.ready.title') }}</h3>
+        <div class="dm-redirect" data-testid="dm-redirect">
+          <p class="db-muted">{{ t('discordMigration.ready.redirect.intro') }}</p>
+          <BridgeCopyBlock :text="redirectUri" :label="t('discordMigration.source.own.redirectLabel')" />
+          <label class="dm-radio">
+            <input v-model="redirectAdded" type="checkbox" data-testid="redirect-added" />
+            <span>{{ t('discordMigration.ready.redirect.added') }}</span>
+          </label>
+        </div>
         <ul v-if="blockers.length" class="db-steps" data-testid="blockers">
           <li v-for="blocker in blockers" :key="blocker">{{ blocker }}</li>
         </ul>
@@ -210,7 +242,7 @@
           <button
             type="button"
             class="btn btn-primary"
-            :disabled="busy !== '' || !config.readiness.ready"
+            :disabled="busy !== '' || !config.readiness.ready || !redirectAdded"
             data-testid="open-migration"
             @click="openMigration"
           >
@@ -325,7 +357,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useToast } from 'vue-toastification'
 import Icon from '@/components/common/Icon.vue'
@@ -356,6 +388,7 @@ import {
   type MigrationConfig,
   type MigrationError,
   type MigrationMember,
+  type MemberOverride,
   type PermissionGap,
   type RoleMapRow,
 } from './migrationApi'
@@ -376,6 +409,8 @@ const now = ref(Date.now())
 
 const source = ref<CredentialSource | ''>('')
 const guildId = ref('')
+// True while the field holds the bridge's guild the panel filled in, not something saved or typed.
+const guildFromBridge = ref(false)
 const clientId = ref('')
 const clientSecret = ref('')
 const botToken = ref('')
@@ -476,6 +511,16 @@ function permissionLabel(name: string): string {
     .join(' ')
 }
 
+function permissionList(names: string[]): string {
+  return names.length ? names.map(permissionLabel).join(', ') : t('discordMigration.overrides.nothing')
+}
+
+function overrideStatus(o: MemberOverride): string {
+  if (o.status === 'unpaired') return t('discordMigration.overrides.unpaired')
+  if (o.status === 'linked') return t('discordMigration.overrides.linked', { username: o.username ?? '' })
+  return t('discordMigration.overrides.notLinked')
+}
+
 function missingText(gap: PermissionGap): string {
   return gap.missing.map(permissionLabel).join(', ')
 }
@@ -509,7 +554,13 @@ async function reloadConfig() {
   const c = config.value
   if (c.credential_source) source.value = c.credential_source
   else if (!source.value) source.value = sourceOptions.value[0] ?? 'own'
-  guildId.value = c.discord_guild_id ?? guildId.value
+  if (c.discord_guild_id) {
+    guildId.value = c.discord_guild_id
+    guildFromBridge.value = false
+  } else if (!guildId.value && c.bridge_discord_guild_id) {
+    guildId.value = c.bridge_discord_guild_id
+    guildFromBridge.value = true
+  }
   selection.value = {
     ...Object.fromEntries(Object.entries(selection.value).filter(([id]) => suggested.value.has(id))),
     ...Object.fromEntries(c.role_map.map((m) => [m.discord_role_id, m.harmony_role_id])),
@@ -763,10 +814,34 @@ async function applyAll() {
 
 // ------------------------------------------------------------------ readiness and lifecycle
 
+// Whether the owner ticked "I added the redirect address". Kept in this browser, per server: the
+// database has no column for it, and it only gates the Open button.
+const redirectKey = computed(() => `harmony:discord-migration-redirect:${props.serverId}`)
+function readTick(key: string): boolean {
+  try {
+    return localStorage.getItem(key) === '1'
+  } catch {
+    return false
+  }
+}
+function writeTick(key: string, on: boolean) {
+  try {
+    if (on) localStorage.setItem(key, '1')
+    else localStorage.removeItem(key)
+  } catch {
+    // Storage may be unavailable; the tick then lasts for this visit only.
+  }
+}
+const redirectAdded = ref(readTick(redirectKey.value))
+watch(redirectAdded, (v) => writeTick(redirectKey.value, v))
+// Another server in the same panel has its own tick.
+watch(redirectKey, (key) => { redirectAdded.value = readTick(key) })
+
 const blockers = computed(() => {
   const r = config.value?.readiness
   if (!r) return []
   const list: string[] = []
+  if (!redirectAdded.value) list.push(t('discordMigration.ready.blockers.redirect'))
   if (!r.has_credentials) list.push(t('discordMigration.ready.blockers.credentials'))
   if (!r.has_guild) list.push(t('discordMigration.ready.blockers.guild'))
   if (!r.roles_fetched) list.push(t('discordMigration.ready.blockers.roles'))
@@ -776,13 +851,18 @@ const blockers = computed(() => {
   return list
 })
 
+const OVERRIDES_COLLAPSED = 5
+const showAllOverrides = ref(false)
+const memberOverrides = computed(() => config.value?.member_overrides ?? [])
+const shownOverrides = computed(() =>
+  showAllOverrides.value ? memberOverrides.value : memberOverrides.value.slice(0, OVERRIDES_COLLAPSED),
+)
+
 const warnings = computed(() => {
   const w = config.value?.readiness_warnings
   const list: string[] = []
   const unpaired = w?.unpaired_channels?.length ?? 0
   if (unpaired > 0) list.push(t('discordMigration.ready.warnings.unpaired', { count: unpaired }, unpaired))
-  const overrides = w?.member_overrides ?? 0
-  if (overrides > 0) list.push(t('discordMigration.ready.warnings.overrides', { count: overrides }, overrides))
   return list
 })
 
@@ -1042,6 +1122,30 @@ onMounted(load)
   justify-content: space-between;
   gap: 12px;
   align-items: flex-start;
+}
+
+.dm-redirect {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.dm-override {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  align-items: baseline;
+  overflow-wrap: anywhere;
+}
+
+.dm-override-status[data-status='linked'] {
+  color: var(--success);
+}
+
+.dm-override-status[data-status='not_linked'],
+.dm-override-status[data-status='unpaired'] {
+  color: var(--warning);
 }
 
 .dm-gap-text {
