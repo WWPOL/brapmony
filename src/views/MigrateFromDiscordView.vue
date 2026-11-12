@@ -410,14 +410,20 @@ onMounted(() => {
 </script>
 
 <style scoped>
+/* The shell's content area is a fixed-height, overflow-hidden box, so the page scrolls itself:
+   a long role list must not push the buttons off a phone screen. margin: auto on the card
+   centres it when it fits and lets it start at the top when it doesn't (align-items: center
+   would clip its top edge). */
 .mg-wrap {
-  min-height: calc(100 * var(--app-vh));
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   display: flex;
-  align-items: center;
-  justify-content: center;
   padding: 24px;
   background: var(--background-senary);
 }
+.mg-wrap > .mg-card { margin: auto; }
 .mg-card {
   width: 100%;
   max-width: 440px;
@@ -462,7 +468,12 @@ onMounted(() => {
   cursor: pointer;
   text-decoration: none;
 }
-.mg-actions { display: flex; gap: 12px; flex-wrap: nowrap; }
+.mg-actions { display: flex; gap: 12px; flex-wrap: wrap; }
+.mg-actions > .mg-btn { flex: 1 1 auto; }
+@media (max-width: 480px) {
+  .mg-wrap { padding: 12px; }
+  .mg-card { padding: 20px; }
+}
 .mg-btn-primary { background: var(--harmony-primary); border-color: transparent; color: #fff; }
 .mg-btn:disabled { opacity: 0.6; cursor: default; }
 .mg-link { background: none; border: 0; padding: 0; color: var(--text-link); cursor: pointer; font: inherit; text-decoration: underline; }

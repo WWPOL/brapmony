@@ -12,7 +12,7 @@
 // reverse proxy has), so the pages forward those requests to the gateway; redirects pass
 // through untouched.
 
-import { test, expect, type BrowserContext } from '@playwright/test'
+import { test, expect, devices, type BrowserContext } from '@playwright/test'
 import {
   adminClient,
   createUser,
@@ -52,6 +52,8 @@ let server: SeededServer
 let stub: DiscordStub
 let gateway: BotGateway
 let newcomerId = ''
+let phoneUser: SpecUser | undefined
+const PHONE_DISCORD_ID = '1500000000000000098'
 let crewRoleId = ''
 
 test.beforeAll(async () => {
@@ -104,6 +106,7 @@ test.afterAll(async () => {
   await stub?.stop()
   if (server) await admin.from('servers').delete().eq('id', server.id)
   if (newcomerId) await admin.auth.admin.deleteUser(newcomerId).catch(() => {})
+  if (phoneUser) await deleteUser(admin, phoneUser)
   await deleteUser(admin, owner)
 })
 
@@ -228,6 +231,63 @@ test('an owner opens the migration, a Discord member joins with their roles, and
     await expect(visitor.getByText(server.name).first()).toBeVisible({ timeout: 30000 })
   } finally {
     await visitorContext.close()
+  }
+
+  // ---------------------------------------------------------------- on a phone, with many roles
+  // A member holding 30 roles links an existing account from a phone. The result screen lists
+  // every role, then the sync choices, then Sync / Continue: the page must scroll down to them.
+  // It scrolls with the wheel, as a person would: scrollIntoView also scrolls an
+  // overflow: hidden box, which hid the bug.
+  const ranks = Array.from({ length: 30 }, (_, i) => ({
+    discordId: `15000000000000002${String(i).padStart(2, '0')}`,
+    name: `Rank ${String(i + 1).padStart(2, '0')}`,
+  }))
+  const { data: rankRoles, error: rankError } = await admin
+    .from('server_roles')
+    .insert(ranks.map((r, i) => ({ server_id: server.id, name: r.name, position: 10 + i, permissions: 0 })))
+    .select('id, name')
+  if (rankError || !rankRoles) throw new Error(`rank roles: ${rankError?.message}`)
+  const rankRoleId = new Map(rankRoles.map((r) => [r.name, r.id]))
+  for (const r of ranks) stub.state.roles.push({ id: r.discordId, name: r.name, position: 10, permissions: '0' })
+  {
+    const { error } = await admin.from('discord_migration_discord_roles')
+      .insert(ranks.map((r) => ({ server_id: server.id, discord_role_id: r.discordId, name: r.name, position: 10 })))
+    if (error) throw new Error(`discord roles: ${error.message}`)
+    const { error: mapError } = await admin.from('discord_migration_role_map')
+      .insert(ranks.map((r) => ({ server_id: server.id, discord_role_id: r.discordId, harmony_role_id: rankRoleId.get(r.name)! })))
+    if (mapError) throw new Error(`role map: ${mapError.message}`)
+  }
+  phoneUser = await createUser(admin, 'dmp')
+  stub.state.members.push({
+    user: { id: PHONE_DISCORD_ID, username: `ph${Date.now().toString(36)}` },
+    roles: ranks.map((r) => r.discordId),
+    joined_at: '2022-01-01T00:00:00.000Z',
+  })
+  stub.state.consentUserId = PHONE_DISCORD_ID
+
+  const phoneContext = await browser.newContext({ ...devices['Pixel 7'], baseURL: BASE_URL })
+  try {
+    await proxyGateway(phoneContext)
+    const phone = await phoneContext.newPage()
+    await signIn(phone, phoneUser)
+    await phone.goto(`/migrate/${migration.link_token}`)
+    await phone.locator('[data-testid="migrate-signin-discord"]').click()
+    await expect(phone.getByText('Scope: identify')).toBeVisible({ timeout: 45000 })
+    await phone.locator('#stub-authorize').click()
+
+    const done = phone.locator('[data-testid="migrate-done"]')
+    await expect(done).toBeVisible({ timeout: 45000 })
+    await expect(phone.locator('[data-testid="migrate-roles"] li')).toHaveCount(30)
+    // The card starts at the top of the screen, not clipped above it.
+    await expect(phone.getByRole('heading', { name: server.name })).toBeInViewport()
+    const continueButton = phone.locator('[data-testid="migrate-continue"]')
+    await expect(continueButton).not.toBeInViewport()
+    await phone.mouse.move(200, 400)
+    for (let i = 0; i < 10; i++) await phone.mouse.wheel(0, 1000)
+    await expect(continueButton).toBeInViewport({ timeout: 5000 })
+    await expect(phone.locator('[data-testid="migrate-sync"]')).toBeInViewport()
+  } finally {
+    await phoneContext.close()
   }
 
   // ---------------------------------------------------------------- the sync follows Discord
