@@ -438,6 +438,45 @@ This section intentionally does not promote the frozen-reference statuses above.
   Android build/emulator checks; those results must be recorded separately.
   No frozen-reference row changes from `U/U` on the strength of JVM/HTTP tests.
 
+# Native render and interaction evidence (this session)
+
+This section records what was actually observed, and is deliberately narrower than a parity
+claim. Two kinds of evidence were produced against the live local stack on
+`http://localhost:54480` (fixture server `E2E Server`, accounts `fx_alice` / `fx_bob`):
+
+1. **Headless render captures** (`ScreenRenderHarnessTest`): the app's own composables drawn by
+   Robolectric's native graphics on the JVM, signed in to the real instance, each PNG written
+   after the screen's own repositories answered. Thirty-two captures cover the instance picker,
+   Chats (dark, light, midnight, custom), Social, Alerts, You, the appearance panel, Drive, and
+   all six server-management tabs.
+2. **Interaction journeys** (`NativeJourneyTest`): the bottom bar reaches every destination; the
+   rail opens a server channel; a direct message and a channel message are typed, sent, and then
+   read back **from the instance** over PostgREST, so a pass means the round trip happened; a
+   refused sign-in stays on the form with the instance's sentence; choosing a theme repaints the
+   appearance preview, measured by pixel difference rather than by a screenshot looking right.
+
+Both run with `--tests 'lol.mony.harmony.ScreenRenderHarnessTest' --tests
+'lol.mony.harmony.NativeJourneyTest'`, and 16 tests pass.
+
+**What this does not establish.** These are not emulator runs. The host has no `/dev/kvm`, so the
+AOSP API 30 image runs under QEMU TCG; it reaches `sys.boot_completed=1` after roughly two to six
+minutes, then loses its framework (binder transactions fail with 29189/-22 and zygote is killed)
+and its screencaps come back all black. Harness jobs owning the emulator are torn down mid-run.
+So the following remain **unverified**, and keep their `U/U` rows:
+
+- Touch, gesture and software-keyboard behaviour; IME insets; system back; process death and
+  restore; rotation and window-size classes above the one captured width.
+- Device appearance: the system light/dark setting, dynamic colour, and the status and navigation
+  bar icons `HarmonyRoot` sets through the window insets controller.
+- Push (B05), voice and video (B06), Harmony's own Megolm encryption (B03/B04), the attachment
+  upload pipeline (B07), and every deep link (B09). These are not implemented natively; a render
+  harness cannot make them so.
+- Any performance, battery or memory claim.
+
+A JVM render or a passing interaction test is therefore **supporting** evidence. It is not a
+substitute for driving the APK on a device, and no row above moves off `U/U` on its strength
+alone.
+
 ## Completion rule
 
 Complete parity requires every applicable feature above implemented and all
