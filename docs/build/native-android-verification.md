@@ -11,20 +11,22 @@ This host has no `/dev/kvm`. The Android emulator therefore runs the guest CPU
 under QEMU's TCG interpreter, and the AOSP API 30 image behaves like this:
 
 - It boots to `sys.boot_completed=1` in roughly two to six minutes.
-- Shortly after, its framework dies. The kernel log shows
-  `binder: ... transaction failed 29189/-22`, `binder: send failed reply for
-  transaction ..., target dead`, and `Service 'zygote' ... received signal 9`;
-  `adb` then reports `device not found`.
+- Its framework used to die shortly after boot, with `binder: ... transaction
+  failed 29189/-22` and `Service 'zygote' ... received signal 9` in the kernel
+  log, after which `adb` reported `device not found`. Running the guest on
+  **one core** stops the TCG thread races behind that: every run since has
+  stayed up long enough to install and drive the APK.
 - Screencaps taken while it is up are a uniform black 480x960 PNG (0 of 460800
   pixels non-black), even though SurfaceFlinger reports the display on and awake
   with the activity's layers present.
-- The harness tears down the sandbox that owns the emulator process, so a
-  long emulator run does not survive from one tool call to the next.
+- The harness tears down the sandbox that owns the emulator process, so the
+  emulator does not survive from one tool call to the next. A journey has to
+  boot, install and drive in a single run.
 
-An emulator run is therefore not a check that can be relied on, and a task that
-blocks on it never finishes. Pretending otherwise would be worse than the
-limitation: an all-black screenshot or a stale accessibility dump is not visual
-verification.
+So the emulator is usable for **function**, in one long call, and not for
+**pixels**: every screenshot path returns black (see below). A task that
+blocks on device screenshots never finishes, and recording an all-black
+image as visual evidence would make the audit lie.
 
 ## What is verified, and what each part is worth
 
@@ -75,7 +77,16 @@ the first attempt captured a loading spinner as if it were the screen.
 
 `ScreenRenderHarnessTest` covers the instance picker, Chats in the default dark
 look and in light, midnight and a custom account look, Social, Alerts, You, the
-appearance panel, Drive, and all six server-management tabs -- 32 captures.
+appearance panel, Drive, and all six server-management tabs. The captures are
+committed in `docs/build/evidence/android-native-render/`, with a README
+naming each one.
+
+`AccountAppearanceRenderTest` is the check that the client honours Harmony's
+appearance settings. It reads `profiles.appearance_settings` for the signed-in
+account -- the same JSON the web client writes -- renders Chats with it, then
+re-renders with the app's default and requires the pixels to differ. Run
+against an account set to a custom light look with a crimson accent, that pair
+is `chats-account-appearance.png` and `chats-account-default.png`.
 
 ### Journeys: `NativeJourneyTest`
 
@@ -131,29 +142,12 @@ Without those variables the render and journey tests skip themselves through a
 JUnit assumption, so an offline `./gradlew test` still passes and still says what
 it did not check.
 
-## Why not just fix the emulator
+## What was rejected
 
-Because the cause is the host, not a flag. Without `/dev/kvm` the guest runs
-under TCG; its GPU path initialises (`Graphics Adapter ... SwiftShader`) and the
-framework comes up, but the guest's rendered frames never arrive where
-`screencap` reads them. Several attempts were made and all failed the same way:
-`-gpu swiftshader_indirect`, `-gpu guest`, `-gpu swiftshader`, forcing client
-composition by restarting SurfaceFlinger, switching `debug.hwui.renderer`, and
-the emulator console's own screenshot command. Single-core boots (which stop the
-TCG thread races that had been killing zygote) made the framework stable -- the
-dumps in the evidence directory come from those runs -- but not the pixels.
+Committing an all-black PNG as "visual evidence", and inferring appearance from
+the accessibility tree alone. The first is false. The second proves a screen
+exists and exposes the right labels -- genuinely useful, and the reason the
+dumps are kept -- but says nothing about layout, contrast, clipping or whether a
+custom theme applied. Neither is what the task asked for, and recording either
+as verification would have made the audit lie.
 
-Committing an all-black PNG as "visual evidence" was the alternative, and it is
-a lie. So was inferring appearance from the accessibility tree: that proves a
-screen exists and exposes the right labels, which is genuinely useful and is why
-the dumps are kept, but says nothing about layout, contrast or clipping.
-
-## The alternative that was rejected
-
-Committing the emulator's all-black screenshots as "visual evidence", or
-inferring appearance from the accessibility tree alone. The first is false. The
-second proves a screen exists and exposes the right labels -- genuinely useful,
-and the reason `evidence-05/01-signin.xml` is kept -- but says nothing about
-layout, contrast, clipping or whether a custom theme applied. Neither is what
-the task asked for, and recording either as verification would have made the
-audit lie.

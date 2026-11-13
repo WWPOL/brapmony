@@ -102,6 +102,18 @@ internal object RenderHarness {
         }
 
     /**
+     * The look the account itself stores, as Harmony's `profiles.appearance_settings`.
+     *
+     * This is the value the app must honour: a person who set a theme on the web should
+     * find it here, not the app's own default.
+     */
+    fun accountAppearance(state: AppState): VisualThemeSettings {
+        val session = state.auth.state.value as AuthState.SignedIn
+        val profile = session.profile ?: error("signed in without a profile")
+        return VisualThemeSettings.fromJson(profile.appearanceSettings)
+    }
+
+    /**
      * Draws [content] inside the app's real theme and saves it as `<name>.png`.
      *
      * [settle] is text that only appears once the screen's own repositories have answered, so a
@@ -132,7 +144,43 @@ internal object RenderHarness {
     }
 
     /**
-     * Waits until the composer is empty again, which is what sending a message does.
+     * Draws [content] under a theme the test can change afterwards, and captures it.
+     *
+     * A Compose rule may only call `setContent` once, so a screen that must be compared
+     * under two looks has to repaint in place. That is also what the app does when the
+     * account's look arrives after the first frame.
+     */
+    fun ComposeContentTestRule.shotThenRetheme(
+        firstName: String,
+        secondName: String,
+        state: AppState,
+        first: VisualThemeSettings,
+        second: VisualThemeSettings,
+        settle: String? = null,
+        content: @Composable (VisualThemeSettings) -> Unit,
+    ): Pair<Bitmap, Bitmap> {
+        val theme = androidx.compose.runtime.mutableStateOf(first)
+        setContent {
+            HarmonyTheme(theme.value) {
+                Surface(Modifier.fillMaxSize().semantics { testTagsAsResourceId = true }) {
+                    ProvideAppState(state) { content(theme.value) }
+                }
+            }
+        }
+        waitForIdle()
+        if (settle != null) {
+            waitUntil(timeoutMillis = 180_000) {
+                onAllNodesWithText(settle, substring = true).fetchSemanticsNodes().isNotEmpty()
+            }
+            waitForIdle()
+        }
+        val before = capture(firstName)
+        theme.value = second
+        waitForIdle()
+        return before to capture(secondName)
+    }
+
+    /**
      *
      * Waiting on the message text alone is not enough: the text field already holds the draft, so
      * the condition would be met before the send and the capture would show the message unsent.

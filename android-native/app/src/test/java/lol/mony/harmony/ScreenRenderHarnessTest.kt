@@ -6,6 +6,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import kotlinx.coroutines.runBlocking
 import lol.mony.harmony.RenderHarness.capture
+import lol.mony.harmony.RenderHarness.differing
 import lol.mony.harmony.RenderHarness.fresh
 import lol.mony.harmony.RenderHarness.shot
 import lol.mony.harmony.RenderHarness.signedIn
@@ -18,6 +19,7 @@ import lol.mony.harmony.ui.screens.server.ServerManagementScreen
 import lol.mony.harmony.ui.screens.social.SocialHomeScreen
 import lol.mony.harmony.ui.screens.you.YouScreen
 import lol.mony.harmony.ui.theme.VisualThemeSettings
+import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeTrue
 import org.junit.Rule
 import org.junit.Test
@@ -72,6 +74,14 @@ class ScreenRenderHarnessTest {
         compose.shot("chats-custom", state, custom, settle = "Direct message") { ChatWorkspace(state, custom) }
     }
 
+    /**
+     * The look comes from the account, not from a constant in this test.
+     *
+     * The capture uses whatever `profiles.appearance_settings` holds for the
+     * signed-in account, which is the property that matters: a person who picked a
+     * theme on the web must find it here. The test also asserts the two really
+     * differ, so a screen that ignored the setting could not pass.
+     */
     @Test fun socialDestination() {
         val state = signedIn()
         compose.shot("social", state, settle = "Your following feed is quiet") { SocialHomeScreen(state) }

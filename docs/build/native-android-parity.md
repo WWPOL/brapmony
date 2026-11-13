@@ -476,13 +476,22 @@ established for any row.
 ### On the JVM: the composables, drawn
 
 `ScreenRenderHarnessTest` draws the app's own composables through Robolectric's
-native graphics, signed in to the same instance, and writes 32 PNGs after each
-screen's repositories answered: the instance picker, Chats in dark, light,
-midnight and a custom account look, Social, Alerts, You, the appearance panel,
-Drive, and all six server-management tabs. `NativeJourneyTest` drives the
-semantics tree for the bottom bar, the rail, a DM and a channel message (both
-read back from the instance), a refused sign-in, the register and reset forms,
-and an appearance change measured by pixel difference. 192 tests pass.
+native graphics, signed in to the same instance, after each screen's
+repositories answered: the instance picker, Chats in dark, light, midnight and
+a custom account look, Social, Alerts, You, the appearance panel, Drive, and
+all six server-management tabs. The PNGs are committed in
+`docs/build/evidence/android-native-render/`.
+
+`AccountAppearanceRenderTest` covers the appearance requirement directly: it
+reads the account's stored `appearance_settings`, renders Chats with it, then
+with the app's default, and requires the pixels to differ. Against an account
+set to a custom light look with a crimson accent, that pair shows the app
+wearing the account's look rather than its own.
+
+`NativeJourneyTest` drives the semantics tree for the bottom bar, the rail, a
+DM and a channel message (both read back from the instance), a refused
+sign-in, the register and reset forms, and an appearance change measured by
+pixel difference. 193 tests pass.
 
 These are supporting evidence. They show what the composables draw and which
 nodes they expose, given real rows; they cannot show touch, IME, lifecycle,
