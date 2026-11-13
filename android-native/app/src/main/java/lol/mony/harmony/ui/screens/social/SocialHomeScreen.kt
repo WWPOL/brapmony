@@ -283,12 +283,13 @@ private fun SocialProfileContent(
     var error by remember(targetId) { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
     val ownId by state.profileId.collectAsState()
-    val own = targetId == (ownId ?: (state.auth.state.value as? AuthState.SignedIn)?.profile?.id)
+    val authState by state.auth.state.collectAsState()
+    val own = targetId == (ownId ?: (authState as? AuthState.SignedIn)?.profile?.id)
     SocialPostFeed("profile:$targetId", revision, postContent, "No visible posts on this profile yet.", header = {
         profile?.let { person ->
             Column(Modifier.fillMaxWidth().padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                    Avatar(person.shownName, socialMediaUrl((state.auth.state.value as? AuthState.SignedIn)?.endpoint?.baseUrl.orEmpty(), person.avatarUrl), size = 64.dp)
+                    Avatar(person.shownName, socialMediaUrl((authState as? AuthState.SignedIn)?.endpoint?.baseUrl.orEmpty(), person.avatarUrl), size = 64.dp)
                     Column(Modifier.weight(1f)) {
                         Text(person.shownName, style = MaterialTheme.typography.headlineSmall)
                         Text(person.handle, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
@@ -426,8 +427,9 @@ private fun SocialPeople(state: AppState, repo: SocialRepository, route: SocialR
 
 @Composable
 private fun SocialPersonRow(state: AppState, person: SocialProfile, onOpen: () -> Unit, trailing: @Composable () -> Unit = {}) {
+    val authState by state.auth.state.collectAsState()
     Row(Modifier.fillMaxWidth().clickable(onClick = onOpen).padding(horizontal = 20.dp, vertical = 14.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
-        Avatar(person.shownName, socialMediaUrl((state.auth.state.value as? AuthState.SignedIn)?.endpoint?.baseUrl.orEmpty(), person.avatarUrl))
+        Avatar(person.shownName, socialMediaUrl((authState as? AuthState.SignedIn)?.endpoint?.baseUrl.orEmpty(), person.avatarUrl))
         Column(Modifier.weight(1f)) { Text(person.shownName, style = MaterialTheme.typography.titleSmall); Text(person.handle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
         trailing()
     }

@@ -289,7 +289,7 @@ private fun RegisterForm(
     var done by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
-    val usernameLooksValid = username.matches(Regex("[A-Za-z0-9_]{2,32}"))
+    val usernameLooksValid = username.matches(Regex("[a-z0-9_]{3,24}"))
     val passwordsMatch = password.isNotEmpty() && password == confirm
     val canSubmit = !busy && email.isNotBlank() && usernameLooksValid && password.length >= 8 && passwordsMatch
 
@@ -349,9 +349,9 @@ private fun RegisterForm(
             Spacer(Modifier.height(12.dp))
             OutlinedTextField(
                 value = username,
-                onValueChange = { username = it.filter { c -> c.isLetterOrDigit() || c == '_' }; error = null },
+                onValueChange = { username = it.lowercase().filter { c -> c in 'a'..'z' || c in '0'..'9' || c == '_' }.take(24); error = null },
                 label = { Text("Username") },
-                supportingText = { Text("Letters and numbers, at least 2") },
+                supportingText = { Text("3–24 lowercase letters, numbers or underscores") },
                 isError = username.isNotEmpty() && !usernameLooksValid,
                 singleLine = true,
                 enabled = !busy,

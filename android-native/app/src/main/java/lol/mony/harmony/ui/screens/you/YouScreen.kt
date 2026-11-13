@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
@@ -54,6 +55,12 @@ fun YouScreen(
     var selected by rememberSaveable { mutableIntStateOf(0) }
     var confirmSignOut by remember { mutableStateOf(false) }
     val uriHandler = LocalUriHandler.current
+    var drive by rememberSaveable { mutableStateOf(false) }
+    if (drive) {
+        androidx.activity.compose.BackHandler { drive = false }
+        lol.mony.harmony.ui.screens.drive.DriveScreen(state, onBack = { drive = false })
+        return
+    }
     val tabs = listOf("Profile", "Appearance", "Privacy", "Notifications", "Security")
 
     LaunchedEffect(signedIn?.user?.id, signedIn?.endpoint?.baseUrl, reload) {
@@ -67,7 +74,7 @@ fun YouScreen(
         finally { loading = false }
     }
 
-    Column(Modifier.fillMaxSize()) {
+    Column(Modifier.fillMaxSize().statusBarsPadding()) {
         Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Avatar(
@@ -79,6 +86,7 @@ fun YouScreen(
                     Text(profile?.displayName ?: signedIn?.profile?.shownName ?: "You", style = MaterialTheme.typography.titleLarge)
                     Text("@${profile?.username ?: signedIn?.profile?.username.orEmpty()}", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
+                TextButton(onClick = { drive = true }) { Text("Drive") }
                 TextButton(onClick = { confirmSignOut = true }) { Text("Sign out") }
             }
             // LICENSE-ADDITIONAL-TERMS §1: visible, canonical attribution within one tap of the shell.

@@ -64,6 +64,17 @@ class CoreTransportTest {
         }
     }
 
+    @Test fun unsupportedStructuredEditCannotStripAttachments() = runBlocking {
+        MockWebServer().use { server ->
+            server.enqueue(MockResponse().setBody("""[{"id":"m","user_id":"p","created_at":"2026-01-01T00:00:00Z","content":[{"type":"text","text":"caption"},{"type":"file","url":"https://example.test/photo.jpg"}]}]"""))
+            val result = ChatRepository(RestApi(OkHttpClient())).editMessage(
+                Endpoint(server.url("/").toString(), "anon"), "jwt", "m", "new caption")
+            assertTrue(result.isFailure)
+            assertEquals(1, server.requestCount)
+            assertEquals("GET", server.takeRequest().method)
+        }
+    }
+
     @Test fun schemaModelsDoNotInventReactionOrThreadColumns() {
         val reaction = HarmonyJson.decodeFromString(Reaction.serializer(),
             """{"id":"r","message_id":"m","user_id":"p","custom_emoji_content":"👍","emoji_id":null}""")

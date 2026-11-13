@@ -5,6 +5,9 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.activity.compose.LocalActivity
+import androidx.compose.ui.graphics.toArgb
+import androidx.core.view.WindowCompat
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.testTagsAsResourceId
 import androidx.compose.ui.unit.dp
@@ -53,6 +56,17 @@ fun HarmonyRoot(state: AppState) {
         } catch (error: Exception) { recover(error) }
     }
     HarmonyTheme(appearance) {
+        val activity = LocalActivity.current
+        val background = MaterialTheme.colorScheme.background.toArgb()
+        SideEffect {
+            activity?.window?.let { window ->
+                val bars = WindowCompat.getInsetsController(window, window.decorView)
+                bars.isAppearanceLightStatusBars = appearance.isLight
+                bars.isAppearanceLightNavigationBars = appearance.isLight
+                @Suppress("DEPRECATION")
+                window.navigationBarColor = background
+            }
+        }
         ProvideAppState(state) {
             Surface(Modifier.fillMaxSize().semantics { testTagsAsResourceId = true },
                 color = MaterialTheme.colorScheme.background) {
@@ -104,7 +118,7 @@ private fun ProfileSetup(state: AppState, session: AuthState.SignedIn) {
     Column(Modifier.fillMaxSize().systemBarsPadding().imePadding().padding(24.dp), verticalArrangement = Arrangement.Center) {
         Text("Finish your profile", style = MaterialTheme.typography.headlineMedium)
         Text("Choose how people see you on this instance.", Modifier.padding(vertical = 12.dp))
-        OutlinedTextField(username, { username = it }, label = { Text("Username") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+        OutlinedTextField(username, { username = it.lowercase().filter { c -> c in 'a'..'z' || c in '0'..'9' || c == '_' }.take(24) }, label = { Text("Username") }, singleLine = true, modifier = Modifier.fillMaxWidth())
         OutlinedTextField(name, { name = it }, label = { Text("Display name") }, singleLine = true, modifier = Modifier.fillMaxWidth())
         if (error != null) ErrorBanner(error!!) { error = null }
         Button(enabled = !busy && username.isNotBlank(), onClick = {

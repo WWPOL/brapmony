@@ -71,6 +71,12 @@ class ChatRepository(private val rest: RestApi) {
 
     suspend fun editMessage(endpoint: Endpoint, token: String, messageId: String, text: String): Result<Message> = runCatching {
         require(text.isNotBlank()) { "A message cannot be empty." }
+        val original = rest.select(endpoint, token, "messages", filters = listOf("id" to "eq.$messageId"),
+            serializer = ListSerializer(Message.serializer())).getOrThrow().firstOrNull()
+            ?: error("This message is no longer available.")
+        require(!original.encrypted && original.content.all { it.type == "text" }) {
+            "Editing encrypted or structured/media messages is not implemented; nothing was changed."
+        }
         rest.update(endpoint, token, "messages", listOf("id" to "eq.$messageId"),
             buildJsonObject {
                 put("content", buildJsonArray { add(buildJsonObject { put("type", "text"); put("text", text) }) })
@@ -79,20 +85,17 @@ class ChatRepository(private val rest: RestApi) {
     }
 
     suspend fun deleteMessage(endpoint: Endpoint, token: String, messageId: String): Result<Unit> = runCatching {
-        // The official client deletes the row; database triggers handle audit/federation.
-        rest.delete(endpoint, token, "messages", listOf("id" to "eq.$messageId")).getOrThrow()
+        val changed = rest.update(endpoint, token, "messages", listOf("id" to "eq.$messageId"),
+            buildJsonObject {
+                put("is_deleted", true)
+                put("content", buildJsonArray { add(buildJsonObject { put("type", "text"); put("text", "[deleted]") }) })
+            }.toString(), serializer = ListSerializer(Message.serializer())).getOrThrow()
+        check(changed.isNotEmpty()) { "This message could not be deleted. Check your permissions." }
     }
 
-    suspend fun pin(endpoint: Endpoint, token: String, messageId: String, pinned: Boolean): Result<Unit> = runCatching {
-        val profileId = ProfileRepository(rest).mine(endpoint, token)?.profile?.id ?: error("Sign in again.")
-        rest.update(endpoint, token, "messages", listOf("id" to "eq.$messageId"), buildJsonObject {
-            put("is_pinned", pinned)
-            put("pinned_at", if (pinned) JsonPrimitive(nowIso()) else JsonNull)
-            put("pinned_by", if (pinned) JsonPrimitive(profileId) else JsonNull)
-        }.toString(), serializer = ListSerializer(Message.serializer())).getOrThrow().firstOrNull()
-            ?: error("This message could not be pinned. Check your permissions.")
-        Unit
-    }
+    suspend fun pin(endpoint: Endpoint, token: String, messageId: String, pinned: Boolean): Result<Unit> =
+        rest.rpcUnit(endpoint, token, if (pinned) "pin_message" else "unpin_message",
+            buildJsonObject { put("p_message_id", messageId) }.toString())
 
     suspend fun pinned(endpoint: Endpoint, token: String, channelId: String): Result<List<Message>> = rest.select(
         endpoint, token, "messages", filters = listOf("channel_id" to "eq.$channelId", "is_pinned" to "eq.true"),

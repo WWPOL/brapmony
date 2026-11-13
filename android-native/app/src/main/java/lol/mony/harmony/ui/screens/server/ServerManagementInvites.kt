@@ -15,6 +15,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -40,6 +41,7 @@ internal fun ServerManagementInvitesPage(state: AppState, repository: ServerMana
         }
         return
     }
+    val authState by state.auth.state.collectAsState()
     val actions = rememberServerManagementActions()
     val policy = overview.invitePolicy
     var expiry by remember(overview.server.id, policy) { mutableStateOf((if (policy.maxExpiration > 0) policy.defaultExpiration.coerceIn(1, policy.maxExpiration) else 0).toString()) }
@@ -82,7 +84,7 @@ internal fun ServerManagementInvitesPage(state: AppState, repository: ServerMana
                 HorizontalDivider()
             }
         }) { invite ->
-        val base = (state.auth.state.value as? AuthState.SignedIn)?.endpoint?.baseUrl?.trimEnd('/')
+        val base = (authState as? AuthState.SignedIn)?.endpoint?.origin?.trimEnd('/')
         val link = base?.let { "$it/invite/${invite.code}" }
         val active = invite.active()
         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {

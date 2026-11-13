@@ -119,7 +119,7 @@ class ProfileRepository(private val rest: RestApi) {
     }
 
     suspend fun createSelf(endpoint: Endpoint, token: String, username: String, displayName: String): Profile {
-        require(username.matches(Regex("[A-Za-z0-9_]{2,32}"))) { "Use 2–32 letters, numbers or underscores." }
+        require(username.matches(Regex("[a-z0-9_]{3,24}"))) { "Use 3–24 lowercase letters, numbers or underscores." }
         val id = authUserIdOf(token).takeIf { it.isNotBlank() } ?: error("Sign in again.")
         val domain = instanceDomain(endpoint, token) ?: error("Could not read the instance domain.")
         val row = kotlinx.serialization.json.buildJsonObject {

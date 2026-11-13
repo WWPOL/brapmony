@@ -26,6 +26,15 @@ Harmony is a federated social app: Discord-style servers and chat with ActivityP
 - Federation: Node service in `federation-backend/` ([README](federation-backend/README.md)) - HTTP **server** and queue **worker** split in production Docker; **Redis** for BullMQ and related features
 - Desktop: Tauri (`src-tauri/`)
 
+## Native Android client (work in progress)
+
+An experimental Kotlin/Jetpack Compose client lives in [`android-native/`](android-native/).
+It uses the official Android Gradle setup and connects to the same Harmony backend.
+It is **not yet a feature-parity replacement** for the existing Tauri Android app:
+encryption/recovery, voice/video, push and several media and administration flows are missing.
+See the [design](docs/build/native-android.md), [parity inventory](docs/build/native-android-parity.md)
+and [build/demo instructions](android-native/README.md) before trying it with a disposable account.
+
 ## Self-hosting
 
 On a blank Linux server with a domain pointing at it:

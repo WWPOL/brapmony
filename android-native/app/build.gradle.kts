@@ -11,13 +11,18 @@ android {
     defaultConfig {
         applicationId = "io.github.wwpol.brapmony"
         minSdk = 26
-        targetSdk = 36
+        targetSdk = 37
         versionCode = 1
         versionName = "1.9.6"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         fun literal(value: String) = "\"" + value.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
         buildConfigField("String", "DEFAULT_INSTANCE_URL", literal(providers.gradleProperty("harmonyInstanceUrl").getOrElse("")))
         buildConfigField("String", "DEFAULT_INSTANCE_ANON_KEY", literal(providers.gradleProperty("harmonyAnonKey").getOrElse("")))
+    }
+
+    // Keep the debug identity stable across confined build runtimes; never use this for release.
+    signingConfigs.getByName("debug") {
+        storeFile = rootProject.file(".gradle/debug.keystore")
     }
 
     buildTypes {
@@ -51,6 +56,23 @@ android {
     packaging {
         resources.excludes += setOf("/META-INF/{AL2.0,LGPL2.1}", "META-INF/LICENSE.md", "META-INF/LICENSE-notice.md")
     }
+}
+
+// AGP creates only its default user-home debug store automatically. A confined build's
+// user-home can be ephemeral, so create the conventional debug key in ignored project state.
+val debugStore = rootProject.layout.projectDirectory.file(".gradle/debug.keystore")
+val createLocalDebugKeystore = tasks.register<Exec>("createLocalDebugKeystore") {
+    val destination = debugStore.asFile
+    val suffix = if (System.getProperty("os.name").startsWith("Windows")) ".exe" else ""
+    commandLine("${System.getProperty("java.home")}/bin/keytool$suffix", "-genkeypair", "-noprompt",
+        "-keystore", destination.absolutePath, "-storepass", "android", "-keypass", "android",
+        "-alias", "androiddebugkey", "-dname", "CN=Android Debug,O=Android,C=US",
+        "-keyalg", "RSA", "-keysize", "2048", "-validity", "10000")
+    outputs.file(destination)
+    onlyIf { !destination.exists() }
+}
+tasks.matching { it.name.startsWith("validateSigningDebug") }.configureEach {
+    dependsOn(createLocalDebugKeystore)
 }
 
 dependencies {

@@ -25,7 +25,8 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalWindowInfo
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import lol.mony.harmony.ui.components.ServerRail
 import lol.mony.harmony.ui.theme.HarmonyColors
@@ -53,7 +54,8 @@ fun Shell(
     onDestination: (TopDestination) -> Unit,
     content: @Composable () -> Unit,
 ) {
-    val widthDp = LocalConfiguration.current.screenWidthDp
+    val windowSize = LocalWindowInfo.current.containerSize
+    val widthDp = with(LocalDensity.current) { windowSize.width.toDp().value }
     val wide = widthDp >= 840
     val harmony: HarmonyColors = LocalHarmonyColors.current
     val unread by state.unread.collectAsState()
@@ -61,7 +63,6 @@ fun Shell(
 
     if (wide) {
         Row(Modifier.fillMaxSize()) {
-            ServerRail(state = state)
             NavigationRail(
                 containerColor = harmony.surfaceSidebar,
                 modifier = Modifier.fillMaxHeight().width(88.dp),

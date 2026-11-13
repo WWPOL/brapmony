@@ -218,8 +218,10 @@ fun RoomScreen(state: AppState, roomId: String, direct: Boolean, appearance: Vis
                     state.chats.pin(session.endpoint, token, message.id, !message.isPinned).getOrThrow(); load()
                 } }, Modifier.fillMaxWidth()) { Text(if (message.isPinned) "Unpin message" else "Pin message") }
             }
-            if (message.userId == myId && !message.encrypted) {
-                TextButton(onClick = { edit = message; editText = message.plainText; selected = null }, Modifier.fillMaxWidth()) { Text("Edit message") }
+            if (message.userId == myId) {
+                if (!message.encrypted && message.content.all { it.type == "text" }) {
+                    TextButton(onClick = { edit = message; editText = message.plainText; selected = null }, Modifier.fillMaxWidth()) { Text("Edit message") }
+                }
                 TextButton(onClick = { delete = message; selected = null }, Modifier.fillMaxWidth()) { Text("Delete message", color = MaterialTheme.colorScheme.error) }
             }
             Spacer(Modifier.height(24.dp))

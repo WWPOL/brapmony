@@ -27,7 +27,7 @@ class AuthApi(private val client: OkHttpClient, private val json: Json = Harmony
             put("data", buildJsonObject { put("username", username) })
         })
     suspend fun signOut(endpoint: Endpoint, accessToken: String): Result<Unit> = request(
-        endpoint, "/logout", JsonObject(emptyMap()), accessToken) { Unit }
+        endpoint, "/logout?scope=local", JsonObject(emptyMap()), accessToken) { Unit }
     suspend fun recover(endpoint: Endpoint, email: String): Result<Unit> = request(
         endpoint, "/recover", buildJsonObject { put("email", email.trim()) }) { Unit }
     suspend fun user(endpoint: Endpoint, accessToken: String): Result<AuthUser> = request(

@@ -24,9 +24,10 @@ The separate `android-native/` Gradle project uses AGP 9.5.1, Gradle wrapper 9.9
 built-in Kotlin (AGP 9), Kotlin Compose/serialization compiler plugins 2.4.21 and
 Compose BOM 2026.09.00. These were resolved from the official Google/Maven repositories.
 There is no `org.jetbrains.kotlin.android` plugin: AGP 9 supplies Kotlin itself.
-The initial project uses compile SDK 37, target SDK 36 and minimum SDK 26; current
-AndroidX libraries require compilation against SDK 37. Targeting a later SDK needs
-behaviour-change verification rather than merely changing a number.
+The project compiles and targets SDK 37, with minimum SDK 26; current AndroidX
+libraries require compilation against SDK 37. The current software-emulator validation
+uses API 30, so SDK 37 behaviour changes remain explicitly unverified. Minimum SDK 24
+support from the existing client is also not yet preserved.
 
 JDK 21 runs the build. Local SDK paths and generated outputs are ignored by Git.
 Release signing credentials must never be committed. The debug APK is a different
