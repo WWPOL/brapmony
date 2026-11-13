@@ -97,13 +97,14 @@ private fun SocialFeature(state: AppState, initial: SocialRoute, onClose: (() ->
     var creatingList by remember { mutableStateOf(false) }
     val snackbar = remember { SnackbarHostState() }
 
-    fun mutate(post: SocialPost, operation: suspend (SocialAccess) -> SocialPost) {
+    fun mutate(post: SocialPost, reload: Boolean = false, operation: suspend (SocialAccess) -> SocialPost) {
         if (busy[post.id] == true) return
         busy[post.id] = true
         scope.launch {
             try {
                 val updated = operation(state.socialAccess())
                 updates[updated.id] = updated
+                if (reload) revision++
             } catch (e: CancellationException) { throw e }
             catch (e: Exception) { actionError = e.message ?: "The instance could not complete the change. Refresh before trying again." }
             finally { busy.remove(post.id) }
@@ -116,8 +117,8 @@ private fun SocialFeature(state: AppState, initial: SocialRoute, onClose: (() ->
             onOpen = { navigate(SocialRoute.Post(it)) }, onProfile = { navigate(SocialRoute.Profile(it)) }, onHashtag = { navigate(SocialRoute.Tag(it)) },
             onReply = { draft = SocialDraft(reply = it) }, onEdit = { draft = SocialDraft(edit = it) }, onDelete = { deleting = it },
             onFavorite = { post -> mutate(post) { a -> repo.setInteraction(a.endpoint, a.token, a.profileId, post.id, "favorite", !post.isFavorited) } },
-            onBookmark = { post -> mutate(post) { a -> repo.setInteraction(a.endpoint, a.token, a.profileId, post.id, "bookmark", !post.isBookmarked) } },
-            onBoost = { post -> mutate(post) { a -> repo.setBoost(a.endpoint, a.token, a.profileId, post.id, !post.isReblogged) } })
+            onBookmark = { post -> mutate(post, reload = route == SocialRoute.Feed && timeline == SocialTimeline.Bookmarks) { a -> repo.setInteraction(a.endpoint, a.token, a.profileId, post.id, "bookmark", !post.isBookmarked) } },
+            onBoost = { post -> mutate(post, reload = true) { a -> repo.setBoost(a.endpoint, a.token, a.profileId, post.id, !post.isReblogged) } })
     }
     Scaffold(
         topBar = {
