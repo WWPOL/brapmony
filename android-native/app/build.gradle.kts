@@ -105,6 +105,9 @@ dependencies {
     testImplementation(libs.mockk)
     testImplementation(libs.robolectric)
     testImplementation(libs.okhttp.mockwebserver)
+    // The headless Compose render harness draws real composables through Robolectric's native
+    // graphics so a screen's pixels can be captured without an emulator.
+    testImplementation(libs.androidx.compose.ui.test.junit4)
 
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)

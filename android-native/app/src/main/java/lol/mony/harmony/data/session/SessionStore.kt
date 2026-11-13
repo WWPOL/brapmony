@@ -30,8 +30,46 @@ data class StoredSession(
     val email: String?,
 )
 
+/**
+ * How stored session tokens are sealed at rest.
+ *
+ * Production always uses [AndroidKeystoreSealer]: a per-install AES-GCM key in the Android
+ * Keystore, excluded from backup. The interface exists so that JVM tests and the headless
+ * Compose render harness can run the real repositories; nothing in the app selects another
+ * implementation.
+ */
+interface SessionSealer {
+    fun seal(plaintext: String): String
+    fun unseal(sealed: String): String
+}
+
+class AndroidKeystoreSealer : SessionSealer {
+    private fun key(): SecretKey {
+        val store = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
+        (store.getKey(KEY_ALIAS, null) as? SecretKey)?.let { return it }
+        return KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, "AndroidKeyStore").apply {
+            init(KeyGenParameterSpec.Builder(KEY_ALIAS, KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT)
+                .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
+                .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE).build())
+        }.generateKey()
+    }
+    override fun seal(plaintext: String): String {
+        val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+        cipher.init(Cipher.ENCRYPT_MODE, key())
+        return java.util.Base64.getEncoder().encodeToString(cipher.iv + cipher.doFinal(plaintext.toByteArray(Charsets.UTF_8)))
+    }
+    override fun unseal(sealed: String): String {
+        val bytes = java.util.Base64.getDecoder().decode(sealed)
+        require(bytes.size >= 28)
+        val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+        cipher.init(Cipher.DECRYPT_MODE, key(), GCMParameterSpec(128, bytes.copyOfRange(0, 12)))
+        return cipher.doFinal(bytes.copyOfRange(12, bytes.size)).toString(Charsets.UTF_8)
+    }
+    companion object { private const val KEY_ALIAS = "brapmony.session.v1" }
+}
+
 /** Tokens are sealed with an install-specific Android Keystore key, excluded from backup. */
-class SessionStore(private val context: Context) {
+class SessionStore(private val context: Context, private val sealer: SessionSealer = AndroidKeystoreSealer()) {
     private object Keys {
         val URL = stringPreferencesKey("instance.url")
         val ANON = stringPreferencesKey("instance.anon")
@@ -46,7 +84,7 @@ class SessionStore(private val context: Context) {
     val sessionFlow: Flow<StoredSession?> = context.sessionData.data.map { preferences ->
         preferences[Keys.SEALED]?.let { sealed ->
             // A restored/invalidated key cannot decrypt a session: require sign-in, not plaintext fallback.
-            runCatching { HarmonyJson.decodeFromString(StoredSession.serializer(), unseal(sealed)) }.getOrNull()
+            runCatching { HarmonyJson.decodeFromString(StoredSession.serializer(), sealer.unseal(sealed)) }.getOrNull()
         }
     }
     suspend fun endpoint(): Endpoint? = endpointFlow.first()
@@ -62,7 +100,7 @@ class SessionStore(private val context: Context) {
         }
     }
     suspend fun saveSession(session: StoredSession) {
-        val sealed = seal(HarmonyJson.encodeToString(StoredSession.serializer(), session))
+        val sealed = sealer.seal(HarmonyJson.encodeToString(StoredSession.serializer(), session))
         context.sessionData.edit {
             it[Keys.URL] = session.endpoint.baseUrl.trimEnd('/')
             it[Keys.ANON] = session.endpoint.anonKey
@@ -100,27 +138,4 @@ class SessionStore(private val context: Context) {
         val key = accountKey("draft.$room")
         context.sessionData.edit { if (text.isEmpty()) it.remove(key) else it[key] = text }
     }
-
-    private fun key(): SecretKey {
-        val store = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
-        (store.getKey(KEY_ALIAS, null) as? SecretKey)?.let { return it }
-        return KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, "AndroidKeyStore").apply {
-            init(KeyGenParameterSpec.Builder(KEY_ALIAS, KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT)
-                .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
-                .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE).build())
-        }.generateKey()
-    }
-    private fun seal(text: String): String {
-        val cipher = Cipher.getInstance("AES/GCM/NoPadding")
-        cipher.init(Cipher.ENCRYPT_MODE, key())
-        return java.util.Base64.getEncoder().encodeToString(cipher.iv + cipher.doFinal(text.toByteArray(Charsets.UTF_8)))
-    }
-    private fun unseal(text: String): String {
-        val bytes = java.util.Base64.getDecoder().decode(text)
-        require(bytes.size >= 28)
-        val cipher = Cipher.getInstance("AES/GCM/NoPadding")
-        cipher.init(Cipher.DECRYPT_MODE, key(), GCMParameterSpec(128, bytes.copyOfRange(0, 12)))
-        return cipher.doFinal(bytes.copyOfRange(12, bytes.size)).toString(Charsets.UTF_8)
-    }
-    companion object { private const val KEY_ALIAS = "brapmony.session.v1" }
 }

@@ -17,8 +17,8 @@ import lol.mony.harmony.data.session.SessionStore
  * A single container rather than a DI framework: the graph is small and explicit, and the tests
  * build the same one with a MockWebServer endpoint by hand.
  */
-class AppContainer(context: Context) {
-    val sessionStore: SessionStore = SessionStore(context.applicationContext)
+class AppContainer(context: Context, store: SessionStore = SessionStore(context.applicationContext)) {
+    val sessionStore: SessionStore = store
     val rest: RestApi = RestApi(Http.client)
     val authApi: AuthApi = AuthApi(Http.client)
 

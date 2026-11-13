@@ -2,6 +2,7 @@ package lol.mony.harmony.ui.screens.you
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -26,8 +27,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.CancellationException
 import lol.mony.harmony.data.model.AccountProfile
@@ -76,18 +79,21 @@ fun YouScreen(
 
     Column(Modifier.fillMaxSize().statusBarsPadding()) {
         Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
                 Avatar(
                     name = profile?.displayName ?: profile?.username ?: signedIn?.profile?.shownName ?: "You",
                     url = profile?.avatarUrl?.let { url -> if (url.startsWith('/')) signedIn?.endpoint?.baseUrl + url else url },
                     size = 48.dp,
                 )
                 Column(Modifier.weight(1f)) {
-                    Text(profile?.displayName ?: signedIn?.profile?.shownName ?: "You", style = MaterialTheme.typography.titleLarge)
-                    Text("@${profile?.username ?: signedIn?.profile?.username.orEmpty()}", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(profile?.displayName ?: signedIn?.profile?.shownName ?: "You",
+                        style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    Text("@${profile?.username ?: signedIn?.profile?.username.orEmpty()}",
+                        style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-                TextButton(onClick = { drive = true }) { Text("Drive") }
-                TextButton(onClick = { confirmSignOut = true }) { Text("Sign out") }
+                TextButton(onClick = { drive = true }, contentPadding = PaddingValues(horizontal = 8.dp)) { Text("Drive") }
+                TextButton(onClick = { confirmSignOut = true }, contentPadding = PaddingValues(horizontal = 8.dp)) { Text("Sign out") }
             }
             // LICENSE-ADDITIONAL-TERMS §1: visible, canonical attribution within one tap of the shell.
             TextButton(onClick = { uriHandler.openUri("https://github.com/y4my4my4m/harmony") }) {
