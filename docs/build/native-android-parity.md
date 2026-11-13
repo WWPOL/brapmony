@@ -438,51 +438,70 @@ This section intentionally does not promote the frozen-reference statuses above.
   Android build/emulator checks; those results must be recorded separately.
   No frozen-reference row changes from `U/U` on the strength of JVM/HTTP tests.
 
-## Native render and interaction evidence (this session)
+## Native evidence (this session)
 
-This section records what was actually observed, and is deliberately narrower
-than a parity claim. Two kinds of evidence were produced against the live local
-stack on `http://localhost:54480` (fixture server `E2E Server`, accounts
-`fx_alice` and `fx_bob`):
+Two kinds of evidence were produced against the live local stack on
+`http://localhost:54480` (fixture server `E2E Server`, accounts `fx_alice` and
+`fx_bob`).
 
-1. **Headless render captures** (`ScreenRenderHarnessTest`): the app's own
-   composables drawn by Robolectric's native graphics on the JVM, signed in to
-   the real instance, each PNG written after the screen's own repositories
-   answered. Thirty-two captures cover the instance picker, Chats (dark, light,
-   midnight, custom), Social, Alerts, You, the appearance panel, Drive, and all
-   six server-management tabs.
-2. **Interaction journeys** (`NativeJourneyTest`): the bottom bar reaches every
-   destination; the rail opens a server channel; a direct message and a channel
-   message are typed, sent, and then read back **from the instance** over
-   PostgREST, so a pass means the round trip happened; a refused sign-in stays on
-   the form with the instance's sentence; choosing a theme repaints the
-   appearance preview, measured by pixel difference rather than by a screenshot
-   looking right.
+### On the emulator: the APK, driven by taps
 
-Both run with `--tests 'lol.mony.harmony.ScreenRenderHarnessTest' --tests
-'lol.mony.harmony.NativeJourneyTest'`, and 16 tests pass.
+The debug APK was installed on an AOSP API 30 x86_64 emulator and driven with
+real `adb shell input tap` at the centre of each node's own reported bounds --
+not by calling into a composable. Every step's accessibility tree is kept in
+`docs/build/evidence/android-native-emulator/`, with a README naming the tap
+that produced each one.
 
-**What this does not establish.** These are not emulator runs. The host has no
-`/dev/kvm`, so the AOSP API 30 image runs under QEMU TCG; it reaches
-`sys.boot_completed=1` after roughly two to six minutes, then loses its framework
-(binder transactions fail with 29189/-22 and zygote is killed) and its screencaps
-come back all black. Harness jobs owning the emulator are torn down mid-run. So
-the following remain **unverified**, and keep their `U/U` rows:
+Verified on the device this way: signing in as `fx_alice`; the Chats
+destination with the server rail, DM list and bottom bar; opening the `Bob E2E`
+direct message; typing into the composer and sending, after which the message
+appears as its own `message-<uuid>` node and the composer empties; the same
+message read back over PostgREST, so the composable's row and the instance's row
+are the same row; the server tile opening the channel column; `#general`
+opening with its messages; the message-actions sheet offering reactions, reply,
+copy, thread, pin and edit; server management with its Overview/Channels/Members
+tabs; the Members list with both accounts and their per-member actions; Social;
+Alerts with real notification rows; You; the appearance panel with its four
+themes and live preview; and Drive with its quota, filters and empty state.
 
-- Touch, gesture and software-keyboard behaviour; IME insets; system back;
-  process death and restore; rotation and window-size classes above the one
+**No screenshots exist.** Every capture path returns a uniform black 480x960
+image (0 of 460800 pixels non-black): `screencap` over `exec-out`, `screencap`
+to a file then `adb pull`, the emulator console's own screenshot, and
+`screenrecord` (which refuses to start). SurfaceFlinger lists the app's layers
+and `dumpsys window` names the activity as focused, so the app is drawing; the
+guest's GL output never reaches the host without KVM. A black PNG is not a
+screen, so none is recorded as one. Visual verification is therefore **not**
+established for any row.
+
+### On the JVM: the composables, drawn
+
+`ScreenRenderHarnessTest` draws the app's own composables through Robolectric's
+native graphics, signed in to the same instance, and writes 32 PNGs after each
+screen's repositories answered: the instance picker, Chats in dark, light,
+midnight and a custom account look, Social, Alerts, You, the appearance panel,
+Drive, and all six server-management tabs. `NativeJourneyTest` drives the
+semantics tree for the bottom bar, the rail, a DM and a channel message (both
+read back from the instance), a refused sign-in, the register and reset forms,
+and an appearance change measured by pixel difference. 192 tests pass.
+
+These are supporting evidence. They show what the composables draw and which
+nodes they expose, given real rows; they cannot show touch, IME, lifecycle,
+device appearance or performance, and they are not emulator runs.
+
+### Still unverified, and keeping its `U/U`
+
+- **Visual verification of every screen.** No screenshot from a device exists.
+  The JVM renders are the only pictures, and they are not the device.
+- Touch feel, gestures, the software keyboard and its insets, system back,
+  process death and restore, rotation, and window sizes other than the one
   captured width.
 - Device appearance: the system light/dark setting, dynamic colour, and the
-  status and navigation bar icon polarity `HarmonyRoot` sets through the window
-  insets controller.
+  status and navigation bar icon polarity the app sets through the window insets
+  controller.
 - Push (B05), voice and video (B06), Harmony's own Megolm encryption (B03/B04),
   the attachment upload pipeline (B07), and every deep link (B09). These are not
-  implemented natively; a render harness cannot make them so.
-- Any performance, battery or memory claim.
-
-A JVM render or a passing interaction test is therefore **supporting** evidence.
-It is not a substitute for driving the APK on a device, and no row above moves
-off `U/U` on its strength alone.
+  implemented natively; no harness can make them so.
+- Performance, battery and memory.
 
 ## Completion rule
 
