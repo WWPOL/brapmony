@@ -85,6 +85,20 @@ data class AccountPrivacy(val requireFollowApproval: Boolean, val dmPolicy: Acco
 
 /** Only these controls are rewritten; web skins, future keys and unedited fields stay intact. */
 object AccountAppearance {
+    /** Keep partially typed or non-finite OKLCH values out of Compose's color constructor. */
+    fun validColor(value: String?): Boolean {
+        if (value.isNullOrBlank()) return true
+        val color = lol.mony.harmony.ui.theme.Oklch.parse(value) ?: return false
+        return color.l.isFinite() && color.c.isFinite() && color.h.isFinite() && color.l in 0.0..1.0 && color.c >= 0.0
+    }
+
+    fun preview(settings: VisualThemeSettings): VisualThemeSettings = settings.copy(
+        customPrimaryColor = settings.customPrimaryColor?.takeIf(::validColor),
+        customAccentColor = settings.customAccentColor?.takeIf(::validColor),
+        customBackgroundColor = settings.customBackgroundColor?.takeIf(::validColor),
+        customSidebarColor = settings.customSidebarColor?.takeIf(::validColor),
+    )
+
     val editableKeys = setOf(
         "theme", "customThemeMode", "customPrimaryColor", "customAccentColor",
         "customBackgroundColor", "customSidebarColor", "customBackgroundLightness",

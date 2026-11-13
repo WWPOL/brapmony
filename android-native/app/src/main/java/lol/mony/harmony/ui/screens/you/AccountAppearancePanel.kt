@@ -37,7 +37,6 @@ import lol.mony.harmony.ui.AppState
 import lol.mony.harmony.ui.theme.HarmonyTheme
 import lol.mony.harmony.ui.theme.LocalHarmonyColors
 import lol.mony.harmony.ui.theme.LocalSizes
-import lol.mony.harmony.ui.theme.Oklch
 import lol.mony.harmony.ui.theme.VisualThemeSettings
 import kotlin.math.roundToInt
 
@@ -66,7 +65,7 @@ internal fun AccountAppearancePanel(
                 FilterChip(edited.theme == id, onClick = { edited = edited.copy(theme = id) }, enabled = !busy, label = { Text(label) })
             }
         }
-        HarmonyTheme(edited) {
+        HarmonyTheme(AccountAppearance.preview(edited)) {
             Surface(
                 color = LocalHarmonyColors.current.surfaceChat,
                 border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
@@ -120,6 +119,7 @@ internal fun AccountAppearancePanel(
                 busy = true; error = null; notice = null
                 try {
                     val accountLook = accountRequest(state) { endpoint, token -> repository.appearance(endpoint, token, profile.id).getOrThrow() }
+                    state.sessionStore.saveAppearance(profile.id, kotlinx.serialization.json.JsonObject(VisualThemeSettings.toJsonMap(accountLook)))
                     state.setAppearanceDeviceOnly(false)
                     baseline = accountLook; edited = accountLook; deviceOnly = false; savedDeviceOnly = false
                     onAppearanceChange(accountLook, false)
@@ -133,7 +133,7 @@ internal fun AccountAppearancePanel(
         AccountStatus(error, notice)
         AccountSaveActions(busy, scopeLoaded && (edited != appearance || deviceOnly != savedDeviceOnly), onSave = {
             val invalidColor = if (edited.theme == "custom") listOf(edited.customPrimaryColor, edited.customAccentColor, edited.customBackgroundColor, edited.customSidebarColor)
-                .firstOrNull { !it.isNullOrBlank() && Oklch.parse(it) == null } else null
+                .firstOrNull { !AccountAppearance.validColor(it) } else null
             error = if (invalidColor != null) "A custom color is invalid. Use a hex color such as #0EA5E9 or an OKLCH value." else null
             if (error == null) scope.launch {
                 busy = true; notice = null
@@ -141,6 +141,7 @@ internal fun AccountAppearancePanel(
                     val saved = if (deviceOnly) edited else accountRequest(state) { endpoint, token ->
                         repository.saveAppearance(endpoint, token, profile.id, baseline, edited).getOrThrow()
                     }
+                    state.sessionStore.saveAppearance(profile.id, kotlinx.serialization.json.JsonObject(VisualThemeSettings.toJsonMap(saved)))
                     state.setAppearanceDeviceOnly(deviceOnly)
                     savedDeviceOnly = deviceOnly
                     if (!deviceOnly) baseline = saved
@@ -163,7 +164,7 @@ private fun AppearanceColorField(label: String, value: String?, busy: Boolean, o
     OutlinedTextField(
         value.orEmpty(), { onChange(it.takeIf(String::isNotBlank)) }, label = { Text(label) },
         placeholder = { Text("Default") }, singleLine = true, enabled = !busy,
-        isError = !value.isNullOrBlank() && Oklch.parse(value) == null, modifier = Modifier.fillMaxWidth(),
+        isError = !AccountAppearance.validColor(value), modifier = Modifier.fillMaxWidth(),
     )
 }
 

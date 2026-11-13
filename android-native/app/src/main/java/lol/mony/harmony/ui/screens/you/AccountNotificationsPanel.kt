@@ -49,7 +49,7 @@ internal fun AccountNotificationsPanel(state: AppState, repository: AccountRepos
         catch (failure: Exception) { error = failure.message ?: "Notification preferences could not be loaded." }
         finally { loading = false }
     }
-    AccountStatus(error, notice)
+    if (original == null) AccountStatus(error, null)
     if (loading) CircularProgressIndicator()
     if (original == null) {
         if (!loading) TextButton(onClick = { reload++ }) { Text("Retry notification preferences") }
@@ -85,8 +85,10 @@ internal fun AccountNotificationsPanel(state: AppState, repository: AccountRepos
         }
     }
     val before = original ?: return
-    val timeChanged = quietStart != runCatching { AccountQuietHours.local(before.quietStart, zone) }.getOrNull() ||
-        quietEnd != runCatching { AccountQuietHours.local(before.quietEnd, zone) }.getOrNull()
+    val startChanged = quietStart != runCatching { AccountQuietHours.local(before.quietStart, zone) }.getOrNull()
+    val endChanged = quietEnd != runCatching { AccountQuietHours.local(before.quietEnd, zone) }.getOrNull()
+    val timeChanged = startChanged || endChanged
+    AccountStatus(error, notice)
     AccountSaveActions(busy, edited != before || timeChanged, onSave = {
         error = null; notice = null
         val withTime = runCatching {
@@ -94,8 +96,8 @@ internal fun AccountNotificationsPanel(state: AppState, repository: AccountRepos
                 "Enter quiet hours as HH:mm, using a 24-hour clock."
             }
             edited.copy(
-                quietStart = if (timeChanged) AccountQuietHours.utc(quietStart, zone) else before.quietStart,
-                quietEnd = if (timeChanged) AccountQuietHours.utc(quietEnd, zone) else before.quietEnd,
+                quietStart = if (startChanged) AccountQuietHours.utc(quietStart, zone) else before.quietStart,
+                quietEnd = if (endChanged) AccountQuietHours.utc(quietEnd, zone) else before.quietEnd,
             )
         }.getOrElse { error = it.message; null }
         if (withTime != null) scope.launch {

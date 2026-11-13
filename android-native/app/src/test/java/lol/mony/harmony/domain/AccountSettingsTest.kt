@@ -56,6 +56,16 @@ class AccountSettingsTest {
         assertEquals(original.unknown, reset.unknown)
     }
 
+    @Test fun customColorPreviewRejectsNonFiniteAndPartiallyTypedValues() {
+        assertTrue(AccountAppearance.validColor("#0EA5E9"))
+        assertTrue(AccountAppearance.validColor("oklch(60% 0.1 230)"))
+        assertFalse(AccountAppearance.validColor("oklch(NaN 0.1 230)"))
+        assertFalse(AccountAppearance.validColor("oklch(0.5 Infinity 230)"))
+        assertFalse(AccountAppearance.validColor("#12345"))
+        val preview = AccountAppearance.preview(VisualThemeSettings(theme = "custom", customBackgroundColor = "oklch(NaN 0 0)"))
+        assertNull(preview.customBackgroundColor)
+    }
+
     @Test fun unchangedAppearanceDoesNotInventDefaults() {
         val raw = json("""{"future":{"nested":true}}""")
         val original = VisualThemeSettings.fromJson(raw)
