@@ -1,0 +1,79 @@
+Harmony - federated social application
+======================================
+
+Copyright (C) 2024–present  y4my4my4m  <https://github.com/y4my4my4m>
+                            and the Harmony contributors
+
+This program is free software: you can redistribute it and/or modify it under
+the terms of the GNU Affero General Public License version 3 as published by
+the Free Software Foundation, with the additional terms described in
+LICENSE-ADDITIONAL-TERMS.md (Section 7 of the GNU AGPL v3).
+
+This program is distributed in the hope that it will be useful, but WITHOUT
+ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+FOR A PARTICULAR PURPOSE.  See the GNU Affero General Public License for more
+details.
+
+You should have received a copy of the GNU Affero General Public License along
+with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+--------------------------------------------------------------------------------
+
+The "Harmony" name and the polar-bear logo (🐻‍❄️ + iconography under
+`public/icon_3d.webp`, `public/favicon/`, `src-tauri/icons/`,
+`public/img/app_icon*.png`, `public/img/app_icon*.webp`,
+`public/default_avatar.webp`, and `public/default_server.webp`) are NOT
+licensed under the AGPL and are not granted to you by this license. See
+TRADEMARK.md for the project's name and logo policy.
+
+--------------------------------------------------------------------------------
+
+Third-party assets bundled with this project, with their own licenses:
+
+  - Twemoji (default emoji set)            CC-BY 4.0
+    public/assets/emojis/twemoji/
+    Copyright 2020 Twitter, Inc and other contributors
+    https://github.com/twitter/twemoji
+    License: https://creativecommons.org/licenses/by/4.0/
+    Modified: public/assets/emoji_sheet.webp is a derivative of these SVGs,
+    rasterised and tiled into a sprite sheet by public/assets/make_emojisheet.sh.
+
+  - Figtree                                SIL Open Font License 1.1
+    public/assets/fonts/Figtree-latin.woff2
+    public/assets/fonts/Figtree-latin-ext.woff2
+    Copyright notice and full license text: public/assets/fonts/Figtree-OFL.txt
+
+  - Bricolage Grotesque, Instrument Sans,  SIL Open Font License 1.1
+    Martian Mono
+    public/assets/fonts/paper/  (Paper skin; fetched only while it is active)
+    Copyright notices and full license text: public/assets/fonts/paper/OFL.txt
+
+  - Feather-style icon set                 MIT
+    public/assets/skins/sdr-001/icons/
+    Copyright (c) 2019 Gerrit Halfmann
+    Full license text: public/assets/skins/sdr-001/icons/LICENSE.txt
+
+  - KLIPY brand marks                      third-party trademark
+    public/assets/3rdparty/KLIPY_Light_text.png
+    public/assets/3rdparty/KLIPY_TEXT_LIGHT.svg
+    Not licensed under the AGPL. Bundled solely to satisfy the attribution
+    requirement of the KLIPY API terms. Remove them if the KLIPY integration
+    is disabled.
+
+NoRe Sans Pixel Pro (public/assets/fonts/nore-sans-pixel-pro-v2/) is an
+original typeface by y4my4m and is covered by this project's license.
+
+--------------------------------------------------------------------------------
+
+The bundled sound packs (public/assets/sounds/default/, futuristic/, harmony/,
+neokobe/) and the login, 404 and offline background images
+(public/backgrounds/) were commissioned for this project. No third party
+retains rights in them; they are distributed as part of this program under the
+same license as the rest of it.
+
+--------------------------------------------------------------------------------
+
+Contributors are listed in the git commit history.  Substantial contributions
+are gratefully acknowledged; by submitting a pull request you agree that your
+contribution is licensed under the same terms as this project (AGPL v3 with
+the additional terms in LICENSE-ADDITIONAL-TERMS.md).

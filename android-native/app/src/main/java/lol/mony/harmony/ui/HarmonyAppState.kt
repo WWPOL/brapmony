@@ -71,7 +71,10 @@ class AppState(
         if (profiles.isEmpty()) return
         _people.update { current ->
             val next = current.toMutableMap()
-            for (profile in profiles) next[profile.authUserId ?: profile.id] = profile
+            for (profile in profiles) {
+                next[profile.id] = profile
+                profile.authUserId?.let { next[it] = profile }
+            }
             next
         }
     }

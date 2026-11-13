@@ -98,7 +98,7 @@ data class VisualThemeSettings(
         fun toJsonMap(settings: VisualThemeSettings): Map<String, JsonElement> {
             val body = HarmonyJson.encodeToJsonElement(serializer(), settings.copy(unknown = emptyMap()))
                 as kotlinx.serialization.json.JsonObject
-            return body + settings.unknown
+            return body.filterKeys { it != "unknown" } + settings.unknown
         }
     }
 }
@@ -147,4 +147,5 @@ data class ThemePreset(
     val sidebar: Oklch,
     val accent: Oklch,
     val light: Boolean,
+    val chat: Oklch? = null,
 )

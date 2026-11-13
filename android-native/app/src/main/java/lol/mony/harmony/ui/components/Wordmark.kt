@@ -69,7 +69,7 @@ fun HarmonyWordmark(modifier: Modifier = Modifier) {
         HarmonyMark(size = 44.dp)
         Spacer(Modifier.width(12.dp))
         Text(
-            text = "Harmony",
+            text = "Brapmony",
             style = MaterialTheme.typography.headlineMedium,
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.onSurface,

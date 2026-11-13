@@ -62,7 +62,7 @@ internal fun AccountAppearancePanel(
     }
     AccountSection("Your look", "Preview changes here, then save to your account or just this device.") {
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            listOf("dark" to "Dark", "light" to "Light", "midnight" to "Midnight", "system" to "System", "custom" to "Custom").forEach { (id, label) ->
+            listOf("dark" to "Dark", "light" to "Light", "midnight" to "Midnight", "custom" to "Custom").forEach { (id, label) ->
                 FilterChip(edited.theme == id, onClick = { edited = edited.copy(theme = id) }, enabled = !busy, label = { Text(label) })
             }
         }
@@ -101,7 +101,7 @@ internal fun AccountAppearancePanel(
         Text("Font", style = MaterialTheme.typography.titleSmall)
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             FilterChip(edited.fontFamily == "system", { edited = edited.copy(fontFamily = "system") }, enabled = !busy, label = { Text("System") })
-            FilterChip(edited.fontFamily == "pixel", { edited = edited.copy(fontFamily = "pixel") }, enabled = !busy, label = { Text("Monospace") })
+            FilterChip(edited.fontFamily == "pixel", { edited = edited.copy(fontFamily = "pixel") }, enabled = !busy, label = { Text("Pixel") })
         }
         if (edited.fontFamily !in setOf("system", "pixel")) Text("Account font: ${edited.fontFamily}. This device uses the system font until you choose a native font.", style = MaterialTheme.typography.bodySmall)
         AccountToggle("Show timestamps", checked = edited.showTimestamps, enabled = !busy) { edited = edited.copy(showTimestamps = it) }

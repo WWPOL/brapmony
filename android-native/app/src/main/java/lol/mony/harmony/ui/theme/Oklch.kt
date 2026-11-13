@@ -47,7 +47,7 @@ data class Oklch(val l: Double, val c: Double, val h: Double) {
                 val lightness = if (parts[0].endsWith("%")) l / 100.0 else l
                 val chroma = parts[1].toDoubleOrNull() ?: return null
                 val hue = parts[2].removeSuffix("deg").toDoubleOrNull() ?: return null
-                return Oklch(lightness, chroma, hue)
+                return Oklch(lightness, chroma, hue).takeIf { lightness.isFinite() && chroma.isFinite() && hue.isFinite() && lightness in 0.0..1.0 && chroma in 0.0..0.4 }
             }
             return null
         }
@@ -140,7 +140,7 @@ fun Color.contrastAgainst(other: Color): Double {
 }
 
 /** True when white text reads better than black on this fill. */
-fun Color.prefersLightContent(): Boolean = relativeLuminance() < 0.45
+fun Color.prefersLightContent(): Boolean = contrastAgainst(Color.White) >= contrastAgainst(Color.Black)
 
 /** Blends toward [other] by [amount] (0 = this, 1 = other), in plain sRGB. */
 fun Color.mix(other: Color, amount: Double): Color {

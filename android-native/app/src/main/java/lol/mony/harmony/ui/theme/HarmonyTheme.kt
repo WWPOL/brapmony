@@ -14,8 +14,12 @@ import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.Font
+import lol.mony.harmony.R
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -80,7 +84,7 @@ data class SizePreferences(
     val compact: Boolean,
 ) {
     /** Message text: the person's own px, scaled by zoom, in sp. */
-    val messageSp: Double get() = messageFontSize * (zoomLevel / 100.0)
+    val messageSp: Double get() = messageFontSize.toDouble()
     /** Row spacing: Harmony's compact mode trims it the way the web client's rows do. */
     val rowVerticalPadding: androidx.compose.ui.unit.Dp get() = if (compact) 2.dp else 6.dp
 }
@@ -94,6 +98,8 @@ data class AccessibilityPreferences(
     val screenReaderSupport: Boolean,
 )
 
+private val LocalBaseDensity = staticCompositionLocalOf<Density?> { null }
+
 val LocalAccessibility = staticCompositionLocalOf { AccessibilityPreferences(false, false) }
 
 @Composable
@@ -105,7 +111,10 @@ fun HarmonyTheme(
     val resolved = remember(settings, systemInDarkTheme) { resolveAppearance(settings, systemInDarkTheme) }
     val colorScheme = remember(resolved) { buildColorScheme(resolved) }
     val harmony = remember(resolved) { buildHarmonyColors(resolved.preset, resolved.light) }
+    val baseDensity = LocalBaseDensity.current ?: LocalDensity.current
     CompositionLocalProvider(
+        LocalBaseDensity provides baseDensity,
+        LocalDensity provides Density(baseDensity.density * resolved.zoomLevel / 100f, baseDensity.fontScale),
         LocalHarmonyColors provides harmony,
         LocalMotion provides MotionPreferences(resolved.reduceMotion),
         LocalSizes provides SizePreferences(resolved.fontSize, resolved.zoomLevel, resolved.compact),
@@ -125,6 +134,7 @@ data class ResolvedAppearance(
     val preset: ThemePreset,
     val light: Boolean,
     val accent: Oklch,
+    val primary: Oklch,
     val background: Oklch,
     val sidebar: Oklch,
     val chart: Double,
@@ -151,15 +161,22 @@ fun resolveAppearance(settings: VisualThemeSettings, systemInDarkTheme: Boolean)
         "midnight" -> HarmonyPresets.midnight
         "custom" -> {
             val light = settings.customThemeMode == "light"
-            ThemePreset(
-                id = "custom",
-                label = "Custom",
-                background = settings.background ?: if (light) HarmonyPresets.light.background else HarmonyPresets.dark.background,
-                sidebar = settings.sidebar ?: settings.background
-                    ?: if (light) HarmonyPresets.light.sidebar else HarmonyPresets.dark.sidebar,
-                accent = settings.accent,
-                light = light,
-            )
+            val l = settings.customBackgroundLightness.coerceIn(-50, 50).toDouble()
+            val c = settings.customBackgroundChroma.coerceIn(-30, 30).toDouble()
+            val hue = settings.background?.h ?: settings.accent.h
+            val sidebarHue = settings.sidebar?.h ?: hue
+            val chroma = if (light) (0.02 + c * 0.004).coerceIn(0.0, 0.15)
+                else (0.015 + c * 0.003).coerceIn(0.0, 0.12)
+            // Background picker swatches contribute HUE, not their vivid raw brightness.
+            // These are deriveUiSurfacesFromTone's actual surface equations in colorUtils.ts.
+            val base = if (light) (98 + l * 0.6).coerceIn(60.0, 100.0) / 100
+                else (17 + l * 0.45).coerceIn(10.0, 32.0) / 100
+            val side = if (light) (96 + l * 0.6).coerceIn(55.0, 100.0) / 100
+                else (18.5 + l * 0.5).coerceIn(10.0, 34.0) / 100
+            val chat = if (light) base else (21 + l * 0.5).coerceIn(12.0, 36.0) / 100
+            ThemePreset("custom", "Custom", Oklch(base, chroma, hue),
+                Oklch(side, chroma * if (settings.sidebar != null) 1.5 else 1.0, sidebarHue),
+                settings.accent, light, Oklch(chat, chroma, hue))
         }
         // `dark`, or a value this app does not know: Harmony's dark is the default look.
         else -> if (settings.theme == "system" && !systemInDarkTheme) HarmonyPresets.light else HarmonyPresets.dark
@@ -168,10 +185,11 @@ fun resolveAppearance(settings: VisualThemeSettings, systemInDarkTheme: Boolean)
         preset = preset,
         light = preset.light,
         accent = if (settings.theme == "custom") settings.accent else preset.accent,
+        primary = if (settings.theme == "custom") settings.primary else preset.accent,
         background = preset.background,
         sidebar = preset.sidebar,
-        chart = (settings.customBackgroundChroma / 100.0).coerceIn(-0.3, 0.3),
-        lightnessShift = (settings.customBackgroundLightness / 100.0).coerceIn(-0.5, 0.5),
+        chart = 0.0,
+        lightnessShift = 0.0,
         fontSize = settings.fontSize.coerceIn(10, 32),
         zoomLevel = settings.zoomLevel.coerceIn(50, 200),
         compact = settings.compactMode,
@@ -197,16 +215,16 @@ fun buildColorScheme(appearance: ResolvedAppearance): ColorScheme {
 
     val step = if (light) 0.025 else 0.022
     val onBackground = if (light) Oklch(0.24, 0.012, accent.h) else Oklch(0.96, 0.004, accent.h)
-    val onSurfaceVariant = if (light) Oklch(0.46, 0.014, accent.h) else Oklch(0.72, 0.012, accent.h)
+    val onSurfaceVariant = if (light) Oklch(0.36, 0.008, accent.h) else Oklch(0.78, 0.008, accent.h)
     val outline = if (light) Oklch(0.78, 0.01, accent.h) else Oklch(0.38, 0.012, accent.h)
 
-    val primary = if (light) accent.shift(-0.12) else accent
+    val primary = if (light) appearance.primary.shift(-0.12) else appearance.primary
     val onPrimary = if (primary.toColor().prefersLightContent()) Color.White else Color(0xFF10161C)
     val primaryContainer = if (light) accent.shift(0.36).shiftChroma(-0.04) else accent.shift(-0.36).shiftChroma(-0.02)
     val onPrimaryContainer = if (light) accent.shift(-0.3) else accent.shift(0.32)
 
     val surface = background
-    val surfaceChat = background.shift(step)
+    val surfaceChat = appearance.preset.chat ?: background.shift(step)
     val surfaceRaised = background.shift(step * 2)
     val surfaceSidebar = sidebar.shift(-step / 2)
     val surfaceHigh = background.shift(step * 3)
@@ -303,7 +321,8 @@ fun buildColorScheme(appearance: ResolvedAppearance): ColorScheme {
             onBackground = lifted.toColor(),
             onSurfaceVariant = (if (light) Oklch(0.3, 0.012, accent.h) else Oklch(0.86, 0.008, accent.h)).toColor(),
             outline = (if (light) Oklch(0.55, 0.012, accent.h) else Oklch(0.62, 0.012, accent.h)).toColor(),
-            primary = (if (light) accent.shift(-0.18) else accent.shift(0.05)).toColor(),
+            primary = (if (light) appearance.primary.shift(-0.18) else appearance.primary.shift(0.05)).toColor(),
+            onPrimary = if ((if (light) appearance.primary.shift(-0.18) else appearance.primary.shift(0.05)).toColor().prefersLightContent()) Color.White else Color.Black,
         )
     }
 }
@@ -316,7 +335,7 @@ fun buildHarmonyColors(preset: ThemePreset, isLight: Boolean): HarmonyColors {
     val border = if (light) Oklch(0.86, 0.008, accent.h) else Oklch(0.3, 0.01, accent.h)
     val brand = accent.toColor()
     return HarmonyColors(
-        surfaceChat = background.shift(step).toColor(),
+        surfaceChat = (preset.chat ?: background.shift(step)).toColor(),
         surfaceSidebar = preset.sidebar.shift(-step / 2).toColor(),
         surfaceRaised = background.shift(step * 2).toColor(),
         border = border.toColor().withAlphaValue(if (light) 1.0 else 1.0),
@@ -341,7 +360,7 @@ private fun Oklch.shiftHue(delta: Double): Oklch = copy(h = ((h + delta) % 360.0
 /** Roboto (Android's own face) or the pixel face the web client offers, at the person's sizes. */
 fun harmonyTypography(fontFamily: String): Typography {
     val family = when (fontFamily) {
-        "pixel" -> FontFamily.Monospace
+        "pixel" -> FontFamily(Font(R.font.nore_regular), Font(R.font.nore_bold, FontWeight.Bold))
         else -> FontFamily.Default
     }
     fun style(size: Int, weight: FontWeight = FontWeight.Normal, lineHeight: Int = (size * 1.4).toInt()) =
