@@ -29,19 +29,32 @@ D() { "$ADB" -s "$SERIAL" "$@"; }
 # A fresh dump before every action: the screen changes under us, and acting on a
 # stale tree is how a journey silently tests the wrong screen.
 dump() { D exec-out uiautomator dump /dev/tty 2>/dev/null | sed -e 's/></>\n</g' > "$OUT/$1.xml"; }
+# A device screenshot, via the emulator's gRPC framebuffer read. On a host
+# without KVM this comes back black; px.py says so instead of leaving a
+# black PNG looking like evidence.
+shot() { python3 "$ROOT/e2e/android-native/grpcshot.py" 127.0.0.1 8554 "$OUT/$1.png" >/dev/null 2>&1; }
+# Every step records the tree and tries for a picture; on a host without KVM
+# the picture is black and px.py says so in the log.
+record() {
+  dump "$1"
+  shot "$1"
+  printf '  %s: ' "$1"
+  python3 "$ROOT/e2e/android-native/px.py" "$OUT/$1.png" 2>/dev/null | sed 's|.*/||'
+}
 texts() { python3 "$UIX" "$OUT/$1.xml" | awk -F'\t' '$2 != "-" {print $2}'; }
 has() { python3 "$UIX" "$OUT/$1.xml" "$2" >/dev/null 2>&1 && python3 "$UIX" "$OUT/$1.xml" "$2" | grep -q .; }
 
 # tap NAME STEP: dump, find NAME's own centre, tap it, then dump as STEP.
 tap() {
-  local name=$1 step=$2 before="$OUT/.current.xml" c
-  dump .current
-  c=$(python3 "$UIX" "$OUT/.current.xml" "$name" | head -1 | awk -F'\t' '{print $4}')
+  local name=$1 step=$2 c
+  # Look at the screen as it is now, then tap, then record what the tap produced.
+  D exec-out uiautomator dump /dev/tty 2>/dev/null | sed -e 's/></>\n</g' > "$OUT/current.xml"
+  c=$(python3 "$UIX" "$OUT/current.xml" "$name" | head -1 | awk -F'\t' '{print $4}')
+  rm -f "$OUT/current.xml"
   if [ -z "$c" ]; then echo "!! no node named '$name' on screen"; return 1; fi
   # shellcheck disable=SC2086
   set -- $c; D shell input tap "$1" "$2"; sleep 5
-  dump "$step"
-  rm -f "$before"
+  record "$step"
 }
 
 EMAIL=$(node -p "JSON.parse(require('fs').readFileSync('$ROOT/e2e/fixture.json')).users.alice.email")
@@ -53,7 +66,7 @@ sleep 2; rm -f "${ANDROID_AVD_HOME:-$HOME/.android/avd}"/aosp30.avd/*.lock 2>/de
 # One core keeps TCG from racing its own threads, which is what was killing zygote.
 "$ANDROID_HOME/emulator/emulator" -avd aosp30 -port "$PORT" -accel off -cores 1 -memory 3072 \
   -gpu swiftshader_indirect -no-window -no-audio -no-boot-anim -no-snapshot \
-  -camera-back none -camera-front none > "$OUT/emulator.log" 2>&1 &
+  -grpc 8554 -camera-back none -camera-front none > "$OUT/emulator.log" 2>&1 &
 for _ in $(seq 1 40); do
   sleep 15
   [ "$(D shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = 1 ] && break

@@ -47,13 +47,22 @@ row on screen and the row in the database are the same row), the server tile and
 its channel column, a channel room, the message-actions sheet, server management
 and its Members tab, Social, Alerts, You, the appearance panel and Drive.
 
-It does **not** cover what the screen looked like. Every capture path returns a
-uniform black 480x960 image (0 of 460800 pixels non-black): `screencap` over
-`exec-out`, `screencap` to a file then `adb pull`, the emulator console's own
-screenshot, and `screenrecord` (which refuses to start). SurfaceFlinger lists the
-app's layers and `dumpsys window` names the activity as focused, so the app is
-drawing; the guest's GL output never reaches the host without KVM. A black PNG
-is not evidence of a screen, so none is kept as one.
+It does **not** cover what the screen looked like. Every capture path was
+tried and all of them fail the same way:
+
+- `screencap` over `exec-out`, and `screencap` to a file then `adb pull`.
+- The emulator console's own screenshot, and `screenrecord` (which refuses to
+  start).
+- The emulator's gRPC `getScreenshot`, which reads the host-side framebuffer
+  instead of the guest's. `e2e/android-native/grpcshot.py` speaks enough HTTP/2
+  and protobuf to call it. It answers, but returns the same 9942-byte black
+  image every time; the only non-black frame it ever produced was the boot
+  animation, before the app took the display. That is the channel working and
+  the app's frames missing, not a tool that was never tried.
+
+SurfaceFlinger lists the app's layers and `dumpsys window` names the activity as
+focused, so the app is drawing; the guest's GL output never reaches the host
+without KVM. A black PNG is not evidence of a screen, so none is kept as one.
 
 ### On the JVM: the composables, drawn
 

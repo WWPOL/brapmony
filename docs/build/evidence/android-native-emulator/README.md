@@ -69,24 +69,33 @@ After the send, the conversation was read back over PostgREST as the same
 account:
 
 ```json
-[{"id":"3d4add38-d798-41c7-b760-6ced4143cf64",
-  "content":[{"text": "device journey 1794595699", "type": "text"}]},
- {"id":"56b1b792-...", ...}]
+[{"id":"c13aa1d2-b96e-425d-9c8e-ae5c6c56b513",
+  "content":[{"text": "device journey 1794601142", "type": "text"}]},
+ {"id":"5acc8c7e-...", ...}]
 ```
 
 The first row is the newest message in the conversation, and its id is the
-`message-3d4add38-...` node in `04-message-sent.xml`: the composable's row and
+`message-c13aa1d2-...` node in `04-message-sent.xml`: the composable's row and
 the instance's row are the same row.
 
 ## What is still missing, and why
 
-There are **no screenshots** in this directory. Every capture path returns a
-uniform black 480x960 image (0 of 460800 pixels non-black): `adb exec-out
-screencap -p`, `screencap` to a file then `adb pull`, the emulator console's
-`screenrecord screenshot`, and `screenrecord` video (which refuses to start).
+There are **no screenshots** in this directory, and every way of getting one
+was tried:
+
+- `adb exec-out screencap -p`, and `screencap` to a file then `adb pull`: a
+  uniform black 480x960 PNG, 0 of 460800 pixels non-black.
+- The emulator console's `screenrecord screenshot`: the same black image.
+- `screenrecord` video: refuses to start.
+- The emulator's gRPC `getScreenshot`, which reads the host-side framebuffer
+  rather than the guest's: it answers, but every frame is the same 9942-byte
+  black image. The one non-black frame it ever returned was the boot animation,
+  captured before the app took the display -- proof that the channel works and
+  that the app's own frames are what is missing.
+
 SurfaceFlinger lists the app's layers and `dumpsys window` names the activity as
-focused, so the app is drawing; the guest's GL output simply never reaches the
-host without KVM. A black PNG is not evidence of a screen, so none is included.
+focused, so the app is drawing; the guest's GL output never reaches the host
+without KVM. A black PNG is not evidence of a screen, so none is included.
 
 Visual verification therefore rests on the JVM render captures in
 `android-native/app/src/test/java/lol/mony/harmony/ScreenRenderHarnessTest.kt`,
