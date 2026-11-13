@@ -4,6 +4,7 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -136,6 +137,34 @@ class NativeJourneyTest {
         settle("Invalid login credentials")
         compose.onNodeWithTag("signin-error").assertIsDisplayed()
         compose.capture("journey-signin-error")
+    }
+
+    /** The auth form's other two modes are reachable and keep the person's typed email. */
+    @Test fun registrationAndResetAreReachableFromSignIn() {
+        val state = fresh()
+        compose.shot("journey-signin-modes", state, settle = "Welcome back") {
+            AuthFormScreen(
+                instanceName = "Local Harmony", instanceDomain = RenderHarness.instanceUrl,
+                onSignIn = { _, _ -> AuthApi.Result.Failed("not used") },
+                onRegister = { _, _, _ -> AuthApi.Result.Failed("Registration is closed on this instance") },
+                onForgotPassword = { AuthApi.Result.Ok(Unit) },
+                onChangeInstance = {},
+            )
+        }
+        compose.onNodeWithText("Create an account").performClick()
+        compose.waitUntil(180_000) {
+            compose.onAllNodesWithTag("register-username").fetchSemanticsNodes().isNotEmpty()
+        }
+        compose.capture("journey-register")
+        compose.onNodeWithContentDescription("Back to sign in").performClick()
+        compose.waitUntil(180_000) {
+            compose.onAllNodesWithTag("signin-email").fetchSemanticsNodes().isNotEmpty()
+        }
+        compose.onNodeWithText("Forgot your password?").performClick()
+        compose.waitUntil(180_000) {
+            compose.onAllNodesWithTag("reset-email").fetchSemanticsNodes().isNotEmpty()
+        }
+        compose.capture("journey-reset-password")
     }
 
     /**
