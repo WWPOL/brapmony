@@ -274,8 +274,10 @@ internal fun DriveLinkDialog(
             else {
                 Text(if (public) "Anyone holding the address can open this file, even without an account." else "Restricted. Only accounts with existing access can open this address.")
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Checkbox(checked = public, onCheckedChange = { public = it }, enabled = !busy && linkSharing)
-                    Text("Anyone with the link", modifier = Modifier.clickable(enabled = !busy && linkSharing) { public = !public })
+                    // An instance switch must not prevent restricting an already-public file.
+                    val canChangeAccess = !busy && (linkSharing || public)
+                    Checkbox(checked = public, onCheckedChange = { public = it }, enabled = canChangeAccess)
+                    Text("Anyone with the link", modifier = Modifier.clickable(enabled = canChangeAccess) { public = !public })
                 }
                 if (!linkSharing) Text("This instance has turned off public link sharing.")
                 if (public) {
