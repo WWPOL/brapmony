@@ -57,9 +57,10 @@ data class Reaction(
     val id: String? = null,
     @SerialName("message_id") val messageId: String,
     @SerialName("user_id") val userId: String,
-    val emoji: String,
+    @SerialName("custom_emoji_content") val customEmojiContent: String? = null,
+    @SerialName("emoji_id") val emojiId: String? = null,
     @SerialName("created_at") val createdAt: String? = null,
-)
+) { val emoji: String get() = customEmojiContent ?: emojiId ?: "?" }
 
 @Serializable
 data class Thread(
@@ -70,7 +71,7 @@ data class Thread(
     val name: String? = null,
     @SerialName("message_count") val messageCount: Int = 0,
     @SerialName("created_at") val createdAt: String? = null,
-    @SerialName("last_activity_at") val lastActivityAt: String? = null,
+    @SerialName("last_message_at") val lastActivityAt: String? = null,
 )
 
 /** A direct-message conversation and the people in it. */

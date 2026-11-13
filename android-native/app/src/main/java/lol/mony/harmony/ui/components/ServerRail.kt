@@ -65,7 +65,7 @@ fun ServerRail(
     var loading by remember { mutableStateOf(true) }
     val selected = state.selectedServerId.collectAsState().value
     val unread by state.unread.collectAsState()
-    val channelsByServer = state.channelsByServer.collectAsState()
+    val channelsByServer by state.channelsByServer.collectAsState()
 
     LaunchedEffect(signedIn?.user?.id, state.serversRevision.collectAsState().value) {
         if (signedIn == null) {
@@ -74,7 +74,7 @@ fun ServerRail(
             return@LaunchedEffect
         }
         val token = state.auth.freshToken() ?: return@LaunchedEffect
-        val authUserId = state.auth.authUserId() ?: return@LaunchedEffect
+        val authUserId = signedIn.profile?.id ?: return@LaunchedEffect
         loading = true
         servers = state.servers.servers(signedIn.endpoint, token, authUserId).getOrDefault(emptyList())
         loading = false

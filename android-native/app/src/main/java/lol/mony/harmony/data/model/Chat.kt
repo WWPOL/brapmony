@@ -91,7 +91,7 @@ data class UserServer(
     val position: Int = 0,
     val muted: Boolean = false,
     @SerialName("muted_until") val mutedUntil: String? = null,
-    val avatarUrl: String? = null,
+    @SerialName("avatar_url") val avatarUrl: String? = null,
     val bio: String? = null,
     val pronouns: String? = null,
 )

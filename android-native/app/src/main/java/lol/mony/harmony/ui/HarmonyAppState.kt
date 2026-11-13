@@ -7,6 +7,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.flow.first
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import lol.mony.harmony.data.model.Channel
@@ -133,6 +134,12 @@ class AppState(
         _deviceAppearance.value = settings
     }
 
+    suspend fun saveDeviceAppearance(settings: VisualThemeSettings) {
+        rememberDeviceAppearance(settings)
+        val id = profileId.value ?: return
+        sessionStore.saveAppearance(id, JsonObject(VisualThemeSettings.toJsonMap(settings)))
+    }
+
     /** Writes the look to the account, so it follows to other devices and to the web client. */
     suspend fun persistAccountAppearance(settings: VisualThemeSettings) {
         val session = auth.state.value as? AuthState.SignedIn ?: return
@@ -143,7 +150,7 @@ class AppState(
 
     /** True while this device keeps its own look (the web client's `appearance-sync`). */
     suspend fun appearanceIsDeviceOnly(): Boolean =
-        runCatching { kotlinx.coroutines.flow.first(sessionStore.appearanceScopeFlow) }.getOrNull() == "device"
+        runCatching { sessionStore.appearanceScopeFlow.first() }.getOrNull() == "device"
 
     suspend fun setAppearanceDeviceOnly(deviceOnly: Boolean) {
         sessionStore.setAppearanceScope(deviceOnly)

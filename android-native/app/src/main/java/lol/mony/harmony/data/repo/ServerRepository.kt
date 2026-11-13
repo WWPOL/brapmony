@@ -75,7 +75,7 @@ class ServerRepository(private val rest: RestApi) {
             endpoint, token, "instance_config", "config_key,config_value,description",
             serializer = ListSerializer(InstanceConfigRow.serializer()),
         ).getOrThrow()
-        val map = rows.mapNotNull { row -> row.configValue?.let { row.configKey to it.trim('"') } }.toMap()
+        val map = rows.mapNotNull { row -> row.configValue?.let { row.configKey to it.toString().trim('"') } }.toMap()
         InstanceInfo(
             name = map["instance_name"]?.takeIf { it.isNotBlank() } ?: "Harmony",
             domain = map["domain"],

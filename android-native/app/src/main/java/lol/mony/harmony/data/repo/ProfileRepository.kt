@@ -18,14 +18,14 @@ class ProfileRepository(private val rest: RestApi) {
             filters = listOf("auth_user_id" to "eq.${authUserIdOf(token)}"),
             serializer = ListSerializer(Profile.serializer()),
         )
-        val profile = q.getOrNull()?.firstOrNull() ?: return null
+        val profile = q.getOrThrow().firstOrNull() ?: return null
         return Loaded(profile, authUserIdOf(token))
     }
 
     suspend fun byId(endpoint: Endpoint, token: String, id: String): Profile? = rest.select(
         endpoint, token, "profiles", PROFILE_COLUMNS, listOf("id" to "eq.$id"),
         serializer = ListSerializer(Profile.serializer()),
-    ).getOrNull()?.firstOrNull()
+    ).getOrThrow().firstOrNull()
 
     /** Profiles for a set of ids, in the order asked; missing ids are simply absent. */
     suspend fun byIds(endpoint: Endpoint, token: String, ids: Collection<String>): Map<String, Profile> {
@@ -35,7 +35,7 @@ class ProfileRepository(private val rest: RestApi) {
             endpoint, token, "profiles", PROFILE_COLUMNS,
             listOf("id" to "in.(${unique.joinToString(",")})"),
             serializer = ListSerializer(Profile.serializer()),
-        ).getOrNull().orEmpty()
+        ).getOrThrow()
         return found.associateBy { it.id }
     }
 
@@ -50,7 +50,7 @@ class ProfileRepository(private val rest: RestApi) {
             endpoint, token, "profiles", PROFILE_COLUMNS,
             listOf("auth_user_id" to "in.(${unique.joinToString(",")})"),
             serializer = ListSerializer(Profile.serializer()),
-        ).getOrNull().orEmpty()
+        ).getOrThrow()
         return found.mapNotNull { profile -> profile.authUserId?.let { it to profile } }.toMap()
     }
 
@@ -61,7 +61,7 @@ class ProfileRepository(private val rest: RestApi) {
             listOf("config_key" to "eq.domain"),
             serializer = ListSerializer(lol.mony.harmony.data.model.InstanceConfigRow.serializer()),
         ).getOrNull()
-        rows?.firstOrNull()?.configValue?.trim('"')
+        rows?.firstOrNull()?.configValue?.toString()?.trim('"')
     }.getOrNull()
 
     /** Saves the appearance settings the person picked; the JSON is the web client's own shape. */
@@ -115,7 +115,23 @@ class ProfileRepository(private val rest: RestApi) {
         return rest.select(
             endpoint, token, "profiles", PROFILE_COLUMNS, filters,
             serializer = ListSerializer(Profile.serializer()),
-        ).getOrNull()?.firstOrNull()
+        ).getOrThrow().firstOrNull()
+    }
+
+    suspend fun createSelf(endpoint: Endpoint, token: String, username: String, displayName: String): Profile {
+        require(username.matches(Regex("[A-Za-z0-9_]{2,32}"))) { "Use 2–32 letters, numbers or underscores." }
+        val id = authUserIdOf(token).takeIf { it.isNotBlank() } ?: error("Sign in again.")
+        val domain = instanceDomain(endpoint, token) ?: error("Could not read the instance domain.")
+        val row = kotlinx.serialization.json.buildJsonObject {
+            put("id", kotlinx.serialization.json.JsonPrimitive(id))
+            put("auth_user_id", kotlinx.serialization.json.JsonPrimitive(id))
+            put("username", kotlinx.serialization.json.JsonPrimitive(username))
+            put("display_name", kotlinx.serialization.json.JsonPrimitive(displayName.ifBlank { username }))
+            put("domain", kotlinx.serialization.json.JsonPrimitive(domain))
+            put("is_local", kotlinx.serialization.json.JsonPrimitive(true))
+        }
+        return rest.insert(endpoint, token, "profiles", row.toString(),
+            serializer = ListSerializer(Profile.serializer())).getOrThrow().first()
     }
 
     data class Loaded(val profile: Profile, val authUserId: String)
@@ -125,7 +141,7 @@ class ProfileRepository(private val rest: RestApi) {
     companion object {
         private const val PROFILE_COLUMNS =
             "id,auth_user_id,username,display_name,avatar_url,banner_url,bio,pronouns,domain," +
-                "is_local,appearance_settings,notification_settings,created_at,last_seen_at,status,custom_status"
+                "is_local,appearance_settings,created_at,status,custom_status"
     }
 }
 
@@ -135,7 +151,7 @@ object Jwt {
         val part = token.split(".").getOrNull(1) ?: return emptyMap()
         val padded = part.replace('-', '+').replace('_', '/').padEnd((part.length + 3) / 4 * 4, '=')
         return runCatching {
-            val text = String(android.util.Base64.decode(padded, android.util.Base64.DEFAULT))
+            val text = String(java.util.Base64.getDecoder().decode(padded), Charsets.UTF_8)
             val element = kotlinx.serialization.json.Json.parseToJsonElement(text)
             (element as? kotlinx.serialization.json.JsonObject)?.mapValues { it.value.toString().trim('"') }
                 ?: emptyMap()

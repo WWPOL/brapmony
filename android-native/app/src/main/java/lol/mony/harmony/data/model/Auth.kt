@@ -22,9 +22,13 @@ data class AuthUser(
     val email: String? = null,
     @SerialName("email_confirmed_at") val emailConfirmedAt: String? = null,
     @SerialName("created_at") val createdAt: String? = null,
-    @SerialName("user_metadata") val userMetadata: Map<String, String> = emptyMap(),
-    @SerialName("app_metadata") val appMetadata: Map<String, String> = emptyMap(),
+    @SerialName("user_metadata") val userMetadata: kotlinx.serialization.json.JsonObject = kotlinx.serialization.json.JsonObject(emptyMap()),
+    @SerialName("app_metadata") val appMetadata: kotlinx.serialization.json.JsonObject = kotlinx.serialization.json.JsonObject(emptyMap()),
+    val factors: List<AuthFactor> = emptyList(),
 )
+
+@Serializable
+data class AuthFactor(val id: String, val status: String = "", @SerialName("factor_type") val type: String = "totp")
 
 /** GoTrue's error shape, also used by its `/signup` and `/recover` responses. */
 @Serializable

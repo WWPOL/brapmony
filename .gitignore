@@ -135,3 +135,6 @@ __pycache__/
 
 # Supabase CLI scratch (version check cache)
 supabase/.temp/
+
+# Session-local Android tooling (not source)
+.android-tools/

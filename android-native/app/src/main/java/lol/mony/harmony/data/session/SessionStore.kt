@@ -1,26 +1,26 @@
 package lol.mony.harmony.data.session
 
 import android.content.Context
-import androidx.datastore.preferences.core.edit
-import androidx.datastore.preferences.core.stringPreferencesKey
+import android.security.keystore.KeyGenParameterSpec
+import android.security.keystore.KeyProperties
+import androidx.datastore.preferences.core.*
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
-import kotlinx.serialization.json.Json
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonElement
 import lol.mony.harmony.data.api.Endpoint
 import lol.mony.harmony.data.model.HarmonyJson
+import java.security.KeyStore
+import javax.crypto.Cipher
+import javax.crypto.KeyGenerator
+import javax.crypto.SecretKey
+import javax.crypto.spec.GCMParameterSpec
 
-private val Context.sessionData: androidx.datastore.core.DataStore<androidx.datastore.preferences.core.Preferences> by
-    preferencesDataStore(name = "harmony-session")
+private val Context.sessionData by preferencesDataStore(name = "brapmony-session")
 
-/**
- * What a signed-in install remembers: where the instance is, who is signed in and the tokens.
- *
- * The instance and its anon key are stored even while signed out - a native client asks which
- * instance to use before it can sign in, the same way the desktop and Android WebView builds
- * do (the web client's "Choose an instance").
- */
+@Serializable
 data class StoredSession(
     val endpoint: Endpoint,
     val accessToken: String,
@@ -30,97 +30,97 @@ data class StoredSession(
     val email: String?,
 )
 
-class SessionStore(private val context: Context, private val json: Json = HarmonyJson) {
+/** Tokens are sealed with an install-specific Android Keystore key, excluded from backup. */
+class SessionStore(private val context: Context) {
     private object Keys {
-        val BASE_URL = stringPreferencesKey("instance.baseUrl")
-        val ANON_KEY = stringPreferencesKey("instance.anonKey")
-        val INSTANCE_NAME = stringPreferencesKey("instance.name")
-        val ACCESS = stringPreferencesKey("auth.accessToken")
-        val REFRESH = stringPreferencesKey("auth.refreshToken")
-        val EXPIRES = stringPreferencesKey("auth.expiresAt")
-        val USER_ID = stringPreferencesKey("auth.userId")
-        val EMAIL = stringPreferencesKey("auth.email")
-        // The web client's own key for "this device keeps its own look".
-        val APPEARANCE_SYNC = stringPreferencesKey("appearance-sync")
+        val URL = stringPreferencesKey("instance.url")
+        val ANON = stringPreferencesKey("instance.anon")
+        val NAME = stringPreferencesKey("instance.name")
+        val SEALED = stringPreferencesKey("session.sealed.v1")
     }
-
-    /** The stored instance, if one was chosen; the default is the debug build's local stack. */
-    val endpointFlow: Flow<Endpoint?> = context.sessionData.data.map { prefs ->
-        val base = prefs[Keys.BASE_URL] ?: return@map null
-        val key = prefs[Keys.ANON_KEY] ?: return@map null
-        Endpoint(base, key)
+    val endpointFlow: Flow<Endpoint?> = context.sessionData.data.map {
+        val url = it[Keys.URL] ?: return@map null
+        Endpoint(url, it[Keys.ANON] ?: return@map null)
     }
-
-    val instanceNameFlow: Flow<String?> = context.sessionData.data.map { it[Keys.INSTANCE_NAME] }
-
-    val sessionFlow: Flow<StoredSession?> = context.sessionData.data.map { prefs -> read(prefs) }
-
-    suspend fun session(): StoredSession? = sessionFlow.first()
-
+    val instanceNameFlow: Flow<String?> = context.sessionData.data.map { it[Keys.NAME] }
+    val sessionFlow: Flow<StoredSession?> = context.sessionData.data.map { preferences ->
+        preferences[Keys.SEALED]?.let { sealed ->
+            // A restored/invalidated key cannot decrypt a session: require sign-in, not plaintext fallback.
+            runCatching { HarmonyJson.decodeFromString(StoredSession.serializer(), unseal(sealed)) }.getOrNull()
+        }
+    }
     suspend fun endpoint(): Endpoint? = endpointFlow.first()
-
+    suspend fun session(): StoredSession? = sessionFlow.first()
     suspend fun instanceName(): String? = instanceNameFlow.first()
 
     suspend fun saveInstance(endpoint: Endpoint, name: String? = null) {
-        context.sessionData.edit { prefs ->
-            val previous = prefs[Keys.BASE_URL]
-            prefs[Keys.BASE_URL] = endpoint.baseUrl.trimEnd('/')
-            prefs[Keys.ANON_KEY] = endpoint.anonKey
-            if (name != null) prefs[Keys.INSTANCE_NAME] = name
-            // Another instance means another account: never carry tokens across.
-            if (previous != null && previous.trimEnd('/') != endpoint.baseUrl.trimEnd('/')) {
-                prefs.remove(Keys.ACCESS)
-                prefs.remove(Keys.REFRESH)
-                prefs.remove(Keys.EXPIRES)
-                prefs.remove(Keys.USER_ID)
-                prefs.remove(Keys.EMAIL)
-            }
+        context.sessionData.edit {
+            if (it[Keys.URL] != endpoint.baseUrl.trimEnd('/')) it.remove(Keys.SEALED)
+            it[Keys.URL] = endpoint.baseUrl.trimEnd('/')
+            it[Keys.ANON] = endpoint.anonKey
+            if (name != null) it[Keys.NAME] = name else it.remove(Keys.NAME)
         }
     }
-
     suspend fun saveSession(session: StoredSession) {
-        context.sessionData.edit { prefs ->
-            prefs[Keys.BASE_URL] = session.endpoint.baseUrl.trimEnd('/')
-            prefs[Keys.ANON_KEY] = session.endpoint.anonKey
-            prefs[Keys.ACCESS] = session.accessToken
-            prefs[Keys.REFRESH] = session.refreshToken
-            prefs[Keys.EXPIRES] = session.expiresAtMillis.toString()
-            session.userId?.let { prefs[Keys.USER_ID] = it } ?: prefs.remove(Keys.USER_ID)
-            session.email?.let { prefs[Keys.EMAIL] = it } ?: prefs.remove(Keys.EMAIL)
+        val sealed = seal(HarmonyJson.encodeToString(StoredSession.serializer(), session))
+        context.sessionData.edit {
+            it[Keys.URL] = session.endpoint.baseUrl.trimEnd('/')
+            it[Keys.ANON] = session.endpoint.anonKey
+            it[Keys.SEALED] = sealed
         }
     }
+    suspend fun clearSession() { context.sessionData.edit { it.remove(Keys.SEALED) } }
 
-    suspend fun clearSession() {
-        context.sessionData.edit { prefs ->
-            prefs.remove(Keys.ACCESS)
-            prefs.remove(Keys.REFRESH)
-            prefs.remove(Keys.EXPIRES)
-            prefs.remove(Keys.USER_ID)
-            prefs.remove(Keys.EMAIL)
-        }
+    private suspend fun accountKey(suffix: String): Preferences.Key<String> {
+        val session = session() ?: error("Sign in before changing device preferences.")
+        val scope = session.endpoint.baseUrl + "|" + session.userId
+        val hash = java.security.MessageDigest.getInstance("SHA-256").digest(scope.toByteArray())
+            .joinToString("") { "%02x".format(it) }
+        return stringPreferencesKey("$hash.$suffix")
     }
-
-    /** `device` while this device keeps its own look; absent while it follows the account. */
-    val appearanceScopeFlow: Flow<String?> = context.sessionData.data.map { it[Keys.APPEARANCE_SYNC] }
-
+    val appearanceScopeFlow: Flow<String?> = context.sessionData.data.map { it[accountKey("appearance-sync")] }
     suspend fun setAppearanceScope(deviceOnly: Boolean) {
-        context.sessionData.edit { prefs ->
-            if (deviceOnly) prefs[Keys.APPEARANCE_SYNC] = "device" else prefs.remove(Keys.APPEARANCE_SYNC)
-        }
+        val key = accountKey("appearance-sync")
+        context.sessionData.edit { if (deviceOnly) it[key] = "device" else it.remove(key) }
+    }
+    suspend fun appearance(profileId: String): JsonElement? {
+        val key = accountKey("appearance.$profileId")
+        val text = context.sessionData.data.first()[key] ?: return null
+        return runCatching { HarmonyJson.parseToJsonElement(text) }.getOrNull()
+    }
+    suspend fun saveAppearance(profileId: String, json: JsonElement) {
+        val key = accountKey("appearance.$profileId")
+        context.sessionData.edit { it[key] = json.toString() }
+    }
+    suspend fun draft(room: String): String {
+        val key = accountKey("draft.$room")
+        return context.sessionData.data.first()[key].orEmpty()
+    }
+    suspend fun saveDraft(room: String, text: String) {
+        val key = accountKey("draft.$room")
+        context.sessionData.edit { if (text.isEmpty()) it.remove(key) else it[key] = text }
     }
 
-    private fun read(prefs: androidx.datastore.preferences.core.Preferences): StoredSession? {
-        val base = prefs[Keys.BASE_URL] ?: return null
-        val key = prefs[Keys.ANON_KEY] ?: return null
-        val access = prefs[Keys.ACCESS] ?: return null
-        val refresh = prefs[Keys.REFRESH] ?: return null
-        return StoredSession(
-            endpoint = Endpoint(base, key),
-            accessToken = access,
-            refreshToken = refresh,
-            expiresAtMillis = prefs[Keys.EXPIRES]?.toLongOrNull() ?: 0L,
-            userId = prefs[Keys.USER_ID],
-            email = prefs[Keys.EMAIL],
-        )
+    private fun key(): SecretKey {
+        val store = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
+        (store.getKey(KEY_ALIAS, null) as? SecretKey)?.let { return it }
+        return KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, "AndroidKeyStore").apply {
+            init(KeyGenParameterSpec.Builder(KEY_ALIAS, KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT)
+                .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
+                .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE).build())
+        }.generateKey()
     }
+    private fun seal(text: String): String {
+        val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+        cipher.init(Cipher.ENCRYPT_MODE, key())
+        return java.util.Base64.getEncoder().encodeToString(cipher.iv + cipher.doFinal(text.toByteArray(Charsets.UTF_8)))
+    }
+    private fun unseal(text: String): String {
+        val bytes = java.util.Base64.getDecoder().decode(text)
+        require(bytes.size >= 28)
+        val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+        cipher.init(Cipher.DECRYPT_MODE, key(), GCMParameterSpec(128, bytes.copyOfRange(0, 12)))
+        return cipher.doFinal(bytes.copyOfRange(12, bytes.size)).toString(Charsets.UTF_8)
+    }
+    companion object { private const val KEY_ALIAS = "brapmony.session.v1" }
 }

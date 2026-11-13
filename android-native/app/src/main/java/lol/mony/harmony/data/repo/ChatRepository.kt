@@ -1,455 +1,190 @@
 package lol.mony.harmony.data.repo
 
 import kotlinx.serialization.builtins.ListSerializer
+import kotlinx.serialization.builtins.serializer
+import kotlinx.serialization.json.*
 import lol.mony.harmony.data.api.Endpoint
 import lol.mony.harmony.data.api.RestApi
-import lol.mony.harmony.data.model.Channel
-import lol.mony.harmony.data.model.Conversation
-import lol.mony.harmony.data.model.ConversationParticipant
-import lol.mony.harmony.data.model.DirectConversation
-import lol.mony.harmony.data.model.Message
-import lol.mony.harmony.data.model.Profile
-import lol.mony.harmony.data.model.Reaction
-import lol.mony.harmony.data.model.Thread
-import lol.mony.harmony.data.model.UnreadCountRow
-import kotlinx.serialization.json.Json
+import lol.mony.harmony.data.model.*
 
-/**
- * Messages in channels, DMs and threads.
- *
- * Every call here has a counterpart in the web client's `services/MessageService.ts`,
- * `stores/useChat.ts`, `useDM.ts` and `useThreads.ts`; the tables, columns and RPCs are the
- * same, so a message sent here is a message the web client sees, and the other way round.
- */
+/** Channel, DM and thread messages using Harmony's existing tables and RPCs. */
 class ChatRepository(private val rest: RestApi) {
-
-    // ---- channels -------------------------------------------------------------------------
-
-    /** One page of a channel's messages, newest last, or the page before `before`. */
-    suspend fun channelMessages(
-        endpoint: Endpoint,
-        token: String,
-        channelId: String,
-        before: String? = null,
-        limit: Int = PAGE,
-    ): Result<List<Message>> = runCatching {
-        val filters = buildList {
-            add("channel_id" to "eq.$channelId")
+    suspend fun channelMessages(endpoint: Endpoint, token: String, channelId: String,
+                                before: String? = null, limit: Int = PAGE): Result<List<Message>> = runCatching {
+        rest.select(endpoint, token, "messages", filters = buildList {
+            add("channel_id" to "eq.$channelId"); add("thread_id" to "is.null")
             add("is_deleted" to "eq.false")
-            if (before != null) add("created_at" to "lt.$before")
+            before?.let { add("created_at" to "lt.$it") }
+        }, order = "created_at.desc,id.desc", limit = limit.coerceIn(1, PAGE),
+            serializer = ListSerializer(Message.serializer())).getOrThrow().reversed()
+    }
+
+    suspend fun directMessages(endpoint: Endpoint, token: String, conversationId: String,
+                               before: String? = null, limit: Int = PAGE): Result<List<Message>> = runCatching {
+        rest.select(endpoint, token, "messages", filters = buildList {
+            add("conversation_id" to "eq.$conversationId"); add("is_deleted" to "eq.false")
+            before?.let { add("created_at" to "lt.$it") }
+        }, order = "created_at.desc,id.desc", limit = limit.coerceIn(1, PAGE),
+            serializer = ListSerializer(Message.serializer())).getOrThrow().reversed()
+    }
+
+    suspend fun threadMessages(endpoint: Endpoint, token: String, threadId: String,
+                               limit: Int = PAGE): Result<List<Message>> = rest.select(endpoint, token, "messages",
+        filters = listOf("thread_id" to "eq.$threadId", "is_deleted" to "eq.false"),
+        order = "created_at.asc,id.asc", limit = limit.coerceIn(1, PAGE),
+        serializer = ListSerializer(Message.serializer()))
+
+    suspend fun sendChannelMessage(endpoint: Endpoint, token: String, channelId: String,
+                                   text: String, replyTo: String? = null, threadId: String? = null): Result<Message> = runCatching {
+        // Fail closed until this client implements Harmony's own encrypted envelope.
+        val encryption = rest.rpcValue(endpoint, token, "effective_channel_encryption",
+            buildJsonObject { put("p_channel_id", channelId) }.toString(), JsonElement.serializer()).getOrThrow()
+        if (requiresEncryption(encryption)) error("This channel requires encryption. Encrypted messaging is not implemented in this client yet; nothing was sent.")
+        insertMessage(endpoint, token, text, channelId, null, replyTo, threadId)
+    }
+
+    suspend fun sendDirectMessage(endpoint: Endpoint, token: String, conversationId: String,
+                                  text: String, replyTo: String? = null, threadId: String? = null): Result<Message> = runCatching {
+        val encryption = rest.select(endpoint, token, "conversation_encryption_settings",
+            filters = listOf("conversation_id" to "eq.$conversationId"),
+            serializer = ListSerializer(JsonObject.serializer())).getOrThrow()
+        if (encryption.any { (it["encryption_enabled"] as? JsonPrimitive)?.booleanOrNull == true }) {
+            error("This conversation requires encryption. Encrypted messaging is not implemented in this client yet; nothing was sent.")
         }
-        rest.select(
-            endpoint, token, "messages", MESSAGE_COLUMNS, filters,
-            order = "created_at.desc", limit = limit,
-            serializer = ListSerializer(Message.serializer()),
-        ).getOrThrow().reversed()
+        insertMessage(endpoint, token, text, null, conversationId, replyTo, threadId)
     }
 
-    /** A thread's messages, oldest first. */
-    suspend fun threadMessages(
-        endpoint: Endpoint,
-        token: String,
-        threadId: String,
-        limit: Int = PAGE,
-    ): Result<List<Message>> = runCatching {
-        rest.select(
-            endpoint, token, "messages", MESSAGE_COLUMNS,
-            listOf("thread_id" to "eq.$threadId", "is_deleted" to "eq.false"),
-            order = "created_at.asc", limit = limit,
-            serializer = ListSerializer(Message.serializer()),
-        ).getOrThrow()
-    }
-
-    /** Sends into a channel or thread; a thread send also names its parent for the counters. */
-    suspend fun sendChannelMessage(
-        endpoint: Endpoint,
-        token: String,
-        channelId: String,
-        text: String,
-        replyTo: String? = null,
-        threadId: String? = null,
-    ): Result<Message> = runCatching {
-        val rows = insertMessage(endpoint, token, text, channelId = channelId, replyTo = replyTo, threadId = threadId)
-        rows.first()
-    }
-
-    /** Sends into a direct conversation. */
-    suspend fun sendDirectMessage(
-        endpoint: Endpoint,
-        token: String,
-        conversationId: String,
-        text: String,
-        replyTo: String? = null,
-        threadId: String? = null,
-    ): Result<Message> = runCatching {
-        val rows = insertMessage(endpoint, token, text, conversationId = conversationId, replyTo = replyTo, threadId = threadId)
-        rows.first()
-    }
-
-    private fun insertMessage(
-        endpoint: Endpoint,
-        token: String,
-        text: String,
-        channelId: String? = null,
-        conversationId: String? = null,
-        replyTo: String? = null,
-        threadId: String? = null,
-    ): List<Message> {
-        // `content` is a JSON list of parts, exactly as the web client writes it.
-        val escaped = JsonPrimitiveText.quote(text)
-        val body = buildString {
-            append("{")
-            if (channelId != null) append("\"channel_id\":\"$channelId\",")
-            if (conversationId != null) append("\"conversation_id\":\"$conversationId\",")
-            if (replyTo != null) append("\"reply_to\":\"$replyTo\",")
-            if (threadId != null) append("\"thread_id\":\"$threadId\",")
-            append("\"content\":[{\"type\":\"text\",\"text\":$escaped}]")
-            append("}")
+    private suspend fun insertMessage(endpoint: Endpoint, token: String, text: String,
+                                      channelId: String?, conversationId: String?, replyTo: String?, threadId: String?): Message {
+        require(text.isNotBlank()) { "Write a message first." }
+        val profileId = ProfileRepository(rest).mine(endpoint, token)?.profile?.id ?: error("Your profile could not be loaded. Nothing was sent.")
+        val body = buildJsonObject {
+            put("user_id", profileId)
+            channelId?.let { put("channel_id", it) }; conversationId?.let { put("conversation_id", it) }
+            replyTo?.let { put("reply_to", it) }; threadId?.let { put("thread_id", it) }
+            put("content", buildJsonArray { add(buildJsonObject { put("type", "text"); put("text", text) }) })
         }
-        return rest.insert(
-            endpoint, token, "messages", body,
-            serializer = ListSerializer(Message.serializer()),
-        ).getOrThrow()
+        return rest.insert(endpoint, token, "messages", body.toString(),
+            serializer = ListSerializer(Message.serializer())).getOrThrow().firstOrNull()
+            ?: error("The instance did not accept this message. It may have been blocked by moderation.")
     }
 
     suspend fun editMessage(endpoint: Endpoint, token: String, messageId: String, text: String): Result<Message> = runCatching {
-        val escaped = JsonPrimitiveText.quote(text)
-        rest.update(
-            endpoint, token, "messages", listOf("id" to "eq.$messageId"),
-            patch = """{"content":[{"type":"text","text":$escaped}],"updated_at":"${nowIso()}"}""",
-            serializer = ListSerializer(Message.serializer()),
-        ).getOrThrow().first()
+        require(text.isNotBlank()) { "A message cannot be empty." }
+        rest.update(endpoint, token, "messages", listOf("id" to "eq.$messageId"),
+            buildJsonObject {
+                put("content", buildJsonArray { add(buildJsonObject { put("type", "text"); put("text", text) }) })
+            }.toString(), serializer = ListSerializer(Message.serializer())).getOrThrow().firstOrNull()
+            ?: error("This message could not be edited. Check your permissions.")
     }
 
     suspend fun deleteMessage(endpoint: Endpoint, token: String, messageId: String): Result<Unit> = runCatching {
-        rest.update(
-            endpoint, token, "messages", listOf("id" to "eq.$messageId"),
-            patch = """{"is_deleted":true,"updated_at":"${nowIso()}"}""",
-            serializer = ListSerializer(Message.serializer()),
-        ).getOrThrow()
-        Unit
+        // The official client deletes the row; database triggers handle audit/federation.
+        rest.delete(endpoint, token, "messages", listOf("id" to "eq.$messageId")).getOrThrow()
     }
 
     suspend fun pin(endpoint: Endpoint, token: String, messageId: String, pinned: Boolean): Result<Unit> = runCatching {
-        rest.update(
-            endpoint, token, "messages", listOf("id" to "eq.$messageId"),
-            patch = if (pinned) """{"is_pinned":true,"pinned_at":"${nowIso()}"}""" else """{"is_pinned":false,"pinned_at":null}""",
-            serializer = ListSerializer(Message.serializer()),
-        ).getOrThrow()
+        val profileId = ProfileRepository(rest).mine(endpoint, token)?.profile?.id ?: error("Sign in again.")
+        rest.update(endpoint, token, "messages", listOf("id" to "eq.$messageId"), buildJsonObject {
+            put("is_pinned", pinned)
+            put("pinned_at", if (pinned) JsonPrimitive(nowIso()) else JsonNull)
+            put("pinned_by", if (pinned) JsonPrimitive(profileId) else JsonNull)
+        }.toString(), serializer = ListSerializer(Message.serializer())).getOrThrow().firstOrNull()
+            ?: error("This message could not be pinned. Check your permissions.")
         Unit
     }
 
-    /** The channel's pinned messages, newest pin first, as the pins panel lists them. */
-    suspend fun pinned(endpoint: Endpoint, token: String, channelId: String): Result<List<Message>> = runCatching {
-        rest.select(
-            endpoint, token, "messages", MESSAGE_COLUMNS,
-            listOf("channel_id" to "eq.$channelId", "is_pinned" to "eq.true"),
-            order = "pinned_at.desc", limit = 50,
-            serializer = ListSerializer(Message.serializer()),
-        ).getOrThrow()
-    }
+    suspend fun pinned(endpoint: Endpoint, token: String, channelId: String): Result<List<Message>> = rest.select(
+        endpoint, token, "messages", filters = listOf("channel_id" to "eq.$channelId", "is_pinned" to "eq.true"),
+        order = "pinned_at.desc", limit = PAGE, serializer = ListSerializer(Message.serializer()))
 
-    // ---- threads --------------------------------------------------------------------------
-
-    suspend fun threads(endpoint: Endpoint, token: String, channelId: String): Result<List<Thread>> = runCatching {
-        rest.select(
-            endpoint, token, "threads", THREAD_COLUMNS,
-            listOf("channel_id" to "eq.$channelId"),
-            order = "last_activity_at.desc", limit = 50,
-            serializer = ListSerializer(Thread.serializer()),
-        ).getOrThrow()
-    }
+    suspend fun threads(endpoint: Endpoint, token: String, channelId: String): Result<List<Thread>> = rest.select(
+        endpoint, token, "threads", filters = listOf("channel_id" to "eq.$channelId"),
+        order = "last_message_at.desc.nullslast,created_at.desc", limit = PAGE, serializer = ListSerializer(Thread.serializer()))
 
     suspend fun thread(endpoint: Endpoint, token: String, threadId: String): Result<Thread?> = runCatching {
-        rest.select(
-            endpoint, token, "threads", THREAD_COLUMNS, listOf("id" to "eq.$threadId"),
-            serializer = ListSerializer(Thread.serializer()),
-        ).getOrThrow().firstOrNull()
+        rest.select(endpoint, token, "threads", filters = listOf("id" to "eq.$threadId"),
+            serializer = ListSerializer(Thread.serializer())).getOrThrow().firstOrNull()
     }
 
-    /** Starts a thread off a message, naming its parent, as the web client's Create thread does. */
-    suspend fun createThread(
-        endpoint: Endpoint,
-        token: String,
-        channelId: String,
-        parentMessageId: String,
-        name: String? = null,
-        serverId: String? = null,
-    ): Result<Thread> = runCatching {
-        val body = buildString {
-            append("{")
-            append("\"channel_id\":\"$channelId\",")
-            append("\"parent_message_id\":\"$parentMessageId\",")
-            if (serverId != null) append("\"server_id\":\"$serverId\",")
-            append("\"name\":${name?.let { JsonPrimitiveText.quote(it) } ?: "null"},")
-            append("\"message_count\":0,")
-            append("\"last_activity_at\":\"${nowIso()}\"")
-            append("}")
-        }
-        rest.insert(
-            endpoint, token, "threads", body,
-            serializer = ListSerializer(Thread.serializer()),
-        ).getOrThrow().first()
+    suspend fun createThread(endpoint: Endpoint, token: String, channelId: String, parentMessageId: String,
+                             name: String? = null, serverId: String? = null): Result<Thread> = runCatching {
+        val id = rest.rpcValue(endpoint, token, "create_thread", buildJsonObject {
+            put("p_message_id", parentMessageId); put("p_name", name?.takeIf { it.isNotBlank() } ?: "Discussion")
+            put("p_auto_archive_duration", 1440)
+        }.toString(), String.serializer()).getOrThrow()
+        thread(endpoint, token, id).getOrThrow() ?: error("The new thread could not be loaded.")
     }
 
-    // ---- reactions ------------------------------------------------------------------------
-
-    suspend fun reactionsFor(
-        endpoint: Endpoint,
-        token: String,
-        messageIds: Collection<String>,
-    ): Map<String, List<Reaction>> = runCatching {
+    suspend fun reactionsFor(endpoint: Endpoint, token: String, messageIds: Collection<String>): Result<Map<String, List<Reaction>>> = runCatching {
         if (messageIds.isEmpty()) return@runCatching emptyMap()
-        val rows = rest.select(
-            endpoint, token, "reactions", "id,message_id,user_id,emoji,created_at",
-            listOf("message_id" to "in.(${messageIds.joinToString(",")})"),
-            serializer = ListSerializer(Reaction.serializer()),
-        ).getOrThrow()
-        rows.groupBy { it.messageId }
-    }.getOrDefault(emptyMap())
+        rest.select(endpoint, token, "reactions", filters = listOf("message_id" to "in.(${messageIds.take(PAGE).joinToString(",")})"),
+            serializer = ListSerializer(Reaction.serializer())).getOrThrow().groupBy { it.messageId }
+    }
 
-    suspend fun addReaction(
-        endpoint: Endpoint,
-        token: String,
-        messageId: String,
-        userId: String,
-        emoji: String,
-    ): Result<Unit> = runCatching {
-        val body = """{"message_id":"$messageId","user_id":"$userId","emoji":${JsonPrimitiveText.quote(emoji)}}"""
-        rest.insert(
-            endpoint, token, "reactions", body,
-            serializer = ListSerializer(Reaction.serializer()),
-        ).getOrThrow()
+    suspend fun addReaction(endpoint: Endpoint, token: String, messageId: String, userId: String, emoji: String): Result<Unit> = runCatching {
+        rest.insert(endpoint, token, "reactions", buildJsonObject {
+            put("message_id", messageId); put("user_id", userId); put("custom_emoji_content", emoji)
+        }.toString(), serializer = ListSerializer(Reaction.serializer())).getOrThrow()
         Unit
     }
 
-    suspend fun removeReaction(
-        endpoint: Endpoint,
-        token: String,
-        messageId: String,
-        userId: String,
-        emoji: String,
-    ): Result<Unit> = runCatching {
-        rest.delete(
-            endpoint, token, "reactions",
-            listOf(
-                "message_id" to "eq.$messageId",
-                "user_id" to "eq.$userId",
-                "emoji" to "eq.$emoji",
-            ),
-        ).getOrThrow()
+    suspend fun removeReaction(endpoint: Endpoint, token: String, messageId: String, userId: String, emoji: String): Result<Unit> =
+        rest.delete(endpoint, token, "reactions", listOf("message_id" to "eq.$messageId", "user_id" to "eq.$userId", "custom_emoji_content" to "eq.$emoji"))
+
+    suspend fun conversations(endpoint: Endpoint, token: String, profileId: String,
+                              profiles: ProfileRepository): Result<List<DirectConversation>> = runCatching {
+        val mine = rest.select(endpoint, token, "conversation_participants",
+            filters = listOf("user_id" to "eq.$profileId", "left_at" to "is.null", "hidden_at" to "is.null"),
+            limit = PAGE, serializer = ListSerializer(ConversationParticipant.serializer())).getOrThrow()
+        if (mine.isEmpty()) return@runCatching emptyList()
+        val ids = mine.map { it.conversationId }.distinct()
+        val rows = rest.select(endpoint, token, "conversations", filters = listOf("id" to "in.(${ids.joinToString(",")})", "is_active" to "eq.true"),
+            order = "updated_at.desc", limit = PAGE, serializer = ListSerializer(Conversation.serializer())).getOrThrow()
+        val participants = rest.select(endpoint, token, "conversation_participants",
+            filters = listOf("conversation_id" to "in.(${ids.joinToString(",")})", "left_at" to "is.null"),
+            serializer = ListSerializer(ConversationParticipant.serializer())).getOrThrow()
+        val people = profiles.byIds(endpoint, token, participants.map { it.userId }.distinct())
+        rows.map { conversation -> DirectConversation(conversation,
+            participants.filter { it.conversationId == conversation.id && it.userId != profileId }.mapNotNull { people[it.userId] }) }
     }
 
-    // ---- direct messages ------------------------------------------------------------------
+    suspend fun conversation(endpoint: Endpoint, token: String, conversationId: String,
+                             profileId: String, profiles: ProfileRepository): DirectConversation? =
+        conversations(endpoint, token, profileId, profiles).getOrThrow().find { it.conversation.id == conversationId }
 
-    /** The account's conversations with the people in them, most recent first. */
-    suspend fun conversations(
-        endpoint: Endpoint,
-        token: String,
-        authUserId: String,
-        profiles: ProfileRepository,
-    ): Result<List<DirectConversation>> = runCatching {
-        val mine = rest.select(
-            endpoint, token, "conversation_participants", PARTICIPANT_COLUMNS,
-            listOf("user_id" to "eq.$authUserId", "left_at" to "is.null"),
-            serializer = ListSerializer(ConversationParticipant.serializer()),
-        ).getOrThrow()
-        val conversationIds = mine.map { it.conversationId }.distinct()
-        if (conversationIds.isEmpty()) return@runCatching emptyList()
-        val conversations = rest.select(
-            endpoint, token, "conversations", CONVERSATION_COLUMNS,
-            listOf("id" to "in.(${conversationIds.joinToString(",")})", "is_active" to "eq.true"),
-            order = "updated_at.desc",
-            serializer = ListSerializer(Conversation.serializer()),
-        ).getOrThrow().associateBy { it.id }
-        val participants = rest.select(
-            endpoint, token, "conversation_participants", PARTICIPANT_COLUMNS,
-            listOf("conversation_id" to "in.(${conversationIds.joinToString(",")})", "left_at" to "is.null"),
-            serializer = ListSerializer(ConversationParticipant.serializer()),
-        ).getOrThrow()
-        val byAuthId = profiles.byAuthUserIds(
-            endpoint, token,
-            participants.map { it.userId }.filter { it != authUserId },
-        )
-        conversationIds.mapNotNull { id ->
-            val conversation = conversations[id] ?: return@mapNotNull null
-            val others = participants.filter { it.conversationId == id && it.userId != authUserId }
-                .mapNotNull { byAuthId[it.userId] }
-            DirectConversation(conversation, others)
-        }
-    }
+    suspend fun openDirectConversation(endpoint: Endpoint, token: String, myProfileId: String, otherProfileId: String): Result<String> =
+        rest.rpcValue(endpoint, token, "create_or_get_direct_conversation", buildJsonObject {
+            put("user1_uuid", myProfileId); put("user2_uuid", otherProfileId)
+        }.toString(), String.serializer())
 
-    suspend fun conversation(
-        endpoint: Endpoint,
-        token: String,
-        conversationId: String,
-        authUserId: String,
-        profiles: ProfileRepository,
-    ): DirectConversation? = runCatching {
-        val conversation = rest.select(
-            endpoint, token, "conversations", CONVERSATION_COLUMNS,
-            listOf("id" to "eq.$conversationId"),
-            serializer = ListSerializer(Conversation.serializer()),
-        ).getOrThrow().firstOrNull() ?: return@runCatching null
-        val participants = rest.select(
-            endpoint, token, "conversation_participants", PARTICIPANT_COLUMNS,
-            listOf("conversation_id" to "eq.$conversationId", "left_at" to "is.null"),
-            serializer = ListSerializer(ConversationParticipant.serializer()),
-        ).getOrThrow()
-        val byAuthId = profiles.byAuthUserIds(
-            endpoint, token, participants.map { it.userId }.filter { it != authUserId },
-        )
-        DirectConversation(
-            conversation,
-            participants.filter { it.userId != authUserId }.mapNotNull { byAuthId[it.userId] },
-        )
-    }.getOrNull()
+    suspend fun unreadCounts(endpoint: Endpoint, token: String): List<UnreadCountRow> = rest.rpc(
+        endpoint, token, "get_unread_counts", serializer = ListSerializer(UnreadCountRow.serializer())).getOrThrow()
 
-    suspend fun directMessages(
-        endpoint: Endpoint,
-        token: String,
-        conversationId: String,
-        before: String? = null,
-        limit: Int = PAGE,
-    ): Result<List<Message>> = runCatching {
-        val filters = buildList {
-            add("conversation_id" to "eq.$conversationId")
-            add("is_deleted" to "eq.false")
-            if (before != null) add("created_at" to "lt.$before")
-        }
-        rest.select(
-            endpoint, token, "messages", MESSAGE_COLUMNS, filters,
-            order = "created_at.desc", limit = limit,
-            serializer = ListSerializer(Message.serializer()),
-        ).getOrThrow().reversed()
-    }
+    suspend fun markChannelRead(endpoint: Endpoint, token: String, channelId: String, messageId: String?) =
+        rest.rpcUnit(endpoint, token, "mark_channel_as_read", buildJsonObject {
+            put("p_channel_id", channelId); put("p_message_id", messageId?.let(::JsonPrimitive) ?: JsonNull)
+        }.toString()).getOrThrow()
 
-    /**
-     * Opens (or reuses) the direct conversation with someone, as `useDM.ts` does: an existing
-     * one-to-one conversation wins, otherwise a new one is created with both participants.
-     */
-    suspend fun openDirectConversation(
-        endpoint: Endpoint,
-        token: String,
-        myAuthUserId: String,
-        otherAuthUserId: String,
-    ): Result<String> = runCatching {
-        val mine = rest.select(
-            endpoint, token, "conversation_participants", PARTICIPANT_COLUMNS,
-            listOf("user_id" to "eq.$myAuthUserId", "left_at" to "is.null"),
-            serializer = ListSerializer(ConversationParticipant.serializer()),
-        ).getOrThrow()
-        if (mine.isNotEmpty()) {
-            val theirs = rest.select(
-                endpoint, token, "conversation_participants", PARTICIPANT_COLUMNS,
-                listOf(
-                    "user_id" to "eq.$otherAuthUserId",
-                    "conversation_id" to "in.(${mine.joinToString(",") { it.conversationId }})",
-                    "left_at" to "is.null",
-                ),
-                serializer = ListSerializer(ConversationParticipant.serializer()),
-            ).getOrThrow()
-            val candidates = mine.map { it.conversationId }.toSet()
-            val direct = theirs.firstOrNull { it.conversationId in candidates }
-            if (direct != null) {
-                val conversations = rest.select(
-                    endpoint, token, "conversations", CONVERSATION_COLUMNS,
-                    listOf("id" to "eq.${direct.conversationId}"),
-                    serializer = ListSerializer(Conversation.serializer()),
-                ).getOrThrow()
-                val existing = conversations.firstOrNull()
-                if (existing != null && existing.type == "direct") return@runCatching existing.id
-            }
-        }
-        val created = rest.insert(
-            endpoint, token, "conversations",
-            """{"type":"direct","created_by":"$myAuthUserId","is_active":true}""",
-            serializer = ListSerializer(Conversation.serializer()),
-        ).getOrThrow().first()
-        rest.insert(
-            endpoint, token, "conversation_participants",
-            """[{"conversation_id":"${created.id}","user_id":"$myAuthUserId","role":"member"},""" +
-                """{"conversation_id":"${created.id}","user_id":"$otherAuthUserId","role":"member"}]""",
-            serializer = ListSerializer(ConversationParticipant.serializer()),
-        ).getOrThrow()
-        created.id
-    }
+    suspend fun markConversationRead(endpoint: Endpoint, token: String, conversationId: String, messageId: String?) =
+        rest.rpcUnit(endpoint, token, "mark_conversation_as_read", buildJsonObject {
+            put("p_conversation_id", conversationId); put("p_message_id", messageId?.let(::JsonPrimitive) ?: JsonNull)
+        }.toString()).getOrThrow()
 
-    // ---- read state -----------------------------------------------------------------------
+    suspend fun search(endpoint: Endpoint, token: String, query: String, limit: Int = 25,
+                       channelId: String? = null): Result<List<Message>> = rest.rpc(endpoint, token, "search_messages", buildJsonObject {
+        put("p_query", query); put("p_limit", limit.coerceIn(1, PAGE)); channelId?.let { put("p_channel_id", it) }
+    }.toString(), ListSerializer(Message.serializer()))
 
-    /** The account's unread channels and conversations, from the database's own counts. */
-    suspend fun unreadCounts(endpoint: Endpoint, token: String): List<UnreadCountRow> = runCatching {
-        rest.rpc(
-            endpoint, token, "get_unread_counts",
-            serializer = ListSerializer(UnreadCountRow.serializer()),
-        ).getOrThrow()
-    }.getOrDefault(emptyList())
-
-    suspend fun markChannelRead(endpoint: Endpoint, token: String, channelId: String, messageId: String?) {
-        runCatching {
-            rest.rpcUnit(
-                endpoint, token, "mark_channel_as_read",
-                """{"p_channel_id":"$channelId","p_message_id":${messageId?.let { "\"$it\"" } ?: "null"}}""",
-            )
-        }
-    }
-
-    suspend fun markConversationRead(endpoint: Endpoint, token: String, conversationId: String, messageId: String?) {
-        runCatching {
-            rest.rpcUnit(
-                endpoint, token, "mark_conversation_as_read",
-                """{"p_conversation_id":"$conversationId","p_message_id":${messageId?.let { "\"$it\"" } ?: "null"}}""",
-            )
-        }
-    }
-
-    // ---- search ---------------------------------------------------------------------------
-
-    /** Full-text search across the channels this account can read, via the search RPC. */
-    suspend fun search(endpoint: Endpoint, token: String, query: String, limit: Int = 25): List<Message> = runCatching {
-        rest.rpc(
-            endpoint, token, "search_messages",
-            """{"p_query":${JsonPrimitiveText.quote(query)},"p_limit":$limit}""",
-            serializer = ListSerializer(Message.serializer()),
-        ).getOrThrow()
-    }.getOrDefault(emptyList())
-
-    /** Typing presence is ephemeral: it goes over realtime only, never into a table. */
-    fun typingTopic(channelId: String) = "typing:channel:$channelId"
-
-    fun channelMessageTopic(channelId: String) = "messages:channel:$channelId"
-
-    companion object {
-        const val PAGE = 50
-
-        private const val MESSAGE_COLUMNS =
-            "id,channel_id,conversation_id,thread_id,user_id,bot_id,reply_to,content,is_deleted," +
-                "is_system,is_pinned,pinned_at,encrypted,reactions,metadata,media_paths,created_at,updated_at"
-
-        private const val THREAD_COLUMNS =
-            "id,channel_id,parent_message_id,server_id,name,message_count,created_at,last_activity_at"
-
-        private const val PARTICIPANT_COLUMNS =
-            "id,conversation_id,user_id,role,last_read_at,last_read_message_id,is_muted,left_at"
-
-        private const val CONVERSATION_COLUMNS =
-            "id,name,type,created_by,is_active,metadata,created_at,updated_at"
-    }
+    companion object { const val PAGE = 50 }
 }
 
-/** A JSON string literal for the payloads built by hand above. */
-internal object JsonPrimitiveText {
-    fun quote(value: String): String = Json.encodeToString(
-        kotlinx.serialization.json.JsonPrimitive.serializer(),
-        kotlinx.serialization.json.JsonPrimitive(value),
-    )
+internal fun requiresEncryption(element: JsonElement): Boolean = when (element) {
+    is JsonArray -> element.any(::requiresEncryption)
+    is JsonObject -> (element["messages_encrypted"] as? JsonPrimitive)?.booleanOrNull == true
+    is JsonPrimitive -> element.booleanOrNull == true
+    else -> false
 }
 
-internal fun nowIso(): String {
-    val fmt = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", java.util.Locale.US)
-    fmt.timeZone = java.util.TimeZone.getTimeZone("UTC")
-    return fmt.format(java.util.Date())
-}
-
-/** `Profile` is the postgrest shape; this keeps the DM participant resolution readable above. */
-private typealias ParticipantProfiles = Map<String, Profile>
+internal object JsonPrimitiveText { fun quote(value: String): String = JsonPrimitive(value).toString() }
+internal fun nowIso(): String = java.time.Instant.now().toString()

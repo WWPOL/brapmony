@@ -1,15 +1,9 @@
 package lol.mony.harmony
 
 import android.app.Application
+import lol.mony.harmony.ui.AppState
 
 class HarmonyApp : Application() {
-    override fun onCreate() {
-        super.onCreate()
-        instance = this
-    }
-
-    companion object {
-        lateinit var instance: HarmonyApp
-            private set
-    }
+    val container by lazy { AppContainer(this) }
+    val state by lazy { AppState(container) }
 }

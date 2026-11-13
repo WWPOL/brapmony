@@ -7,7 +7,8 @@ package lol.mony.harmony.data.api
  * gateway, so one base URL plus the instance's anon key is all a client needs - the same pair
  * the web client's `/config.json` carries.
  */
-data class Endpoint(val baseUrl: String, val anonKey: String) {
+@kotlinx.serialization.Serializable
+data class Endpoint(val baseUrl: String, val anonKey: String, val origin: String = baseUrl) {
     val authUrl: String get() = baseUrl.trimEnd('/') + "/auth/v1"
     val restUrl: String get() = baseUrl.trimEnd('/') + "/rest/v1"
     val realtimeUrl: String

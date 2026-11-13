@@ -27,7 +27,7 @@ class RestApi(
     private val jsonMedia = "application/json; charset=utf-8".toMediaType()
 
     /** Read a list of rows. */
-    fun <T> select(
+    suspend fun <T> select(
         endpoint: Endpoint,
         token: String,
         table: String,
@@ -44,7 +44,7 @@ class RestApi(
     }
 
     /** Read at most one row; PostgREST's `Accept: application/vnd.pgrst.object+json`. */
-    fun <T> selectSingle(
+    suspend fun <T> selectSingle(
         endpoint: Endpoint,
         token: String,
         table: String,
@@ -61,7 +61,7 @@ class RestApi(
     }
 
     /** Insert one or more rows and read what the server stored. */
-    fun <T> insert(
+    suspend fun <T> insert(
         endpoint: Endpoint,
         token: String,
         table: String,
@@ -78,7 +78,7 @@ class RestApi(
     }
 
     /** Patch rows matching `filters` and read what they became. */
-    fun <T> update(
+    suspend fun <T> update(
         endpoint: Endpoint,
         token: String,
         table: String,
@@ -96,7 +96,7 @@ class RestApi(
     }
 
     /** Delete rows matching `filters`. */
-    fun delete(
+    suspend fun delete(
         endpoint: Endpoint,
         token: String,
         table: String,
@@ -108,7 +108,7 @@ class RestApi(
     }
 
     /** Call a Postgres function. A table-valued function is read as a list of rows. */
-    fun <T> rpc(
+    suspend fun <T> rpc(
         endpoint: Endpoint,
         token: String,
         function: String,
@@ -124,7 +124,7 @@ class RestApi(
     }
 
     /** Call a function whose answer this app ignores beyond success or failure. */
-    fun rpcUnit(
+    suspend fun rpcUnit(
         endpoint: Endpoint,
         token: String,
         function: String,
@@ -138,7 +138,7 @@ class RestApi(
     }
 
     /** Count rows matching `filters`, via PostgREST's `Prefer: count=exact` header. */
-    fun count(
+    suspend fun count(
         endpoint: Endpoint,
         token: String,
         table: String,
@@ -151,16 +151,12 @@ class RestApi(
             .header("Range", "0-0")
             .get()
             .build()
-        return runCatching {
-            client.newCall(request).execute().use { response ->
-                val range = response.header("Content-Range")
-                if (!response.isSuccessful) return@use Result.failure(
-                    ApiException("$table count failed: ${response.code}", response.code),
-                )
-                val total = range?.substringAfter('/')?.toIntOrNull() ?: 0
-                Result.success(total)
-            }
-        }.getOrElse { Result.failure(it) }
+        return networkResult {
+            val answer = client.answer(request)
+            if (!answer.successful) throw ApiException(explain(answer.text, answer.status), answer.status)
+            answer.contentRange?.substringAfter('/')?.toIntOrNull()
+                ?: throw ApiException("The instance did not return an exact count.")
+        }
     }
 
     private fun buildUrl(
@@ -187,23 +183,27 @@ class RestApi(
             .header("apikey", endpoint.anonKey)
             .header("Authorization", "Bearer $token")
 
-    private fun <T> execute(request: Request, parse: (String) -> T): Result<T> = runCatching {
-        client.newCall(request).execute().use { response ->
-            val text = response.body.string()
-            if (!response.isSuccessful) throw ApiException(explain(text, response.code), response.code)
-            if (text.isBlank()) throw ApiException("The instance returned an empty answer.", response.code)
-            parse(text)
-        }
-    }.recoverCatching { throw it }
+    private suspend fun <T> execute(request: Request, parse: (String) -> T): Result<T> = networkResult {
+        val answer = client.answer(request)
+        if (!answer.successful) throw ApiException(explain(answer.text, answer.status), answer.status)
+        // DELETE and void RPCs legitimately answer 204 with an empty body.
+        parse(answer.text)
+    }
 
-    private fun <T> executeOptional(request: Request, parse: (String) -> T): Result<T?> = runCatching {
-        client.newCall(request).execute().use { response ->
-            val text = response.body.string()
-            // PostgREST answers 406 when a `single` read matched no row; that is "none", not an error.
-            if (response.code == 406 || text.isBlank()) return@use null
-            if (!response.isSuccessful) throw ApiException(explain(text, response.code), response.code)
-            parse(text)
-        }
+    private suspend fun <T> executeOptional(request: Request, parse: (String) -> T): Result<T?> = networkResult {
+        val answer = client.answer(request)
+        if (answer.status == 406 && answer.text.contains("PGRST116") &&
+            answer.text.contains("0 rows")) return@networkResult null
+        if (!answer.successful) throw ApiException(explain(answer.text, answer.status), answer.status)
+        parse(answer.text)
+    }
+
+    /** Scalar or object-valued RPC, such as create_thread's UUID response. */
+    suspend fun <T> rpcValue(endpoint: Endpoint, token: String, function: String,
+                             args: String = "{}", serializer: KSerializer<T>): Result<T> {
+        val request = authorized(endpoint, token, (endpoint.restUrl + "/rpc/" + function).toHttpUrl())
+            .post(args.toRequestBody(jsonMedia)).build()
+        return execute(request) { json.decodeFromString(serializer, it) }
     }
 
     /** PostgREST errors carry `message`, `details` and `hint`; show the most specific sentence. */

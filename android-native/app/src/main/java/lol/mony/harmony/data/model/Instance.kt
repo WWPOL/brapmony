@@ -7,7 +7,7 @@ import kotlinx.serialization.Serializable
 @Serializable
 data class InstanceConfigRow(
     @SerialName("config_key") val configKey: String,
-    @SerialName("config_value") val configValue: String? = null,
+    @SerialName("config_value") val configValue: kotlinx.serialization.json.JsonElement? = null,
     val description: String? = null,
 )
 

@@ -9,13 +9,15 @@ android {
     compileSdk = 37
 
     defaultConfig {
-        applicationId = "lol.mony.harmony"
+        applicationId = "io.github.wwpol.brapmony"
         minSdk = 26
         targetSdk = 36
         versionCode = 1
         versionName = "1.9.6"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        buildConfigField("String", "DEFAULT_INSTANCE_URL", "\"http://10.0.2.2:54480\"")
+        fun literal(value: String) = "\"" + value.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
+        buildConfigField("String", "DEFAULT_INSTANCE_URL", literal(providers.gradleProperty("harmonyInstanceUrl").getOrElse("")))
+        buildConfigField("String", "DEFAULT_INSTANCE_ANON_KEY", literal(providers.gradleProperty("harmonyAnonKey").getOrElse("")))
     }
 
     buildTypes {

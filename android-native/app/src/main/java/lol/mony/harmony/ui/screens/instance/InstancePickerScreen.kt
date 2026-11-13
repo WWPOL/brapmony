@@ -42,13 +42,14 @@ import kotlinx.coroutines.withContext
 import lol.mony.harmony.data.api.Endpoint
 import lol.mony.harmony.ui.components.HarmonyWordmark
 import okhttp3.Request
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import lol.mony.harmony.data.api.Http
 
 /**
  * Choose the instance to connect to, as the native Harmony clients ask on first launch.
  *
  * The app has to learn two things about an instance: where it is and its anon key. Public
- * instances serve both at `/config.json` - the same file the web client's build reads - so a
+ * instances serve both at `/api/federation/instance-info` - the same file the web client's build reads - so a
  * person types a domain and the app discovers the key. A bare host gets `https://`; anything
  * already carrying a scheme is used as given.
  */
@@ -173,62 +174,42 @@ sealed interface Discovery {
     data class Failed(val message: String) : Discovery
 }
 
-/**
- * Reads `/config.json` from an instance.
- *
- * A native client cannot know an instance's anon key in advance. Every Harmony instance serves
- * it in that file next to its Supabase URL, which is exactly the pair the web client is built
- * with - so the picker asks the instance instead of the person.
- */
+/** Native-client discovery uses the same federation endpoint as the official picker. */
+@kotlinx.serialization.Serializable
+private data class InstanceConfiguration(
+    val name: String? = null,
+    val supabaseUrl: String,
+    val supabaseAnonKey: String,
+)
+
 suspend fun discoverInstance(raw: String): Discovery = withContext(Dispatchers.IO) {
-    val trimmed = raw.trim().trimEnd('/')
-    if (trimmed.isEmpty()) return@withContext Discovery.Failed("Enter the instance's address.")
-    val base = when {
-        trimmed.startsWith("http://") || trimmed.startsWith("https://") -> trimmed
-        trimmed.startsWith("localhost") || trimmed.startsWith("10.0.2.2") || trimmed.startsWith("127.0.0.1") ->
-            "http://$trimmed"
-        else -> "https://$trimmed"
+    val address = raw.trim()
+    val url = (if (address.contains("://")) address else "https://$address").toHttpUrlOrNull() ?: return@withContext Discovery.Failed("Enter a valid instance address.")
+    if (url.username.isNotEmpty() || url.password.isNotEmpty() || url.query != null || url.fragment != null) {
+        return@withContext Discovery.Failed("Use an instance address without a password, query or fragment.")
     }
-    val request = Request.Builder().url("$base/config.json").get().build()
+    val loopback = url.host in setOf("localhost", "127.0.0.1", "10.0.2.2")
+    if (!url.isHttps && !(lol.mony.harmony.BuildConfig.DEBUG && loopback)) {
+        return@withContext Discovery.Failed("Use HTTPS to protect your account.")
+    }
+    val origin = url.newBuilder().encodedPath("/").query(null).fragment(null).build().toString().trimEnd('/')
     try {
-        Http.client.newCall(request).execute().use { response ->
-            if (!response.isSuccessful) {
-                return@withContext Discovery.Failed(
-                    "$base answered ${response.code}. Check the address, then try again.",
-                )
+        Http.client.newCall(Request.Builder().url("$origin/api/federation/instance-info")
+            .header("Accept", "application/json").get().build()).execute().use { response ->
+            if (!response.isSuccessful) return@withContext Discovery.Failed(
+                "The instance answered ${response.code}. Check that this is a Harmony instance.")
+            val config = lol.mony.harmony.data.model.HarmonyJson.decodeFromString(
+                InstanceConfiguration.serializer(), response.body.string())
+            val service = config.supabaseUrl.toHttpUrlOrNull()
+                ?: return@withContext Discovery.Failed("The instance returned an invalid service address.")
+            if ((!service.isHttps && !(lol.mony.harmony.BuildConfig.DEBUG &&
+                    service.host in setOf("localhost", "127.0.0.1", "10.0.2.2"))) ||
+                config.supabaseAnonKey.isBlank()) {
+                return@withContext Discovery.Failed("The instance did not publish a secure usable configuration.")
             }
-            val text = response.body.string()
-            val json = runCatching {
-                kotlinx.serialization.json.Json.parseToJsonElement(text) as kotlinx.serialization.json.JsonObject
-            }.getOrNull() ?: return@withContext Discovery.Failed("$base did not answer with JSON.")
-
-            @kotlinx.serialization.Serializable
-            data class Config(
-                val supabaseUrl: String? = null,
-                val supabaseAnonKey: String? = null,
-                val instanceName: String? = null,
-                val name: String? = null,
-                val domain: String? = null,
-            }
-
-            val config = runCatching {
-                lol.mony.harmony.data.model.HarmonyJson.decodeFromString(Config.serializer(), text)
-            }.getOrNull() ?: Config()
-
-            val supabaseUrl = config.supabaseUrl?.takeIf { it.isNotBlank() } ?: base
-            val anonKey = config.supabaseAnonKey?.takeIf { it.isNotBlank() }
-                ?: return@withContext Discovery.Failed(
-                    "$base does not publish an anon key in config.json, so the app cannot sign in.",
-                )
-            Discovery.Found(
-                Endpoint(supabaseUrl, anonKey),
-                config.instanceName?.takeIf { it.isNotBlank() } ?: config.name ?: config.domain,
-            )
+            Discovery.Found(Endpoint(service.toString().trimEnd('/'), config.supabaseAnonKey, origin), config.name)
         }
-    } catch (e: Exception) {
-        Discovery.Failed("Could not reach $base: ${e.message ?: "unknown error"}")
+    } catch (error: Exception) {
+        Discovery.Failed("Could not connect. Check the address and your network connection.")
     }
 }
-
-/** A local development instance, offered as a shortcut so a developer need not type it. */
-const val LOOPBACK_INSTANCE = "http://10.0.2.2:54480"
