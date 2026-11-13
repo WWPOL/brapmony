@@ -139,7 +139,7 @@ class NotificationRepository(private val rest: RestApi) {
         require(postId.isNotBlank())
         val post = rest.select(
             endpoint, token, "posts",
-            columns = "id,author_id,content,content_warning,created_at,url,media_attachments",
+            columns = "id,author_id,content,content_warning,is_sensitive,created_at,url,media_attachments",
             filters = listOf("id" to "eq.$postId", "is_deleted" to "eq.false"),
             limit = 1,
             serializer = ListSerializer(NotificationPost.serializer()),

@@ -66,11 +66,15 @@ data class SocialPost(
     @SerialName("as_of") val asOf: String? = null,
 ) {
     val plainText: String get() = socialContentText(content)
-    val isQuote: Boolean get() = metadata["is_quote"]?.jsonPrimitive?.let {
+    val isQuote: Boolean get() = (metadata["is_quote"] as? JsonPrimitive)?.let {
         it.booleanOrNull == true || it.contentOrNull == "true"
     } == true
-    val isBoost: Boolean get() = metadata["reblog_of"] != null && !isQuote
-    val actionPost: SocialPost get() = if (isBoost) reblog?.copy(author = reblogAuthor ?: reblog.author) ?: this else this
+    val isBoost: Boolean get() = (metadata["reblog_of"] as? JsonPrimitive)?.contentOrNull != null && !isQuote
+    val actionPost: SocialPost get() {
+        val original = if (isBoost) reblog else null
+        val originalAuthor = reblogAuthor ?: original?.author
+        return original?.copy(author = originalAuthor, authorId = original.authorId.ifBlank { originalAuthor?.id.orEmpty() }) ?: this
+    }
 
     /** Direct embeds carry my_interactions; RPCs instead carry the three booleans. */
     fun withInteractionFlags(): SocialPost {

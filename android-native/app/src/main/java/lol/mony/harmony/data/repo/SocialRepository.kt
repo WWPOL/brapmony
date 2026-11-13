@@ -111,8 +111,7 @@ class SocialRepository(private val api: RestApi) {
     ): SocialPost = withContext(Dispatchers.IO) {
         validId(profileId); replyTo?.let(::validId)
         require(visibility in setOf("public", "unlisted", "followers", "direct")) { "Choose a valid visibility." }
-        validateText(endpoint, token, text)
-        val content = parseContent(endpoint, token, text)
+        val content = validateText(endpoint, token, text)
         val row = buildJsonObject {
             put("author_id", profileId); put("content", content); put("visibility", visibility)
             put("content_warning", contentWarning.trim().takeIf(String::isNotEmpty)?.let(::JsonPrimitive) ?: JsonNull)
@@ -132,9 +131,9 @@ class SocialRepository(private val api: RestApi) {
         require(socialContentParts(original.content).all { it["type"]?.toString() in setOf("\"text\"", "\"mention\"", "\"hashtag\"", "\"url\"", "\"link\"") }) {
             "This post contains rich content the text editor cannot preserve. Edit it in the web client."
         }
-        validateText(endpoint, token, text)
+        val content = validateText(endpoint, token, text)
         val patch = buildJsonObject {
-            put("content", parseContent(endpoint, token, text))
+            put("content", content)
             put("content_warning", contentWarning.trim().takeIf(String::isNotEmpty)?.let(::JsonPrimitive) ?: JsonNull)
             put("is_sensitive", sensitive); put("updated_at", Instant.now().toString())
         }
@@ -250,8 +249,14 @@ class SocialRepository(private val api: RestApi) {
         require(profileId != targetId) { "You cannot follow yourself." }
         val filters = listOf("follower_id" to "eq.$profileId", "following_id" to "eq.$targetId")
         val existing = api.select(endpoint, token, "follows", "*", filters, serializer = followRows).getOrThrow().singleOrNull()
-        if (!enabled || existing?.status == "rejected") api.delete(endpoint, token, "follows", filters).getOrThrow()
-        if (enabled && (existing == null || existing.status == "rejected")) {
+        if (!enabled) {
+            api.delete(endpoint, token, "follows", filters).getOrThrow()
+            val remaining = api.select(endpoint, token, "follows", "*", filters, serializer = followRows).getOrThrow()
+            check(remaining.isEmpty()) { "The instance did not confirm that the follow was withdrawn." }
+            return@withContext SocialRelationship()
+        }
+        if (existing?.status == "rejected") api.delete(endpoint, token, "follows", filters).getOrThrow()
+        if (existing == null || existing.status == "rejected") {
             val row = buildJsonObject { put("follower_id", profileId); put("following_id", targetId) }
             val follow = api.insert(endpoint, token, "follows", row.toString(), serializer = followRows).getOrThrow().singleOrNull()
                 ?: error("The instance did not confirm your follow request.")
@@ -400,12 +405,22 @@ class SocialRepository(private val api: RestApi) {
             if (rows.size > limit && last != null) SocialCursor(last.createdAt, last.id, last.score, last.asOf) else null)
     }
 
-    private suspend fun validateText(endpoint: Endpoint, token: String, text: String) {
+    private suspend fun validateText(endpoint: Endpoint, token: String, text: String): JsonArray {
         require(text.isNotBlank()) { "Write something before publishing." }
         val config = api.select(endpoint, token, "instance_config", "config_value", listOf("config_key" to "eq.max_post_length"), limit = 1, serializer = objectRows).getOrThrow()
         val raw = config.singleOrNull()?.get("config_value") as? JsonPrimitive
-        val limit = (raw?.intOrNull ?: raw?.contentOrNull?.toIntOrNull() ?: 500).coerceIn(1, 50_000)
-        require(text.length <= limit) { "Post is too long (${text.length} / $limit characters)." }
+        val configured = raw?.intOrNull ?: raw?.contentOrNull?.toIntOrNull()
+        val limit = (configured?.takeIf { it >= 1 } ?: 500).coerceAtMost(50_000)
+        val content = parseContent(endpoint, token, text)
+        // Match messageTextLength in the web client and enforce_post_length: structured
+        // mentions, tags and URLs do not consume the text budget; masked URL labels do.
+        val length = content.filterIsInstance<JsonObject>().sumOf { part ->
+            val type = (part["type"] as? JsonPrimitive)?.contentOrNull
+            val value = when (type) { "text" -> part["text"]; "url" -> part["label"]; else -> null }
+            (value as? JsonPrimitive)?.contentOrNull?.length ?: 0
+        }
+        require(length <= limit) { "Post is too long ($length / $limit characters)." }
+        return content
     }
 
     private suspend fun parseContent(endpoint: Endpoint, token: String, text: String): JsonArray {

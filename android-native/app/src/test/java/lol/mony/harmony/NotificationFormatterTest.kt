@@ -57,6 +57,14 @@ class NotificationFormatterTest {
         assertFalse(copy.toString().contains("secret plot"))
     }
 
+    @Test fun sensitivePostWithoutWarningDoesNotLeakItsPreview() {
+        val copy = NotificationFormatter.format(notification("activitypub_reply", """{
+            "post":{"is_sensitive":true,"content_preview":"private preview"}
+        }"""))
+        assertEquals("Sensitive content", copy.preview)
+        assertFalse(copy.toString().contains("private preview"))
+    }
+
     @Test fun incomingCallContractIsRecognizedWithoutInventingMessagePreview() {
         val copy = NotificationFormatter.format(notification("dm", """{"sender":{"username":"river"},"preview":"started a call"}"""))
         assertEquals("river is calling you", copy.title)

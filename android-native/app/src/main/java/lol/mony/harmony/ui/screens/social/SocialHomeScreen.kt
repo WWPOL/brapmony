@@ -59,6 +59,10 @@ private suspend fun AppState.socialAccess(): SocialAccess {
     val signedIn = auth.state.value as? AuthState.SignedIn ?: error("Sign in to use social features.")
     val id = profileId.value ?: signedIn.profile?.id ?: error("Your account profile is not available. Sign in again.")
     val token = auth.freshToken() ?: error("Your session expired. Sign in again.")
+    val active = auth.state.value as? AuthState.SignedIn ?: error("Your session ended. Sign in again.")
+    check(active.endpoint == signedIn.endpoint && (profileId.value ?: active.profile?.id) == id) {
+        "The signed-in account changed. Reopen social features."
+    }
     return SocialAccess(signedIn.endpoint, token, id)
 }
 
@@ -220,11 +224,12 @@ private fun SocialPostFeed(
     var cursor by remember(feedKey) { mutableStateOf<SocialCursor?>(null) }
     var loading by remember(feedKey) { mutableStateOf(true) }
     var loaded by remember(feedKey) { mutableStateOf(false) }
+    var retryReset by remember(feedKey) { mutableStateOf(true) }
     var error by remember(feedKey) { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
     val currentLoad by rememberUpdatedState(load)
     suspend fun fetch(reset: Boolean) {
-        loading = true; error = null
+        loading = true; error = null; retryReset = reset
         try {
             val result = currentLoad(if (reset) null else cursor)
             posts = if (reset) result.posts else (posts + result.posts).distinctBy { it.id }
@@ -237,7 +242,7 @@ private fun SocialPostFeed(
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 96.dp)) {
         item { header() }
         if (loading && !loaded) item { SocialLoading() }
-        if (error != null) item { SocialError(error!!, onRetry = { scope.launch { fetch(!loaded) } }) }
+        if (error != null) item { SocialError(error!!, onRetry = { scope.launch { fetch(retryReset) } }) }
         if (loaded && posts.isEmpty() && !loading && error == null) item { SocialMessage(emptyText) }
         items(posts, key = { it.id }) { postContent(it) }
         if (loaded && cursor != null) item {
@@ -336,7 +341,8 @@ private fun SocialTrendingTags(state: AppState, repo: SocialRepository, revision
         catch (e: Exception) { error = e.message ?: "Trending tags could not be loaded." }
     }
     Column(Modifier.padding(horizontal = 20.dp, vertical = 8.dp)) {
-        Text("Trending in the last 24 hours", style = MaterialTheme.typography.titleMedium)
+        Text("Trending posts today", style = MaterialTheme.typography.titleMedium)
+        if (tags.isNotEmpty()) Text("Tags from the past week", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         if (tags.isNotEmpty()) Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             tags.forEach { tag -> SuggestionChip(onClick = { onOpen(tag.tag) }, label = { Text("#${tag.tag}") }) }
         }

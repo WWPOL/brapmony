@@ -96,6 +96,7 @@ internal fun NotificationTargetPreview(
                             HorizontalDivider()
                             var reveal by remember(preview.post.id) { mutableStateOf(false) }
                             val warning = preview.post.contentWarning?.takeIf { it.isNotBlank() }
+                                ?: if (preview.post.isSensitive) "Sensitive content" else null
                             if (warning != null) {
                                 Text("Content warning: $warning", fontWeight = FontWeight.SemiBold)
                                 TextButton(onClick = { reveal = !reveal }) { Text(if (reveal) "Hide content" else "Show content") }

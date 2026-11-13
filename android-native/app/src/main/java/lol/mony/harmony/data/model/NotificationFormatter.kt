@@ -81,6 +81,7 @@ object NotificationFormatter {
             data.notificationFlag("encrypted") == true || message?.notificationFlag("encrypted") == true -> "Encrypted message"
             data.notificationObject("post")?.notificationText("content_warning") != null ->
                 "Content warning: ${data.notificationObject("post")?.notificationText("content_warning")}"
+            data.notificationFlag("is_sensitive") == true || data.notificationObject("post")?.notificationFlag("is_sensitive") == true -> "Sensitive content"
             isCall -> "Incoming call"
             notification.isFollowRequest -> notification.actor?.handle?.let { "$it sent you a follow request" }
             notification.type == "activitypub_follow" -> notification.actor?.handle

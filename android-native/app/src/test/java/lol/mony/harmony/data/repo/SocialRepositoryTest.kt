@@ -34,7 +34,7 @@ class SocialRepositoryTest {
         server = MockWebServer(); server.start()
         endpoint = Endpoint(server.url("/").toString().trimEnd('/'), "test-anon")
         val client = OkHttpClient.Builder().addInterceptor { chain ->
-            networkThreads.add(Thread.currentThread().name)
+            networkThreads.add(java.lang.Thread.currentThread().name)
             chain.proceed(chain.request())
         }.build()
         repo = SocialRepository(RestApi(client))
@@ -44,7 +44,7 @@ class SocialRepositoryTest {
     private fun row(id: String = post, extra: String = "") = """{"id":"$id","author_id":"$profile","created_at":"$at","content":[{"type":"text","text":"hello"}]$extra}"""
 
     @Test fun homeUsesCallerRpcAndNeverNetworksOnCallingThread() = runBlocking {
-        val caller = Thread.currentThread().name
+        val caller = java.lang.Thread.currentThread().name
         answer("[${row(extra = ",\"my_interactions\":[{\"interaction_type\":\"favorite\"}]")}]")
         val page = repo.timeline(endpoint, "user-token", profile, SocialTimeline.Home)
         assertTrue(page.posts.single().isFavorited)
@@ -146,6 +146,20 @@ class SocialRepositoryTest {
         server.takeRequest()
         val inserted = HarmonyJson.parseToJsonElement(server.takeRequest().body.readUtf8()).jsonObject
         assertFalse(inserted.containsKey("status")); assertFalse(inserted.containsKey("ap_id"))
+    }
+
+    @Test fun structuredTagsAndUrlsDoNotConsumeTextLengthBudget() = runBlocking {
+        answer("""[{"config_value":3}]""")
+        answer("[${row()}]", 201)
+        repo.publish(endpoint, "token", profile, "#Harmony https://example.org/a/long/path")
+        assertEquals(2, server.requestCount)
+    }
+
+    @Test fun unfollowDoesNotClaimSuccessWhenRowRemainsAfterDelete() = runBlocking {
+        val held = """[{"id":"$post","follower_id":"$profile","following_id":"$other","status":"accepted"}]"""
+        answer(held); answer("[]"); answer(held)
+        val failure = runCatching { repo.setFollowing(endpoint, "token", profile, other, false) }.exceptionOrNull()
+        assertNotNull(failure); assertTrue(failure!!.message!!.contains("did not confirm"))
     }
 
     @Test fun postCursorBreaksTimestampTiesWithId() = runBlocking {

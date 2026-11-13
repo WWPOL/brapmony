@@ -94,6 +94,7 @@ data class NotificationPost(
     @SerialName("author_id") val authorId: String,
     val content: JsonElement,
     @SerialName("content_warning") val contentWarning: String? = null,
+    @SerialName("is_sensitive") val isSensitive: Boolean = false,
     @SerialName("created_at") val createdAt: String,
     val url: String? = null,
     @SerialName("media_attachments") val mediaAttachments: JsonElement = JsonNull,
