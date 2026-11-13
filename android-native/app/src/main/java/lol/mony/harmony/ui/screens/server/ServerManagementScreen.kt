@@ -96,7 +96,7 @@ fun ServerManagementScreen(state: AppState, serverId: String, onBack: () -> Unit
                         onClick = { section = index }, text = { Text(label) }) }
                 }
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
-                    Box(Modifier.fillMaxWidth().widthIn(max = 840.dp)) {
+                    Box(Modifier.widthIn(max = 840.dp).fillMaxWidth()) {
                         when (section) {
                             0 -> ServerManagementOverviewPage(state, repository, data, revision, ::changed, onBack)
                             1 -> ServerManagementChannelsPage(state, repository, data, revision, ::changed)
@@ -168,7 +168,7 @@ private fun ServerManagementOverviewPage(state: AppState, repository: ServerMana
             state.openChannelId.value = null
         }
         state.channelsByServer.value = state.channelsByServer.value - server.id
-        state.serverManagementChanged(); onBack()
+        onChanged(); onBack()
     } }
 }
 
@@ -200,6 +200,6 @@ internal fun <T> ServerManagementPagedList(key: String, revision: Int, emptyText
         if (rows.isEmpty() && !loading && error == null) item { ServerManagementNote(emptyText) }
         items(rows, key = itemKey) { row(it) }
         if (loading) item { LinearProgressIndicator(Modifier.fillMaxWidth()) }
-        if (more && !loading) item { TextButton(onClick = { scope.launch { fetch(true) } }) { Text("Load more") } }
+        if (more && !loading) item { TextButton(onClick = { if (!loading) scope.launch { fetch(true) } }) { Text("Load more") } }
     }
 }
