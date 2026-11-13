@@ -27,6 +27,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import lol.mony.harmony.ui.components.ServerRail
 import lol.mony.harmony.ui.theme.HarmonyColors
@@ -71,6 +72,7 @@ fun Shell(
                     NavigationRailItem(
                         selected = destination == item,
                         onClick = { onDestination(item) },
+                        modifier = Modifier.testTag("nav-" + item.label),
                         icon = { TopIcon(item, if (item == TopDestination.Notifications) mentions else 0) },
                         label = { Text(item.label) },
                     )
@@ -86,6 +88,7 @@ fun Shell(
                     NavigationBarItem(
                         selected = destination == item,
                         onClick = { onDestination(item) },
+                        modifier = Modifier.testTag("nav-" + item.label),
                         icon = { TopIcon(item, if (item == TopDestination.Notifications) mentions else 0) },
                         label = { Text(item.label) },
                     )
