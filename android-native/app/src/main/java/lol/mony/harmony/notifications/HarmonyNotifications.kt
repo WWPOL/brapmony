@@ -113,6 +113,11 @@ object HarmonyNotifications {
      */
     fun post(context: Context, notification: Notification): Boolean {
         if (permissionState(context) != NotificationPermissionState.Granted) return false
+        // Android 13 and later require the runtime permission to post at all. The check is
+        // repeated here, where the post happens, in the form the platform API itself takes.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) !=
+            PackageManager.PERMISSION_GRANTED) return false
         ensureChannels(context)
         val copy = NotificationFormatter.format(notification)
         val channel = NotificationChannelIds.of(notification.type)

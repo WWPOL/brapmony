@@ -44,6 +44,7 @@ import kotlinx.coroutines.launch
 import kotlinx.serialization.builtins.ListSerializer
 import lol.mony.harmony.data.api.*
 import lol.mony.harmony.data.model.*
+import lol.mony.harmony.data.repo.ChatRepository
 import lol.mony.harmony.data.session.AuthState
 import lol.mony.harmony.ui.AppState
 import lol.mony.harmony.ui.LiveStatus
@@ -196,6 +197,25 @@ fun RoomScreen(state: AppState, roomId: String, direct: Boolean, appearance: Vis
         scope.launch {
             try {
                 val token = state.auth.freshToken() ?: error("Sign in again.")
+                // A retry of a send that actually landed adopts the stored row rather than
+                // posting it twice: the instance has no uniqueness rule on the nonce, so the
+                // check belongs here, as it is in the web client's outbox.
+                val already = if (retryKey == null) null else state.chats.findByNonce(
+                    session.endpoint, token, if (direct) null else roomId, if (direct) roomId else null, nonce,
+                )
+                if (already != null) {
+                    state.rooms.update(key) { current ->
+                        current.copy(
+                            rows = RoomCache.reconcile(
+                                current.rows.filterNot { it.key == (retryKey ?: nonce) },
+                                listOf(already), replaceTail = false),
+                            loaded = true)
+                    }
+                    state.resolveAuthors(session.endpoint, token, listOf(already))
+                    failure = null
+                    state.markLive(LiveStatus.Connected)
+                    return@launch
+                }
                 val sent = if (direct)
                     state.chats.sendDirectMessage(session.endpoint, token, roomId, text, parent, threadId, nonce)
                 else state.chats.sendChannelMessage(session.endpoint, token, roomId, text, parent, threadId, nonce)
@@ -369,12 +389,23 @@ fun RoomScreen(state: AppState, roomId: String, direct: Boolean, appearance: Vis
             }
         }
         Row(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 8.dp), verticalAlignment = Alignment.Bottom) {
-            OutlinedTextField(draft, { draft = it }, placeholder = { Text("Message " + (if (direct) title else "#" + title)) },
+            // A long message is not truncated as it is typed: pasting one keeps every
+            // character, the counter turns red, and Send waits. Swallowing the keystrokes
+            // instead would look like a broken keyboard, and the instance would refuse the
+            // message in a trigger anyway -- which reads as a network failure.
+            OutlinedTextField(draft, { draft = it },
+                placeholder = { Text("Message " + (if (direct) title else "#" + title)) },
                 modifier = Modifier.weight(1f).testTag("message-composer"), maxLines = 5,
-                shape = MaterialTheme.shapes.large)
+                shape = MaterialTheme.shapes.large,
+                supportingText = if (draft.length > ChatRepository.DEFAULT_MAX_LENGTH - 200) ({
+                    Text(draft.length.toString() + " / " + ChatRepository.DEFAULT_MAX_LENGTH,
+                        Modifier.testTag("message-length"))
+                }) else null,
+                isError = draft.length > ChatRepository.DEFAULT_MAX_LENGTH)
             // The send button never turns into a spinner: the row in the list is the progress,
             // and keeping the button usable is what lets a second message be written.
-            IconButton(enabled = draft.isNotBlank(), modifier = Modifier.testTag("message-send"), onClick = {
+            IconButton(enabled = draft.isNotBlank() && draft.length <= ChatRepository.DEFAULT_MAX_LENGTH,
+                modifier = Modifier.testTag("message-send"), onClick = {
                 val text = draft
                 val parent = reply?.id
                 draft = ""; reply = null

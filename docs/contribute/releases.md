@@ -69,7 +69,7 @@ To rebuild an existing tag, run the Release workflow by hand (**Actions** → **
 | desktop (Windows, macOS) | Draft release | Builds the Windows NSIS installer and the universal macOS app with `tauri-action`, and uploads them, with updater payloads and signatures when signing is configured |
 | linux | Draft release | Builds the deb and the AppImage on the CEF runtime, checks that the deb's dependencies resolve on a clean Ubuntu 24.04, runs the smoke test on both, and uploads the AppImage, its signature and the deb |
 | Updater manifest | Draft release, desktop, linux | Writes `latest.json` from the uploaded payloads and signatures; skipped when updater signing is not configured |
-| android | desktop | Builds the aarch64 APK and attaches it to the draft |
+| native-android | Draft release | Builds the native (Jetpack Compose) client from `android-native/` and attaches its APK and checksum to the draft |
 
 `latest.json` is written once, after every desktop and Linux build has uploaded. It fails without uploading when a payload or signature is missing, so a release carries a manifest for every desktop platform or none. `node --test scripts/github-release.test.mjs` tests the release script against a stand-in for the GitHub API; CI runs it with the unit tests.
 
@@ -78,7 +78,7 @@ To rebuild an existing tag, run the Release workflow by hand (**Actions** → **
 | Name | Kind | Used for | Without it |
 | --- | --- | --- | --- |
 | `TAURI_SIGNING_PRIVATE_KEY`, `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` | Secret | Minisign signatures for the updater and `latest.json` | Installers ship without updater files; installed apps are not offered the release |
-| `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD` | Secret | Release signing of the APK | A debug-signed APK, named with `_debug` |
+| `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD` | Secret | Release signing of both Android APKs | A debug-signed APK, named with `_debug` |
 | `ANDROID_GOOGLE_SERVICES_JSON_BASE64` | Secret | Firebase Cloud Messaging in the APK | The APK receives push through UnifiedPush only |
 | `TEST_SUPABASE_URL`, `TEST_SUPABASE_ANON_KEY` | Secret | Supabase values built into the frontend | Placeholders; native apps choose their instance at runtime |
 | `DEFAULT_INSTANCE_URL` | Variable | Pre-fills the instance picker of the native apps | The field starts empty |
@@ -94,7 +94,8 @@ Every asset name comes from `scripts/name-artifact.sh`: `Harmony_<Platform>_V<ve
 | Windows | `Harmony_Windows_VX.Y.Z.exe` (NSIS installer) and its `.sig` |
 | macOS | `Harmony_macOS_VX.Y.Z.dmg` (universal), `Harmony_macOS_VX.Y.Z.app.tar.gz` (updater payload) and its `.sig` |
 | Linux | `Harmony_Linux_VX.Y.Z.AppImage` and its `.sig`, `Harmony_Linux_VX.Y.Z.deb` |
-| Android | `Harmony_Android_VX.Y.Z.apk` (aarch64) |
+| Android (Tauri) | `Harmony_Android_VX.Y.Z.apk` (aarch64) |
+| Android (native) | `Harmony_Android_Native_VX.Y.Z.apk` and its `.sha256`; `_debug` before the extension when the build is test-signed. See [Native Android builds](/build/native-android-builds). |
 | All desktop | `latest.json`, the updater manifest |
 
 ## Container images
@@ -134,4 +135,5 @@ Each build is uploaded as a workflow artifact named `Harmony_<Platform>_V<versio
 | Web app | Served by each instance, so it changes when the instance updates. |
 | Desktop app (Windows, macOS, Linux AppImage) | `tauri-plugin-updater` reads `releases/latest/download/latest.json`, which resolves to the newest published release, and verifies the payload against the committed public key. |
 | Linux deb | Does not update itself; install the new deb. |
-| Android app | Checks the newest published GitHub release at most once a day and shows a notice linking to its APK. |
+| Android app (Tauri) | Checks the newest published GitHub release at most once a day and shows a notice linking to its APK. |
+| Android app (native) | Not offered a release by the app: install a version-tag APK from its release, or a branch build from that branch's rolling prerelease (see [Native Android builds](/build/native-android-builds)). |

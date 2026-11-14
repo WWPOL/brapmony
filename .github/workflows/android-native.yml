@@ -1,20 +1,57 @@
 name: Native Android build and checks
 
+# The Jetpack Compose client in android-native/. Every push builds it, whatever the
+# branch, and publishes what it built: the per-run APK as an Actions artifact, and the
+# newest build of each branch on a rolling prerelease. A version tag additionally puts
+# the APK on that tag's release (release.yml, job native-android).
+#
+# Trust: build and publish are separate jobs. The build job runs on pull requests too
+# and holds no write permission. The publish job has contents: write and runs only on a
+# push to a branch in this repository, so a fork's pull request can build but can never
+# reach a token that writes. pull_request_target is not used anywhere here: it runs the
+# base repository's token against a pull request's code.
 on:
+  # Every push, on every branch, with no path filter: the branch build is what a person
+  # downloads to try the client, so a commit that changes nothing here must still produce
+  # the APK of that commit rather than leave the previous one standing. Pull requests are
+  # filtered: they build to check the client, and a change elsewhere has nothing to check.
   push:
-    branches: [master]
-    paths: ['android-native/**', '.github/workflows/android-native.yml']
+    branches: ['**']
   pull_request:
-    paths: ['android-native/**', '.github/workflows/android-native.yml']
+    paths: ['android-native/**', 'scripts/name-artifact.sh', 'scripts/android-native-release.mjs', '.github/workflows/android-native.yml']
   workflow_dispatch:
 
+# One run per ref: a newer push supersedes the older run's build, which is what a rolling
+# release means. The publish job is not cancelled mid-flight by a newer push, though: it
+# moves a stable asset name, and a publish cut off between uploading the new bytes and
+# removing the old ones would leave both behind. The job is a few HTTP calls, so letting it
+# finish costs nothing and keeps the release consistent.
+concurrency:
+  group: android-native-${{ github.ref }}
+  cancel-in-progress: true
+
+# Nothing here writes to the repository; the publish job opts in for itself.
 permissions:
   contents: read
 
 jobs:
   build:
+    name: Build and check
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 30
+    env:
+      HAS_TEST_KEYSTORE: ${{ secrets.ANDROID_TEST_KEYSTORE_BASE64 != '' }}
+      # The stable test key's certificate SHA-256 fingerprint (repository variable, colon
+      # separated as keytool prints it). It is a digest, not the key: publishing it lets a run
+      # prove which certificate it signed with, and lets two APKs be compared without either.
+      TEST_KEY_SHA256: ${{ vars.ANDROID_TEST_KEY_SHA256 }}
+    outputs:
+      # The name the APK was given, the commit it was built from and its checksum: the
+      # three things a downloader needs to know what they have.
+      apk: ${{ steps.name.outputs.path }}
+      sha256: ${{ steps.digest.outputs.sha256 }}
+      version: ${{ steps.version.outputs.version }}
+      version-code: ${{ steps.version.outputs.version-code }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4.9.1
@@ -23,6 +60,255 @@ jobs:
           java-version: '21'
       - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3.2.2
       - run: sdkmanager 'platform-tools' 'platforms;android-37.0' 'build-tools;37.0.0'
+      # A debug keystore is generated per checkout and therefore has a random certificate, so
+      # two runs would sign with different keys and Android would refuse to install one over
+      # the other. A repository secret can supply one stable test key instead; the APK is
+      # still named _debug, because it is still a test key and never a release key. Without the
+      # secret the builds are still produced, and the run says what that means.
+      - name: Configure the test signing key
+        if: env.HAS_TEST_KEYSTORE == 'true'
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_TEST_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_TEST_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_TEST_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_TEST_KEY_PASSWORD }}
+        run: |
+          cd android-native
+          if ! printf '%s' "$KEYSTORE_B64" | tr -d '[:space:]' | base64 -d > test.keystore 2>/dev/null; then
+            echo '::error::ANDROID_TEST_KEYSTORE_BASE64 is not valid base64. Regenerate it with: base64 -w 0 test.keystore'
+            exit 1
+          fi
+          if ! keytool -list -keystore test.keystore -storepass "$KEYSTORE_PASSWORD" >/dev/null 2>&1; then
+            echo '::error::ANDROID_TEST_KEYSTORE_BASE64 decoded, but is not a keystore readable with ANDROID_TEST_KEYSTORE_PASSWORD.'
+            exit 1
+          fi
+          cat > test-keystore.properties <<EOF
+          storeFile=test.keystore
+          storePassword=$KEYSTORE_PASSWORD
+          keyAlias=$KEY_ALIAS
+          keyPassword=$KEY_PASSWORD
+          EOF
+      - name: Note the test signing key
+        if: env.HAS_TEST_KEYSTORE != 'true'
+        run: |
+          echo "::warning::No ANDROID_TEST_KEYSTORE_BASE64 secret: this APK is signed with a key generated for this checkout, whose certificate differs from every other run's. It installs on a device with no debug build of this app, but it will not install over one from another run."
+          echo "::notice::For APKs that install over each other, add ANDROID_TEST_KEYSTORE_BASE64, ANDROID_TEST_KEYSTORE_PASSWORD, ANDROID_TEST_KEY_ALIAS and ANDROID_TEST_KEY_PASSWORD (a throwaway test key, never the release key). See docs/build/native-android-builds.md."
+      # The app's version comes from the repository's VERSION file, so it is the same
+      # number the desktop and Tauri Android builds report. The APK records it in its
+      # manifest as versionName and versionCode.
+      - name: Read the version
+        id: version
+        run: |
+          version=$(tr -d '[:space:]' < VERSION)
+          if ! printf '%s\n' "$version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "::error::VERSION is not x.y.z: $version"
+            exit 1
+          fi
+          IFS=. read -r major minor patch <<<"$version"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "version-code=$((major * 1000000 + minor * 1000 + patch))" >> "$GITHUB_OUTPUT"
       # These are build, JVM and lint checks, NOT emulator or full-parity verification.
       - run: ./gradlew :app:assembleDebug :app:testDebugUnitTest :app:lintDebug --no-daemon --console=plain --max-workers=2
         working-directory: android-native
+      # A debug APK is test-signed with the repository's debug key: installable, but not
+      # an update of a release-signed install. The name says so (`_debug`).
+      - name: Name the APK
+        id: name
+        run: |
+          set -- android-native/app/build/outputs/apk/debug/*.apk
+          if [ $# -ne 1 ] || [ ! -f "$1" ]; then
+            echo "::error::Expected one debug APK, found: $*"
+            exit 1
+          fi
+          bash scripts/name-artifact.sh --native Android debug "$1"
+      # What the file is, checked against the APK itself rather than trusted: the
+      # package, the version it reports, and the key it is signed with. A build that
+      # fails any of these is not published.
+      - name: Check the APK and write its checksum
+        id: digest
+        run: |
+          apk="${{ steps.name.outputs.path }}"
+          # The runner can carry several build-tools; `.../build-tools/*/aapt2` would expand to
+          # more than one path and run the first as the command. Take the newest explicitly.
+          tools=$(ls -d "$ANDROID_HOME"/build-tools/*/ | sort -V | tail -1)
+          # Written to a file and read from it: GitHub runs the step with `pipefail`, so
+          # piping aapt2 into `head` would fail the step with SIGPIPE once aapt2 writes past
+          # the first line.
+          "${tools}aapt2" dump badging "$apk" > apk-badging.txt
+          badging=$(head -1 apk-badging.txt)
+          echo "$badging"
+          case $badging in
+            *"package: name='io.github.wwpol.brapmony.debug'"*) ;;
+            *) echo "::error::$apk is not the debug package this workflow builds"; exit 1 ;;
+          esac
+          case $badging in
+            *"versionName='${{ steps.version.outputs.version }}-debug'"*) ;;
+            *) echo "::error::$apk does not report version ${{ steps.version.outputs.version }}-debug"; exit 1 ;;
+          esac
+          "$tools"apksigner verify --print-certs "$apk" > apk-signature.txt
+          # The certificate's SHA-256 fingerprint, not its subject: two different keys can
+          # both say CN=Android Debug, and only the fingerprint says whether an APK will install
+          # over another. The fingerprint goes in the artifact's metadata so two runs can be
+          # compared, and is compared here when a stable key is configured.
+          # apksigner prints lowercase hex; keytool prints uppercase hex in colon-separated
+          # pairs. Both are the same digest, so both sides are reduced to bare lowercase hex
+          # before they are compared.
+          normalize() { printf '%s' "$1" | tr -d ':' | tr 'A-F' 'a-f'; }
+          fingerprint=$(normalize "$(sed -n 's/^.*certificate SHA-256 digest: //p' apk-signature.txt | head -1)")
+          if [ -z "$fingerprint" ]; then
+            echo '::error::the APK is not signed, or its certificate has no SHA-256 fingerprint'
+            cat apk-signature.txt
+            exit 1
+          fi
+          echo "signing certificate SHA-256: $fingerprint"
+          if [ "$HAS_TEST_KEYSTORE" = 'true' ] && [ "$fingerprint" != "$(normalize "$TEST_KEY_SHA256")" ]; then
+            echo "::error::the stable test key is configured (SHA-256 $(normalize "$TEST_KEY_SHA256")), but the APK carries $fingerprint"
+            exit 1
+          fi
+          # `sha256sum --check` reads `<hash>  <name>`: the line describes the file
+          # beside it, so checking it works from any directory the APK is in.
+          ( cd "$(dirname "$apk")" && sha256sum "$(basename "$apk")" > "$(basename "$apk").sha256" )
+          sha256=$(cut -d' ' -f1 "$apk.sha256")
+          echo "sha256=$sha256" >> "$GITHUB_OUTPUT"
+          # The same facts again, for a person reading the artifact: the commit, the
+          # version, and how it was signed.
+          {
+            echo "commit=${{ github.sha }}"
+            echo "ref=${{ github.ref_name }}"
+            echo "run=${{ github.run_id }}-${{ github.run_attempt }}"
+            echo "version=${{ steps.version.outputs.version }}"
+            echo "versionCode=${{ steps.version.outputs.version-code }}"
+            echo "sha256=$sha256"
+            echo "signing=debug key (test only, not a production release)"
+            echo "certificate-sha256=$fingerprint"
+          } > "$apk.txt"
+          cat "$apk.sha256" "$apk.txt"
+      # Immutable per run: the artifact is named after this run and never overwritten,
+      # so a link to it always means the bytes that run built.
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: native-android-apk-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ steps.name.outputs.path }}
+            ${{ steps.name.outputs.path }}.sha256
+            ${{ steps.name.outputs.path }}.txt
+          if-no-files-found: error
+          retention-days: 90
+
+  # Publishes the newest build of each branch as a rolling prerelease. A prerelease is
+  # deliberately not a release: /releases/latest skips it, so the app's own update notice
+  # and the desktop updater never offer a branch build as a release.
+  publish:
+    name: Publish the rolling prerelease
+    needs: build
+    # A push to a branch of this repository, and nothing else: a pull request from a fork
+    # runs the build job only, with no token that can write.
+    if: github.event_name == 'push' && github.repository == 'WWPOL/brapmony'
+    # Its own group, so a push that arrives while this runs does not cancel it; the newer
+    # run's publish then replaces the stable names with its own, which is the point.
+    concurrency:
+      group: android-native-publish-${{ github.ref }}
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          sparse-checkout: scripts
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version-file: .nvmrc
+      # The artifact is read-only evidence of what the build job produced; publishing
+      # reads it back rather than rebuilding, so the published bytes are the checked bytes.
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: native-android-apk-${{ github.run_id }}-${{ github.run_attempt }}
+          path: native-android
+      - name: Publish
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BRANCH: ${{ github.ref_name }}
+          COMMIT: ${{ github.sha }}
+          VERSION: ${{ needs.build.outputs.version }}
+          VERSION_CODE: ${{ needs.build.outputs.version-code }}
+          SHA256: ${{ needs.build.outputs.sha256 }}
+        run: |
+          set -- native-android/*.apk
+          if [ $# -ne 1 ] || [ ! -f "$1" ]; then
+            echo "::error::Expected one downloaded APK, found: $*"
+            exit 1
+          fi
+          apk="$1"
+          actual=$(sha256sum "$apk" | cut -d' ' -f1)
+          if [ "$actual" != "$SHA256" ]; then
+            echo "::error::The downloaded APK hashes to $actual, the build reported $SHA256"
+            exit 1
+          fi
+          node scripts/android-native-release.mjs rolling --apk "$apk" \
+            --branch "$BRANCH" --commit "$COMMIT" \
+            --body "$(printf '%s\n' \
+              "Rolling build of \`$BRANCH\` for the native (Jetpack Compose) Android client." \
+              "" \
+              "| | |" \
+              "| --- | --- |" \
+              "| Version | $VERSION (versionCode $VERSION_CODE) |" \
+              "| Commit | \`$COMMIT\` |" \
+              "| Checksum | \`$SHA256\` |" \
+              "" \
+              "\`Harmony_Android_Native_latest.apk\` always names the newest build of this branch; the" \
+              "other APK is the build of the commit above and never changes. Both are **debug-signed" \
+              "with a test key**: installable, but Android will not install one over a release-signed" \
+              "build, and these are not production releases. Releases are cut from version tags.")"
+      # A rolling release is a prerelease, so /releases/latest/download/... would not
+      # resolve to it. The link people are given is the tag-specific one; this step fetches
+      # it back over the same path a browser would and checks that what arrives is the APK
+      # that was just built: package, versionCode, certificate fingerprint and checksum.
+      - name: Check the published download
+        env:
+          BRANCH: ${{ github.ref_name }}
+          EXPECTED_SHA256: ${{ needs.build.outputs.sha256 }}
+          EXPECTED_VERSION_CODE: ${{ needs.build.outputs.version-code }}
+        run: |
+          tag=$(node -e "import('./scripts/android-native-release.mjs').then(m => console.log(m.rollingTag(process.env.BRANCH)))")
+          url="https://github.com/${{ github.repository }}/releases/download/$tag/Harmony_Android_Native_latest.apk"
+          echo "checking $url"
+          # GitHub answers a download URL with a redirect to a signed blob; -L follows it.
+          for attempt in 1 2 3 4 5; do
+            if curl -fsSL -o published.apk "$url"; then break; fi
+            echo "attempt $attempt: not downloadable yet"; sleep 10
+          done
+          [ -s published.apk ] || { echo "::error::$url did not download"; exit 1; }
+          tools=$(ls -d "$ANDROID_HOME"/build-tools/*/ | sort -V | tail -1)
+          badging=$("${tools}aapt2" dump badging published.apk | head -1)
+          echo "$badging"
+          case $badging in
+            *"package: name='io.github.wwpol.brapmony.debug'"*) ;;
+            *) echo '::error::the published APK is not this app'; exit 1 ;;
+          esac
+          case $badging in
+            *"versionCode='$EXPECTED_VERSION_CODE'"*) ;;
+            *) echo "::error::the published APK is not versionCode $EXPECTED_VERSION_CODE"; exit 1 ;;
+          esac
+          actual=$(sha256sum published.apk | cut -d' ' -f1)
+          [ "$actual" = "$EXPECTED_SHA256" ] || { echo "::error::the published APK hashes to $actual, the build reported $EXPECTED_SHA256"; exit 1; }
+          fingerprint=$("${tools}apksigner" verify --print-certs published.apk | sed -n 's/^.*certificate SHA-256 digest: //p' | head -1)
+          [ -n "$fingerprint" ] || { echo '::error::the published APK is not signed'; exit 1; }
+          echo "published APK: versionCode $EXPECTED_VERSION_CODE, sha256 $actual, certificate SHA-256 $fingerprint"
+          echo "- Fetched the download back and checked it: package io.github.wwpol.brapmony.debug, versionCode $EXPECTED_VERSION_CODE, sha256 $actual, certificate SHA-256 $fingerprint." >> "$GITHUB_STEP_SUMMARY"
+      - name: Report the download links
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BRANCH: ${{ github.ref_name }}
+        run: |
+          tag=$(node -e "import('./scripts/android-native-release.mjs').then(m => console.log(m.rollingTag(process.env.BRANCH)))")
+          {
+            echo "### Native Android: rolling build of \`$BRANCH\`"
+            echo ""
+            echo "- [Harmony_Android_Native_latest.apk](https://github.com/${{ github.repository }}/releases/download/$tag/Harmony_Android_Native_latest.apk) (newest build of this branch)"
+            echo "- [The rolling release](https://github.com/${{ github.repository }}/releases/tag/$tag)"
+            echo "- [This run's artifact](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})"
+            echo ""
+            echo "Debug-signed with the test key; not a production release."
+          } >> "$GITHUB_STEP_SUMMARY"

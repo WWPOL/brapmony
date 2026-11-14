@@ -27,6 +27,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -123,7 +124,11 @@ private fun PicturePicker(state: AppState, repository: AccountRepository, profil
     var progress by remember { mutableStateOf(0f) }
     var failure by remember { mutableStateOf<String?>(null) }
     var notice by remember { mutableStateOf<String?>(null) }
-    val baseUrl = (state.auth.state.value as? lol.mony.harmony.data.session.AuthState.SignedIn)?.endpoint?.baseUrl
+    // Read as state, not as `StateFlow.value`: the picture has to be resolved against the
+    // instance the account is signed in to, and a direct read would not recompose if that
+    // changed. Compose's lint rejects the direct read for the same reason.
+    val auth by state.auth.state.collectAsState()
+    val baseUrl = (auth as? lol.mony.harmony.data.session.AuthState.SignedIn)?.endpoint?.baseUrl
 
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult

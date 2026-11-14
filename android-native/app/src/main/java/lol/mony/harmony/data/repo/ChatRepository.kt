@@ -77,26 +77,44 @@ class ChatRepository(private val rest: RestApi) {
                                       channelId: String?, conversationId: String?, replyTo: String?,
                                       threadId: String?, nonce: String?): Message {
         require(text.isNotBlank()) { "Write a message first." }
+        // Postgres text cannot hold a NUL, and the instance answers such a send with
+        // `unsupported Unicode escape sequence` rather than storing it.
+        require('\u0000' !in text) { "That message contains a character the instance cannot store. Remove it and send again." }
+        require(text.length <= ABSOLUTE_MAX_LENGTH) {
+            "This message is longer than the instance allows. Shorten it and send again."
+        }
         val profileId = ProfileRepository(rest).mine(endpoint, token)?.profile?.id ?: error("Your profile could not be loaded. Nothing was sent.")
         val body = buildJsonObject {
             put("user_id", profileId)
             channelId?.let { put("channel_id", it) }; conversationId?.let { put("conversation_id", it) }
             replyTo?.let { put("reply_to", it) }; threadId?.let { put("thread_id", it) }
             nonce?.let { value ->
+                // `created_via` is a reserved key the instance accepts only as the web
+                // client's own value, so this client says exactly that; anything else is
+                // refused with 42501 and the send is lost.
                 put("metadata", buildJsonObject {
-                    put("created_via", "harmony_android")
+                    put("created_via", "harmony_client")
                     put("client_nonce", value)
                 })
             }
             put("content", buildJsonArray { add(buildJsonObject { put("type", "text"); put("text", text) }) })
         }
-        return rest.insert(endpoint, token, "messages", body.toString(),
-            serializer = ListSerializer(Message.serializer())).getOrThrow().firstOrNull()
-            ?: error("The instance did not accept this message. It may have been blocked by moderation.")
+        val stored = rest.insert(endpoint, token, "messages", body.toString(),
+            serializer = ListSerializer(Message.serializer())).getOrThrow()
+        stored.firstOrNull()?.let { return it }
+        // PostgREST can acknowledge a write with 201 and no representation. That is not a
+        // failure and must not be reported as one: the row is there, and the nonce the send
+        // carried is how to find it. A send without a nonce has nothing to look it up by, so
+        // only then is an empty answer the client's problem.
+        if (nonce != null) {
+            findByNonce(endpoint, token, channelId, conversationId, nonce)?.let { return it }
+        }
+        error("The instance did not accept this message. It may have been blocked by moderation.")
     }
 
     suspend fun editMessage(endpoint: Endpoint, token: String, messageId: String, text: String): Result<Message> = runCatching {
         require(text.isNotBlank()) { "A message cannot be empty." }
+        require(text.length <= ABSOLUTE_MAX_LENGTH) { "This message is longer than the instance allows. Shorten it and save again." }
         val original = rest.select(endpoint, token, "messages", filters = listOf("id" to "eq.$messageId"),
             serializer = ListSerializer(Message.serializer())).getOrThrow().firstOrNull()
             ?: error("This message is no longer available.")
@@ -145,6 +163,25 @@ class ChatRepository(private val rest: RestApi) {
         thread(endpoint, token, id).getOrThrow() ?: error("The new thread could not be loaded.")
     }
 
+    /**
+     * The row a previous send of [nonce] already stored, if any.
+     *
+     * The instance does not enforce uniqueness on `metadata.client_nonce`, so a retry that just
+     * sends again can produce a second message. The reference's outbox checks the nonce before
+     * retrying (`useOutbox.ts`), and so does this: a retry that already landed adopts the row
+     * the instance holds instead of posting a duplicate.
+     */
+    suspend fun findByNonce(endpoint: Endpoint, token: String, channelId: String?, conversationId: String?,
+                            nonce: String): Message? = runCatching {
+        val filters = buildList {
+            add("metadata->>client_nonce" to "eq.$nonce")
+            channelId?.let { add("channel_id" to "eq.$it") }
+            conversationId?.let { add("conversation_id" to "eq.$it") }
+        }
+        rest.select(endpoint, token, "messages", filters = filters, limit = 1,
+            serializer = ListSerializer(Message.serializer())).getOrThrow().firstOrNull()
+    }.getOrNull()
+
     /** One message by id, for a notification that names a message outside the loaded page. */
     suspend fun messageById(endpoint: Endpoint, token: String, messageId: String): Message? =
         rest.select(endpoint, token, "messages", filters = listOf("id" to "eq.$messageId", "is_deleted" to "eq.false"),
@@ -160,7 +197,13 @@ class ChatRepository(private val rest: RestApi) {
         rest.insert(endpoint, token, "reactions", buildJsonObject {
             put("message_id", messageId); put("user_id", userId); put("custom_emoji_content", emoji)
         }.toString(), serializer = ListSerializer(Reaction.serializer())).getOrThrow()
-        Unit
+    }.map { Unit }.recoverCatching { error ->
+        // The instance allows 20 reactions from one person on one message and says so in the
+        // database's own words; turning that into a sentence is the client's job.
+        if (error.message?.contains("Maximum emoji reactions", ignoreCase = true) == true) {
+            throw IllegalArgumentException("You have reached the 20-reaction limit on this message.")
+        }
+        throw error
     }
 
     suspend fun removeReaction(endpoint: Endpoint, token: String, messageId: String, userId: String, emoji: String): Result<Unit> =
@@ -210,7 +253,13 @@ class ChatRepository(private val rest: RestApi) {
         put("p_query", query); put("p_limit", limit.coerceIn(1, PAGE)); channelId?.let { put("p_channel_id", it) }
     }.toString(), ListSerializer(Message.serializer()))
 
-    companion object { const val PAGE = 50 }
+    companion object {
+        const val PAGE = 50
+
+        /** The default `max_message_length`, and the ceiling the instance clamps it to. */
+        const val DEFAULT_MAX_LENGTH = 2000
+        const val ABSOLUTE_MAX_LENGTH = 50000
+    }
 }
 
 internal fun requiresEncryption(element: JsonElement): Boolean = when (element) {
