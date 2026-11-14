@@ -1,0 +1,13 @@
+== device emulator-5558
+  model: Android ATD built for x86_64
+  sdk:   30
+== package io.github.wwpol.brapmony.debug
+  version: 1.9.6-debug
+== data directories
+  present: /data_mirror/data_de/null/0/io.github.wwpol.brapmony.debug
+  present: /data/user_de/0/io.github.wwpol.brapmony.debug
+  present: /data/user/0/io.github.wwpol.brapmony.debug
+== the abort, if the device already logged one
+  none in the current buffers
+== verdict
+  both data directories are present: this is not the reported failure.

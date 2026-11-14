@@ -1,0 +1,17 @@
+== device emulator-5558
+  model: Android ATD built for x86_64
+  sdk:   30
+== package io.github.wwpol.brapmony.debug
+  version: 1.9.6-debug
+== data directories
+  MISSING: /data_mirror/data_de/null/0/io.github.wwpol.brapmony.debug
+  MISSING: /data/user_de/0/io.github.wwpol.brapmony.debug
+  present: /data/user/0/io.github.wwpol.brapmony.debug
+== the abort, if the device already logged one
+  none in the current buffers
+== verdict
+  the device-protected mirror entry is missing.
+  The app's own data is still there, so nothing is lost yet: this is the state
+  that aborts every launch in zygote64, before any app code runs.
+  Safe repair, keeps app data: reinstall the same build in place.
+    /home/noah/documents/chat/brapmony/.worktrees/task-build-native-android-app-with-parity-v8hy4zr4/android-native/doctor.sh --serial emulator-5558 --repair --apk <the same build>.apk

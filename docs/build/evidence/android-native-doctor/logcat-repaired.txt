@@ -1,0 +1,147 @@
+--------- beginning of system
+11-14 11:25:30.031   495   512 W Looper  : Slow delivery took 1530ms android.fg h=android.os.Handler c=<recycled PooledLambda@a53e301> m=0
+11-14 11:25:30.037   495   512 W Looper  : Slow dispatch took 354ms android.fg h=android.os.Handler c=<recycled PooledLambda@a53e301> m=0
+--------- beginning of main
+11-14 11:25:30.102   495   513 W system_server: Long monitor contention with owner Binder:495_2 (510) at void com.android.server.am.ActivityManagerService.serviceDoneExecuting(android.os.IBinder, int, int, int)(ActivityManagerService.java:15232) waiters=2 in void com.android.server.am.ActivityManagerService.dispatchProcessesChanged() for 515ms
+11-14 11:25:30.111   495   513 W Looper  : Slow dispatch took 524ms android.ui h=com.android.server.am.ActivityManagerService$UiHandler c=null m=31
+11-14 11:25:30.438   793   793 D CarrierSvcBindHelper: No carrier app for: 0
+11-14 11:25:30.635   495   512 W Looper  : Slow dispatch took 598ms android.fg h=android.os.Handler c=<recycled PooledLambda@aed5cba> m=0
+11-14 11:25:30.556   793   793 D CarrierSvcBindHelper: No carrier app for: 0
+11-14 11:25:30.903   793   793 D CarrierConfigLoader: mHandler: 9 phoneId: 0
+11-14 11:25:30.938   495   520 W TextServicesManagerService: no available spell checker services found
+11-14 11:25:30.951   495   512 W Looper  : Slow dispatch took 315ms android.fg h=android.os.Handler c=<recycled PooledLambda@112e28e> m=0
+11-14 11:25:31.155   495   520 W Searchables: No global search activity found
+11-14 11:25:31.175   495   512 W Looper  : Slow dispatch took 223ms android.fg h=android.os.Handler c=<recycled PooledLambda@947ff47> m=0
+11-14 11:25:31.422   495   512 W Looper  : Slow dispatch took 240ms android.fg h=android.os.Handler c=<recycled PooledLambda@b816289> m=0
+11-14 11:25:31.734   495   512 W Looper  : Slow dispatch took 278ms android.fg h=android.os.Handler c=<recycled PooledLambda@ae2809d> m=0
+11-14 11:25:31.968   495   520 W VoiceInteractionManager: no available voice recognition services found for user 0
+11-14 11:25:32.049   495   512 W Looper  : Slow dispatch took 273ms android.fg h=android.os.Handler c=<recycled PooledLambda@cb712f6> m=0
+11-14 11:25:32.154   495   512 W Looper  : Slow dispatch took 104ms android.fg h=android.os.Handler c=com.android.server.role.-$$Lambda$RoleManagerService$p0uu3WH3gz96-kAWnyu6IUHMtCg@4593c3d m=0
+11-14 11:25:32.305   495   512 W Looper  : Slow dispatch took 140ms android.fg h=android.os.Handler c=<recycled PooledLambda@d827821> m=0
+11-14 11:25:31.558   495   520 W Searchables: No global search activity found
+11-14 11:25:32.405   495   503 I system_server: Background concurrent copying GC freed 63760(3310KB) AllocSpace objects, 31(1196KB) LOS objects, 49% free, 9113KB/17MB, paused 1.302ms total 4.812s
+11-14 11:25:32.568   495   512 W Looper  : Slow dispatch took 243ms android.fg h=android.os.Handler c=<recycled PooledLambda@bad6446> m=0
+11-14 11:25:32.637  1756  1756 W sh      : type=1400 audit(0.0:12): avc: denied { ioctl } for path="socket:[35685]" dev="sockfs" ino=35685 ioctlcmd=0x5401 scontext=u:r:runas_app:s0:c77,c256,c512,c768 tcontext=u:r:su:s0 tclass=unix_stream_socket permissive=0 app=io.github.wwpol.brapmony.debug
+11-14 11:25:32.641  1756  1756 W sh      : type=1400 audit(0.0:13): avc: denied { ioctl } for path="socket:[35687]" dev="sockfs" ino=35687 ioctlcmd=0x5401 scontext=u:r:runas_app:s0:c77,c256,c512,c768 tcontext=u:r:su:s0 tclass=unix_stream_socket permissive=0 app=io.github.wwpol.brapmony.debug
+11-14 11:25:32.834   495   512 W Looper  : Slow dispatch took 185ms android.fg h=android.os.Handler c=<recycled PooledLambda@1853607> m=0
+11-14 11:25:32.854  1324  1342 I PermissionControllerServiceImpl: Updating user sensitive for uid 10077
+11-14 11:25:34.474   495   515 D EventSequenceValidator: Transition from ACTIVITY_CANCELLED to INTENT_STARTED
+11-14 11:25:34.491   495  1575 I ActivityTaskManager: START u0 {flg=0x10000000 cmp=io.github.wwpol.brapmony.debug/lol.mony.harmony.MainActivity} from uid 0
+11-14 11:25:34.532   365   365 I perfetto: ing_service_impl.cc:758 Configured tracing session 3, #sources:1, duration:5000 ms, #buffers:1, total buffer size:4096 KB, total sessions:1, uid:1071 session name: ""
+11-14 11:25:34.535   364   364 I perfetto: probes_producer.cc:230  Ftrace setup (target_buf=3)
+--------- beginning of kernel
+11-14 11:25:34.615     0     0 W perfetto: enabled ftrace
+11-14 11:25:34.581   276   336 W EmuHWC2 : No layers, exit, buffer 0x0
+11-14 11:25:34.615   276   336 W EmuHWC2 : No layers, exit, buffer 0x0
+11-14 11:25:34.600   364   364 I perfetto: ftrace_procfs.cc:176    enabled ftrace
+11-14 11:25:34.704   495   516 W system_server: Long monitor contention with owner Binder:495_F (1575) at android.app.ActivityManager$TaskSnapshot com.android.server.wm.TaskSnapshotCache.getSnapshot(int, int, boolean, boolean)(TaskSnapshotCache.java:68) waiters=1 in void com.android.server.wm.WindowAnimator.lambda$new$1$WindowAnimator(long) for 138ms
+11-14 11:25:34.715   276   336 W EmuHWC2 : No layers, exit, buffer 0x0
+11-14 11:25:34.845   495   522 W ActivityManager: Slow operation: 67ms so far, now at startProcess: asking zygote to start proc
+11-14 11:25:34.869   495   515 W ActivityManager: Slow operation: 112ms so far, now at startProcess: done starting proc!
+11-14 11:25:34.883   276   336 I chatty  : uid=1000(system) HwBinder:276_2 identical 2 lines
+11-14 11:25:34.950   276   336 W EmuHWC2 : No layers, exit, buffer 0x0
+11-14 11:25:34.981   495   515 D EventSequenceValidator: Transition from INTENT_STARTED to ACTIVITY_LAUNCHED
+11-14 11:25:34.993   275   275 D goldfish-address-space: claimShared: Ask to claim region [0x3fc384000 0x3fc546000]
+11-14 11:25:35.045  1764  1766 I cmd     : oneway function results will be dropped but finished with status OK and parcel size 4
+11-14 11:25:35.116   276   336 W EmuHWC2 : No layers, exit, buffer 0x0
+11-14 11:25:35.257   495   512 W Looper  : Drained
+11-14 11:25:35.166   276   336 I chatty  : uid=1000(system) HwBinder:276_2 identical 2 lines
+11-14 11:25:35.199   276   336 W EmuHWC2 : No layers, exit, buffer 0x0
+11-14 11:25:35.354   258   258 D Zygote  : Forked child process 1772
+11-14 11:25:35.474  1772  1772 I .brapmony.debu: Late-enabling -Xcheck:jni
+11-14 11:25:35.643  1772  1772 I .brapmony.debu: Unquickening 12 vdex files!
+11-14 11:25:35.661  1772  1772 W .brapmony.debu: Unexpected CPU variant for X86 using defaults: x86_64
+11-14 11:25:35.731   983   989 I adbd    : jdwp connection from 1772
+11-14 11:25:35.754   495   522 W ActivityManager: Slow operation: 975ms so far, now at startProcess: returned from zygote!
+11-14 11:25:35.756   495   522 W ActivityManager: Slow operation: 977ms so far, now at startProcess: done updating battery stats
+11-14 11:25:35.758   495   522 W ActivityManager: Slow operation: 980ms so far, now at startProcess: building log message
+11-14 11:25:35.759   495   522 I ActivityManager: Start proc 1772:io.github.wwpol.brapmony.debug/u0a77 for pre-top-activity {io.github.wwpol.brapmony.debug/lol.mony.harmony.MainActivity}
+11-14 11:25:35.759   495   522 W ActivityManager: Slow operation: 981ms so far, now at startProcess: starting to update pids map
+11-14 11:25:35.762   495   522 W ActivityManager: Slow operation: 983ms so far, now at startProcess: done updating pids map
+11-14 11:25:36.017   276   336 W EmuHWC2 : No layers, exit, buffer 0x0
+11-14 11:25:36.082   495  1575 W ActivityManager: Slow operation: 184ms so far, now at attachApplicationLocked: after mServices.attachApplicationLocked
+11-14 11:25:36.166   276   336 I chatty  : uid=1000(system) HwBinder:276_2 identical 4 lines
+11-14 11:25:36.199   276   336 W EmuHWC2 : No layers, exit, buffer 0x0
+11-14 11:25:36.271   495   515 W system_server: Long monitor contention with owner Binder:495_F (1575) at void com.android.server.am.ActivityManagerService.attachApplication(android.app.IApplicationThread, long)(ActivityManagerService.java:5460) waiters=0 in void com.android.server.am.ProcessRecord.onStartActivity(int, boolean, java.lang.String, long) for 272ms
+11-14 11:25:36.575   495   513 W Looper  : Slow dispatch took 279ms android.ui h=com.android.server.am.ActivityManagerService$UiHandler c=null m=53
+11-14 11:25:37.307  1772  1772 I .brapmony.debu: The ClassLoaderContext is a special shared library.
+11-14 11:25:39.561   364   364 I perfetto: probes_producer.cc:329  Producer stop (id=3)
+11-14 11:25:39.610     0     0 W perfetto: disabled ftrace
+11-14 11:25:39.595   364   364 I perfetto: ftrace_procfs.cc:183    disabled ftrace
+11-14 11:25:39.673   365   365 I perfetto: ng_service_impl.cc:1948 Tracing session 3 ended, total sessions:0
+11-14 11:25:40.135   495   515 W system_server: Long monitor contention with owner LazyTaskWriterThread (893) at void com.android.server.wm.TaskPersister$TaskWriteQueueItem.process()(TaskPersister.java:555) waiters=0 in void com.android.server.wm.ActivityRecord$2.run() for 248ms
+11-14 11:25:41.511   495   515 W system_server: Long monitor contention with owner LazyTaskWriterThread (893) at void com.android.server.wm.WindowManagerService.removeObsoleteTaskFiles(android.util.ArraySet, int[])(WindowManagerService.java:3685) waiters=0 in void com.android.server.wm.ActivityRecord$2.run() for 368ms
+11-14 11:25:41.971   495   893 E TaskPersister: File error accessing recents directory (directory doesn't exist?).
+11-14 11:25:43.163   495   513 W system_server: Long monitor contention with owner android.fg (512) at boolean com.android.server.am.ActivityManagerService.unbindService(android.app.IServiceConnection)(ActivityManagerService.java:15196) waiters=0 in void com.android.server.am.ActivityManagerService.dispatchUidsChanged() for 107ms
+11-14 11:25:43.197   495   513 W Looper  : Slow dispatch took 142ms android.ui h=com.android.server.am.ActivityManagerService$UiHandler c=null m=53
+11-14 11:25:43.221   495   512 W Looper  : Slow dispatch took 180ms android.fg h=android.os.Handler c=<recycled PooledLambda@bad6446> m=0
+11-14 11:25:44.681   495   515 W ActivityTaskManager: Launch timeout has expired, giving up wake lock!
+11-14 11:25:46.145   495   513 W system_server: Long monitor contention with owner android.display (515) at void com.android.server.am.ProcessRecord.setPendingUiClean(boolean)(ProcessRecord.java:1435) waiters=0 in void com.android.server.am.ActivityManagerService.dispatchProcessesChanged() for 134ms
+11-14 11:25:46.147   495   513 W Looper  : Slow dispatch took 139ms android.ui h=com.android.server.am.ActivityManagerService$UiHandler c=null m=31
+11-14 11:25:47.036  1772  1772 D NetworkSecurityConfig: Using Network Security Config from resource network_security_config debugBuild: true
+11-14 11:25:47.065  1772  1772 D NetworkSecurityConfig: Using Network Security Config from resource network_security_config debugBuild: true
+11-14 11:25:49.884  1772  1772 I .brapmony.debu: Waiting for a blocking GC ClassLinker
+11-14 11:25:49.929  1772  1794 D libEGL  : loaded /vendor/lib64/egl/libEGL_emulation.so
+11-14 11:25:49.978  1772  1794 D libEGL  : loaded /vendor/lib64/egl/libGLESv1_CM_emulation.so
+11-14 11:25:50.040  1772  1794 D libEGL  : loaded /vendor/lib64/egl/libGLESv2_emulation.so
+11-14 11:25:50.077  1772  1772 I .brapmony.debu: WaitForGcToComplete blocked ClassLinker on ClassLinker for 193.364ms
+11-14 11:25:50.081  1772  1772 W .brapmony.debu: Verification of void androidx.activity.ComponentActivity.addObserverForBackInvoker$lambda$0(androidx.activity.OnBackPressedDispatcher, androidx.activity.ComponentActivity, androidx.lifecycle.LifecycleOwner, androidx.lifecycle.Lifecycle$Event) took 199.226ms (145.56 bytecodes/s) (1880B approximate peak alloc)
+11-14 11:25:50.401   495   495 W system_server: Long monitor contention with owner android.bg (520) at boolean android.os.MessageQueue.enqueueMessage(android.os.Message, long)(MessageQueue.java:600) waiters=0 in android.os.Message android.os.MessageQueue.next() for 221ms
+11-14 11:25:50.403   495   495 W Looper  : Slow delivery took 223ms main h=android.service.notification.NotificationListenerService$MyHandler c=null m=7
+11-14 11:25:50.810   495   495 W system_server: Long monitor contention with owner android.bg (520) at boolean android.os.MessageQueue.enqueueMessage(android.os.Message, long)(MessageQueue.java:600) waiters=0 in android.os.Message android.os.MessageQueue.next() for 295ms
+11-14 11:25:52.121  1772  1791 I .brapmony.debu: Waiting for a blocking GC ProfileSaver
+11-14 11:25:54.040  1772  1791 I .brapmony.debu: WaitForGcToComplete blocked ProfileSaver on ClassLinker for 1.920s
+11-14 11:25:54.691  1772  1772 I Choreographer: Skipped 315 frames!  The application may be doing too much work on its main thread.
+11-14 11:25:56.891  1772  1782 I .brapmony.debu: Background young concurrent copying GC freed 2420(379KB) AllocSpace objects, 0(0B) LOS objects, 42% free, 2941KB/5152KB, paused 736us total 1.314s
+11-14 11:25:57.897   495   495 W Looper  : Drained
+11-14 11:26:03.695  1772  1792 D HostConnection: HostConnection::get() New Host Connection established 0x7c390a090fd0, tid 1792
+11-14 11:26:03.874  1772  1792 D HostConnection: HostComposition ext ANDROID_EMU_CHECKSUM_HELPER_v1 ANDROID_EMU_native_sync_v2 ANDROID_EMU_dma_v1 ANDROID_EMU_direct_mem ANDROID_EMU_host_composition_v1 ANDROID_EMU_host_composition_v2 ANDROID_EMU_vulkan ANDROID_EMU_deferred_vulkan_commands ANDROID_EMU_vulkan_null_optional_strings ANDROID_EMU_vulkan_create_resources_with_requirements ANDROID_EMU_YUV_Cache ANDROID_EMU_vulkan_ignored_handles ANDROID_EMU_has_shared_slots_host_memory_allocator ANDROID_EMU_vulkan_free_memory_sync ANDROID_EMU_vulkan_shader_float16_int8 ANDROID_EMU_vulkan_async_queue_submit ANDROID_EMU_sync_buffer_data ANDROID_EMU_vulkan_async_qsri ANDROID_EMU_read_color_buffer_dma ANDROID_EMU_hwc_color_transform GL_OES_EGL_image_external_essl3 GL_OES_vertex_array_object GL_KHR_texture_compression_astc_ldr ANDROID_EMU_host_side_tracing ANDROID_EMU_gles_max_version_3_0 
+11-14 11:26:03.906   148   148 I hwservicemanager: getTransport: Cannot find entry android.hardware.configstore@1.0::ISurfaceFlingerConfigs/default in either framework or device manifest.
+11-14 11:26:03.925  1772  1792 D EGL_emulation: eglCreateContext: 0x7c38fa114500: maj 3 min 0 rcv 3
+11-14 11:26:03.942  1772  1792 D EGL_emulation: eglMakeCurrent: 0x7c38fa114500: ver 3 0 (tinfo 0x7c389a0d3b20) (first time)
+11-14 11:26:04.102   275   275 D goldfish-address-space: claimShared: Ask to claim region [0x3fc1c2000 0x3fc384000]
+11-14 11:26:04.118   148   148 I hwservicemanager: getTransport: Cannot find entry android.hardware.graphics.mapper@4.0::IMapper/default in either framework or device manifest.
+11-14 11:26:04.120  1772  1792 I Gralloc4: mapper 4.x is not supported
+11-14 11:26:04.142  1772  1792 D HostConnection: createUnique: call
+11-14 11:26:04.147  1772  1792 D HostConnection: HostConnection::get() New Host Connection established 0x7c390a092710, tid 1792
+11-14 11:26:04.148  1772  1792 D goldfish-address-space: allocate: Ask for block of size 0x100
+11-14 11:26:04.157  1772  1792 D goldfish-address-space: allocate: ioctl allocate returned offset 0x3fbffe000 size 0x2000
+11-14 11:26:04.301  1772  1792 D HostConnection: HostComposition ext ANDROID_EMU_CHECKSUM_HELPER_v1 ANDROID_EMU_native_sync_v2 ANDROID_EMU_dma_v1 ANDROID_EMU_direct_mem ANDROID_EMU_host_composition_v1 ANDROID_EMU_host_composition_v2 ANDROID_EMU_vulkan ANDROID_EMU_deferred_vulkan_commands ANDROID_EMU_vulkan_null_optional_strings ANDROID_EMU_vulkan_create_resources_with_requirements ANDROID_EMU_YUV_Cache ANDROID_EMU_vulkan_ignored_handles ANDROID_EMU_has_shared_slots_host_memory_allocator ANDROID_EMU_vulkan_free_memory_sync ANDROID_EMU_vulkan_shader_float16_int8 ANDROID_EMU_vulkan_async_queue_submit ANDROID_EMU_sync_buffer_data ANDROID_EMU_vulkan_async_qsri ANDROID_EMU_read_color_buffer_dma ANDROID_EMU_hwc_color_transform GL_OES_EGL_image_external_essl3 GL_OES_vertex_array_object GL_KHR_texture_compression_astc_ldr ANDROID_EMU_host_side_tracing ANDROID_EMU_gles_max_version_3_0 
+11-14 11:26:04.551  1772  1772 W .brapmony.debu: Accessing hidden method Landroid/os/SystemProperties;->addChangeCallback(Ljava/lang/Runnable;)V (greylist, reflection, allowed)
+11-14 11:26:04.590   495   515 D EventSequenceValidator: Transition from ACTIVITY_LAUNCHED to ACTIVITY_FINISHED
+11-14 11:26:05.155   495   515 W system_server: Long monitor contention with owner android.anim (516) at void com.android.server.wm.WindowManagerService.removeWindow(com.android.server.wm.Session, android.view.IWindow)(WindowManagerService.java:1895) waiters=0 in void com.android.server.wm.WindowManagerService$H.handleMessage(android.os.Message) for 192ms
+11-14 11:26:05.161   495   516 I Choreographer: Skipped 31 frames!  The application may be doing too much work on its main thread.
+11-14 11:26:05.202   276   336 W EmuHWC2 : No layers, exit, buffer 0x0
+11-14 11:26:05.248  1772  1772 I Choreographer: Skipped 537 frames!  The application may be doing too much work on its main thread.
+11-14 11:26:05.301   276   336 W EmuHWC2 : No layers, exit, buffer 0x0
+11-14 11:26:05.583   276   336 I chatty  : uid=1000(system) HwBinder:276_2 identical 4 lines
+11-14 11:26:05.766   276   336 W EmuHWC2 : No layers, exit, buffer 0x0
+11-14 11:26:05.824   371   576 E IPCThreadState: binder thread pool (1 threads) starved for 1238 ms
+11-14 11:26:06.594  1772  1800 D ProfileInstaller: Installing profile for io.github.wwpol.brapmony.debug
+11-14 11:26:06.746  1772  1796 W .brapmony.debu: Verification of java.lang.Object androidx.datastore.core.FileStorageConnection.readScope(kotlin.jvm.functions.Function3, kotlin.coroutines.Continuation) took 142.938ms (1273.28 bytecodes/s) (6056B approximate peak alloc)
+11-14 11:26:06.758  1772  1800 W .brapmony.debu: Verification of java.io.InputStream androidx.profileinstaller.DeviceProfileWriter.openStreamFromAssets(android.content.res.AssetManager, java.lang.String) took 124.374ms (273.37 bytecodes/s) (2392B approximate peak alloc)
+11-14 11:26:06.987   495   520 D ArtManagerInternalImpl: /data/misc/iorapd/io.github.wwpol.brapmony.debug/1009006/lol.mony.harmony.MainActivity/compiled_traces/compiled_trace.pb doesn't exist
+11-14 11:26:06.995  1772  1796 W .brapmony.debu: Verification of java.lang.Object androidx.datastore.core.FileStorageConnection.writeScope(kotlin.jvm.functions.Function2, kotlin.coroutines.Continuation) took 248.182ms (1369.96 bytecodes/s) (8040B approximate peak alloc)
+11-14 11:26:07.075  1772  1800 W .brapmony.debu: Verification of androidx.profileinstaller.ProfileVerifier$CompilationStatus androidx.profileinstaller.ProfileVerifier.writeProfileVerification(android.content.Context, boolean) took 107.617ms (2862.00 bytecodes/s) (11496B approximate peak alloc)
+11-14 11:26:07.654  1772  1800 W .brapmony.debu: Verification of boolean androidx.concurrent.futures.AbstractResolvableFuture.setFuture(com.google.common.util.concurrent.ListenableFuture) took 117.805ms (713.04 bytecodes/s) (3592B approximate peak alloc)
+11-14 11:26:08.232  1772  1796 W .brapmony.debu: Verification of androidx.datastore.preferences.protobuf.Internal$BooleanList androidx.datastore.preferences.protobuf.GeneratedMessageLite.emptyBooleanList() took 119.762ms (41.75 bytecodes/s) (1432B approximate peak alloc)
+11-14 11:26:09.092  1772  1796 W .brapmony.debu: Verification of java.lang.String androidx.datastore.preferences.protobuf.GeneratedMessageLite.toString() took 130.537ms (68.95 bytecodes/s) (1648B approximate peak alloc)
+11-14 11:26:09.211   495   520 I ActivityTaskManager: Displayed io.github.wwpol.brapmony.debug/lol.mony.harmony.MainActivity: +30s31ms
+11-14 11:26:10.027  1772  1796 W .brapmony.debu: Verification of androidx.datastore.preferences.protobuf.CodedInputStream androidx.datastore.preferences.protobuf.CodedInputStream.newInstance(byte[], int, int, boolean) took 102.941ms (233.14 bytecodes/s) (2008B approximate peak alloc)
+11-14 11:26:10.461  1772  1796 W .brapmony.debu: Verification of java.lang.String androidx.datastore.preferences.protobuf.CodedInputStream$StreamDecoder.readStringRequireUtf8() took 125.144ms (471.46 bytecodes/s) (2536B approximate peak alloc)
+11-14 11:26:12.414  1772  1796 W .brapmony.debu: Verification of boolean androidx.datastore.preferences.protobuf.UnknownFieldSchema.mergeOneFieldFrom(java.lang.Object, androidx.datastore.preferences.protobuf.Reader, int) took 101.566ms (1122.41 bytecodes/s) (3552B approximate peak alloc)
+11-14 11:26:12.593  1772  1796 W .brapmony.debu: Verification of void androidx.datastore.preferences.protobuf.WireFormat$FieldType.<clinit>() took 114.493ms (2349.47 bytecodes/s) (4864B approximate peak alloc)
+11-14 11:26:12.686  1772  1782 I .brapmony.debu: Background concurrent copying GC freed 9773(1271KB) AllocSpace objects, 0(0B) LOS objects, 49% free, 3843KB/7687KB, paused 10.810ms total 6.729s
+11-14 11:26:14.061  1772  1796 W .brapmony.debu: Verification of java.lang.Object androidx.datastore.preferences.protobuf.ExtensionSchemaLite.parseExtension(java.lang.Object, androidx.datastore.preferences.protobuf.Reader, java.lang.Object, androidx.datastore.preferences.protobuf.ExtensionRegistryLite, androidx.datastore.preferences.protobuf.FieldSet, java.lang.Object, androidx.datastore.preferences.protobuf.UnknownFieldSchema) took 137.679ms (5403.85 bytecodes/s) (17688B approximate peak alloc)
+11-14 11:26:14.890  1772  1796 W .brapmony.debu: Verification of void androidx.datastore.preferences.protobuf.MessageSchema.mergeFromHelper(androidx.datastore.preferences.protobuf.UnknownFieldSchema, androidx.datastore.preferences.protobuf.ExtensionSchema, java.lang.Object, androidx.datastore.preferences.protobuf.Reader, androidx.datastore.preferences.protobuf.ExtensionRegistryLite) took 160.873ms (15328.79 bytecodes/s) (43424B approximate peak alloc)
+11-14 11:26:15.187  1772  1796 W .brapmony.debu: Verification of androidx.datastore.preferences.protobuf.MessageSchema androidx.datastore.preferences.protobuf.MessageSchema.newSchemaForRawMessageInfo(androidx.datastore.preferences.protobuf.RawMessageInfo, androidx.datastore.preferences.protobuf.NewInstanceSchema, androidx.datastore.preferences.protobuf.ListFieldSchema, androidx.datastore.preferences.protobuf.UnknownFieldSchema, androidx.datastore.preferences.protobuf.ExtensionSchema, androidx.datastore.preferences.protobuf.MapFieldSchema) took 183.642ms (6501.75 bytecodes/s) (29056B approximate peak alloc)
+11-14 11:26:15.531  1772  1796 W .brapmony.debu: Verification of void androidx.datastore.preferences.protobuf.MessageSchema.writeFieldsInAscendingOrder(java.lang.Object, androidx.datastore.preferences.protobuf.Writer) took 149.169ms (13313.70 bytecodes/s) (33624B approximate peak alloc)
+11-14 11:26:15.651  1772  1796 W .brapmony.debu: Verification of void androidx.datastore.preferences.protobuf.MessageSchema.writeFieldsInDescendingOrder(java.lang.Object, androidx.datastore.preferences.protobuf.Writer) took 119.055ms (13640.64 bytecodes/s) (24936B approximate peak alloc)
+11-14 11:26:15.871  1772  1796 W .brapmony.debu: Verification of int androidx.datastore.preferences.protobuf.MessageSchema.getSerializedSize(java.lang.Object) took 174.837ms (11290.49 bytecodes/s) (34136B approximate peak alloc)
+11-14 11:26:16.083  1772  1796 W .brapmony.debu: Verification of int androidx.datastore.preferences.protobuf.MessageSchema.parseMessage(java.lang.Object, byte[], int, int, int, androidx.datastore.preferences.protobuf.ArrayDecoders$Registers) took 101.308ms (17214.74 bytecodes/s) (29728B approximate peak alloc)
+11-14 11:26:16.311  1772  1796 W .brapmony.debu: Verification of boolean androidx.datastore.preferences.protobuf.UnsafeUtil.determineAndroidSupportByAddressSize(java.lang.Class) took 102.647ms (1354.15 bytecodes/s) (3272B approximate peak alloc)
+11-14 11:26:18.399     0     0 W healthd : battery l=100 v=5000 t=25.0 h=2 st=2 c=900000 fc=300000 cc=10 chg=a
+11-14 11:26:18.718  1772  1772 I Choreographer: Skipped 76 frames!  The application may be doing too much work on its main thread.
+11-14 11:26:18.965     0     0 D logd    : logdr: UID=0 GID=0 PID=1801 n tail=0 logMask=99 pid=0 start=0ns timeout=0ns
+11-14 11:26:21.119     0     0 D logd    : logdr: UID=0 GID=0 PID=1804 n tail=0 logMask=99 pid=0 start=0ns timeout=0ns
+11-14 11:26:24.240     0     0 D logd    : logdr: UID=0 GID=0 PID=1810 n tail=0 logMask=99 pid=0 start=0ns timeout=0ns

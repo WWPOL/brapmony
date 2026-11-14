@@ -1,0 +1,1 @@
+doctor.sh: <a physical serial> is not an emulator; pass --allow-physical to inspect it

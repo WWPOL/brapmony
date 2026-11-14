@@ -1,0 +1,1 @@
+doctor.sh: --serial is required; no device is guessed

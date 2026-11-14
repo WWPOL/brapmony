@@ -173,6 +173,24 @@ Without those variables the render and journey tests skip themselves through a
 JUnit assumption, so an offline `./gradlew test` still passes and still says what
 it did not check.
 
+## When a launch dies before the app
+
+A launch can abort in `zygote64` before any app code runs, because the platform
+cannot mount the app's data directory. That is not a crash in this client and
+`adb logcat` shows it as `JNI FatalError ... Failed to mount` with no app stack.
+`android-native/doctor.sh` diagnoses it read-only, and repairs it with an in-place
+reinstall that keeps the app's data:
+
+```sh
+bash android-native/doctor.sh --serial emulator-5558
+bash android-native/doctor.sh --serial emulator-5558 --repair --apk app-debug.apk
+```
+
+It refuses a physical serial unless `--allow-physical` is passed, and never
+uninstalls or clears app data. The mechanism, the reproduction and the two repair
+attempts that do *not* work are in
+[the data-directory notes](native-android-launch-data-directory.md).
+
 ## What was rejected
 
 Committing an all-black PNG as "visual evidence", and inferring appearance from

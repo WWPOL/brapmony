@@ -1,0 +1,209 @@
+--------- beginning of system
+11-14 11:24:37.246   495   512 W Looper  : Slow dispatch took 226ms android.fg h=android.os.Handler c=<recycled PooledLambda@aed5cba> m=0
+--------- beginning of main
+11-14 11:24:37.341   495   504 W JavaBinder: BinderProxy is being destroyed but the application did not call unlinkToDeath to unlink all of its death recipients beforehand.  Releasing leaked death recipient: com.android.server.AlarmManagerService$2
+11-14 11:24:37.341   495   504 W JavaBinder: BinderProxy is being destroyed but the application did not call unlinkToDeath to unlink all of its death recipients beforehand.  Releasing leaked death recipient: com.android.server.AlarmManagerService$2
+11-14 11:24:37.342   495   504 I BpBinder: onLastStrongRef automatically unlinking death recipients: <uncached descriptor>
+--------- beginning of kernel
+11-14 11:24:37.389     0     0 I binder  : 495:504 DecRefs 0 refcount change on invalid ref 396 ret -22
+11-14 11:24:37.389     0     0 I binder  : 495:504 DecRefs 0 refcount change on invalid ref 397 ret -22
+11-14 11:24:37.374   495   504 W JavaBinder: BinderProxy is being destroyed but the application did not call unlinkToDeath to unlink all of its death recipients beforehand.  Releasing leaked death recipient: com.android.server.AlarmManagerService$2
+11-14 11:24:37.375   495   504 I BpBinder: onLastStrongRef automatically unlinking death recipients: <uncached descriptor>
+11-14 11:24:37.410   495   504 W JavaBinder: BinderProxy is being destroyed but the application did not call unlinkToDeath to unlink all of its death recipients beforehand.  Releasing leaked death recipient: com.android.server.AlarmManagerService$2
+11-14 11:24:37.411   495   504 I BpBinder: onLastStrongRef automatically unlinking death recipients: <uncached descriptor>
+11-14 11:24:37.575   495   512 W Looper  : Slow dispatch took 328ms android.fg h=android.os.Handler c=<recycled PooledLambda@de5eaaf> m=0
+11-14 11:24:38.265  1695  1695 W sh      : type=1400 audit(0.0:10): avc: denied { ioctl } for path="socket:[31566]" dev="sockfs" ino=31566 ioctlcmd=0x5401 scontext=u:r:runas_app:s0:c77,c256,c512,c768 tcontext=u:r:su:s0 tclass=unix_stream_socket permissive=0 app=io.github.wwpol.brapmony.debug
+11-14 11:24:38.273  1695  1695 W sh      : type=1400 audit(0.0:11): avc: denied { ioctl } for path="socket:[31568]" dev="sockfs" ino=31568 ioctlcmd=0x5401 scontext=u:r:runas_app:s0:c77,c256,c512,c768 tcontext=u:r:su:s0 tclass=unix_stream_socket permissive=0 app=io.github.wwpol.brapmony.debug
+11-14 11:24:38.378   495   520 W TextServicesManagerService: no available spell checker services found
+11-14 11:24:38.470   495   520 W Searchables: No global search activity found
+11-14 11:24:38.774   495   520 W VoiceInteractionManager: no available voice recognition services found for user 0
+11-14 11:24:40.076   495   512 W Looper  : Drained
+11-14 11:24:40.204   495   503 I system_server: Background concurrent copying GC freed 16580(965KB) AllocSpace objects, 2(104KB) LOS objects, 49% free, 8085KB/15MB, paused 313us total 1.654s
+11-14 11:24:42.765   901  1600 I MediaProvider: Scanned external_primary due to REASON_MOUNTED, found 16 items in 8560ms, 0 inserts 0 updates 0 deletes
+11-14 11:24:42.918   495   515 D EventSequenceValidator: Transition from INTENT_FAILED to INTENT_STARTED
+11-14 11:24:42.942   495   509 I ActivityTaskManager: START u0 {flg=0x10000000 cmp=io.github.wwpol.brapmony.debug/lol.mony.harmony.MainActivity} from uid 0
+11-14 11:24:43.087   276   336 W EmuHWC2 : No layers, exit, buffer 0x0
+11-14 11:24:43.183   276   336 I chatty  : uid=1000(system) HwBinder:276_2 identical 1 line
+11-14 11:24:43.283   276   336 W EmuHWC2 : No layers, exit, buffer 0x0
+11-14 11:24:43.301   495   515 W system_server: Long monitor contention with owner Binder:495_1 (509) at android.app.ActivityManager$TaskSnapshot com.android.server.wm.TaskSnapshotCache.getSnapshot(int, int, boolean, boolean)(TaskSnapshotCache.java:68) waiters=0 in void com.android.server.wm.TaskChangeNotificationController.forAllRemoteListeners(com.android.server.wm.TaskChangeNotificationController$TaskStackConsumer, android.os.Message) for 286ms
+11-14 11:24:43.303   495   516 W system_server: Long monitor contention with owner Binder:495_1 (509) at android.app.ActivityManager$TaskSnapshot com.android.server.wm.TaskSnapshotCache.getSnapshot(int, int, boolean, boolean)(TaskSnapshotCache.java:68) waiters=1 in void com.android.server.wm.WindowAnimator.lambda$new$1$WindowAnimator(long) for 255ms
+11-14 11:24:43.427   495   515 D CompatibilityChangeReporter: Compat change id reported: 135634846; UID 10077; state: DISABLED
+11-14 11:24:43.471   901  1600 I MediaProvider: End Intent { act=android.intent.action.MEDIA_MOUNTED dat=file:///storage/emulated/0 flg=0x5000010 cmp=com.android.providers.media.module/com.android.providers.media.MediaService (has extras) }
+11-14 11:24:43.477   495   522 W ActivityManager: Slow operation: 77ms so far, now at startProcess: asking zygote to start proc
+11-14 11:24:43.481   495   522 D CompatibilityChangeReporter: Compat change id reported: 143937733; UID 10077; state: ENABLED
+11-14 11:24:43.505   495   515 W ActivityManager: Slow operation: 128ms so far, now at startProcess: done starting proc!
+11-14 11:24:43.566   276   336 W EmuHWC2 : No layers, exit, buffer 0x0
+11-14 11:24:45.106     0     0 I init    : Untracked pid 1718 exited with status 1
+11-14 11:24:45.138     0     0 I init    : Untracked pid 1716 exited with status 0
+11-14 11:24:45.167     0     0 W perfetto: enabled ftrace
+11-14 11:24:43.586   495   515 D EventSequenceValidator: Transition from INTENT_STARTED to ACTIVITY_LAUNCHED
+11-14 11:24:43.618   276   336 W EmuHWC2 : No layers, exit, buffer 0x0
+11-14 11:24:43.447  1706  1708 I cmd     : oneway function results will be dropped but finished with status OK and parcel size 4
+11-14 11:24:43.698   276   336 W EmuHWC2 : No layers, exit, buffer 0x0
+11-14 11:24:43.757   275   275 D goldfish-address-space: claimShared: Ask to claim region [0x3fc384000 0x3fc546000]
+11-14 11:24:43.922   276   336 W EmuHWC2 : No layers, exit, buffer 0x0
+11-14 11:24:44.088   495   520 W Looper  : Drained
+11-14 11:24:44.082   276   336 I chatty  : uid=1000(system) HwBinder:276_2 identical 3 lines
+11-14 11:24:44.133   276   336 W EmuHWC2 : No layers, exit, buffer 0x0
+11-14 11:24:44.234   258   258 D Zygote  : Forked child process 1714
+11-14 11:24:44.283  1714  1714 F zygote64: jni_internal.cc:729] JNI FatalError called: (io.github.wwpol.brapmony.debug) frameworks/base/core/jni/com_android_internal_os_Zygote.cpp:786: Failed to mount /data_mirror/data_de/null/0/io.github.wwpol.brapmony.debug to /data/user_de/0/io.github.wwpol.brapmony.debug: No such file or directory
+11-14 11:24:44.351   365   365 I perfetto: ing_service_impl.cc:758 Configured tracing session 2, #sources:1, duration:5000 ms, #buffers:1, total buffer size:4096 KB, total sessions:1, uid:1071 session name: ""
+11-14 11:24:44.469  1714  1714 F zygote64: runtime.cc:655] Runtime aborting...
+11-14 11:24:44.469  1714  1714 F zygote64: runtime.cc:655] Dumping all threads without mutator lock held
+11-14 11:24:44.469  1714  1714 F zygote64: runtime.cc:655] All threads:
+11-14 11:24:44.469  1714  1714 F zygote64: runtime.cc:655] DALVIK THREADS (1):
+11-14 11:24:44.469  1714  1714 F zygote64: runtime.cc:655] "main" prio=5 tid=1 Runnable
+11-14 11:24:44.469  1714  1714 F zygote64: runtime.cc:655]   | group="" sCount=0 dsCount=0 flags=0 obj=0x72388e68 self=0x7c39ea0957b0
+11-14 11:24:44.469  1714  1714 F zygote64: runtime.cc:655]   | sysTid=258 nice=0 cgrp=default sched=0/0 handle=0x7c3b0ffc14f8
+11-14 11:24:44.469  1714  1714 F zygote64: runtime.cc:655]   | state=? schedstat=( 0 0 0 ) utm=0 stm=0 core=0 HZ=100
+11-14 11:24:44.469  1714  1714 F zygote64: runtime.cc:655]   | stack=0x7ffebdf95000-0x7ffebdf97000 stackSize=8192KB
+11-14 11:24:44.469  1714  1714 F zygote64: runtime.cc:655]   | held mutexes= "abort lock" "mutator lock"(shared held)
+11-14 11:24:44.469  1714  1714 F zygote64: runtime.cc:655]   native: (backtrace::Unwind failed for thread 258: Thread doesn't exist)
+11-14 11:24:44.469  1714  1714 F zygote64: runtime.cc:655]   at com.android.internal.os.Zygote.nativeForkAndSpecialize(Native method)
+11-14 11:24:44.469  1714  1714 F zygote64: runtime.cc:655]   at com.android.internal.os.Zygote.forkAndSpecialize(Zygote.java:344)
+11-14 11:24:44.469  1714  1714 F zygote64: runtime.cc:655]   at com.android.internal.os.ZygoteConnection.processOneCommand(ZygoteConnection.java:257)
+11-14 11:24:44.469  1714  1714 F zygote64: runtime.cc:655]   at com.android.internal.os.ZygoteServer.runSelectLoop(ZygoteServer.java:546)
+11-14 11:24:44.469  1714  1714 F zygote64: runtime.cc:655]   at com.android.internal.os.ZygoteInit.main(ZygoteInit.java:934)
+11-14 11:24:44.469  1714  1714 F zygote64: runtime.cc:655] 
+11-14 11:24:44.469  1714  1714 F zygote64: runtime.cc:655] Aborting thread:
+11-14 11:24:44.469  1714  1714 F zygote64: runtime.cc:655] "main" prio=5 tid=1 Native
+11-14 11:24:44.469  1714  1714 F zygote64: runtime.cc:655]   | group="" sCount=0 dsCount=0 flags=0 obj=0x72388e68 self=0x7c39ea0957b0
+11-14 11:24:44.469  1714  1714 F zygote64: runtime.cc:655]   | sysTid=258 nice=0 cgrp=default sched=0/0 handle=0x7c3b0ffc14f8
+11-14 11:24:44.469  1714  1714 F zygote64: runtime.cc:655]   | state=? schedstat=( 0 0 0 ) utm=0 stm=0 core=0 HZ=100
+11-14 11:24:44.469  1714  1714 F zygote64: runtime.cc:655]   | stack=0x7ffebdf95000-0x7ffebdf97000 stackSize=8192KB
+11-14 11:24:44.469  1714  1714 F zygote64: runtime.cc:655]   | held mutexes= "abort lock"
+11-14 11:24:44.469  1714  1714 F zygote64: runtime.cc:655]   native: (backtrace::Unwind failed for thread 258: Thread doesn't exist)
+11-14 11:24:44.469  1714  1714 F zygote64: runtime.cc:655]   at com.android.internal.os.Zygote.nativeForkAndSpecialize(Native method)
+11-14 11:24:44.469  1714  1714 F zygote64: runtime.cc:655]   at com.android.internal.os.Zygote.forkAndSpecialize(Zygote.java:344)
+11-14 11:24:44.469  1714  1714 F zygote64: runtime.cc:655]   at com.android.internal.os.ZygoteConnection.processOneCommand(ZygoteConnection.java:257)
+11-14 11:24:44.469  1714  1714 F zygote64: runtime.cc:655]   at com.android.internal.os.ZygoteServer.runSelectLoop(ZygoteServer.java:546)
+11-14 11:24:44.469  1714  1714 F zygote64: runtime.cc:655]   at com.android.internal.os.ZygoteInit.main(ZygoteInit.java:934)
+11-14 11:24:44.469  1714  1714 F zygote64: runtime.cc:655] 
+--------- beginning of crash
+11-14 11:24:44.473  1714  1714 F libc    : Fatal signal 6 (SIGABRT), code -1 (SI_QUEUE) in tid 1714 (main), pid 1714 (main)
+11-14 11:24:44.526  1716  1716 E libc    : capset failed: Operation not permitted
+11-14 11:24:44.527  1716  1716 E libc    : failed to raise ambient capability 0: Operation not permitted
+11-14 11:24:44.528  1716  1716 E libc    : failed to raise ambient capability 1: Operation not permitted
+11-14 11:24:44.529  1716  1716 E libc    : failed to raise ambient capability 2: Operation not permitted
+11-14 11:24:44.530  1716  1716 E libc    : failed to raise ambient capability 3: Operation not permitted
+11-14 11:24:44.531  1716  1716 E libc    : failed to raise ambient capability 4: Operation not permitted
+11-14 11:24:44.531  1716  1716 E libc    : failed to raise ambient capability 5: Operation not permitted
+11-14 11:24:44.531  1716  1716 E libc    : failed to raise ambient capability 6: Operation not permitted
+11-14 11:24:44.532  1716  1716 E libc    : failed to raise ambient capability 7: Operation not permitted
+11-14 11:24:44.532  1716  1716 E libc    : failed to raise ambient capability 8: Operation not permitted
+11-14 11:24:44.533  1716  1716 E libc    : failed to raise ambient capability 9: Operation not permitted
+11-14 11:24:44.533  1716  1716 E libc    : failed to raise ambient capability 10: Operation not permitted
+11-14 11:24:44.534  1716  1716 E libc    : failed to raise ambient capability 11: Operation not permitted
+11-14 11:24:44.534  1716  1716 E libc    : failed to raise ambient capability 12: Operation not permitted
+11-14 11:24:44.535  1716  1716 E libc    : failed to raise ambient capability 13: Operation not permitted
+11-14 11:24:44.535  1716  1716 E libc    : failed to raise ambient capability 14: Operation not permitted
+11-14 11:24:44.535  1716  1716 E libc    : failed to raise ambient capability 15: Operation not permitted
+11-14 11:24:44.536  1716  1716 E libc    : failed to raise ambient capability 16: Operation not permitted
+11-14 11:24:44.537  1716  1716 E libc    : failed to raise ambient capability 17: Operation not permitted
+11-14 11:24:44.538  1716  1716 E libc    : failed to raise ambient capability 18: Operation not permitted
+11-14 11:24:44.539  1716  1716 E libc    : failed to raise ambient capability 19: Operation not permitted
+11-14 11:24:44.540  1716  1716 E libc    : failed to raise ambient capability 20: Operation not permitted
+11-14 11:24:44.541  1716  1716 E libc    : failed to raise ambient capability 21: Operation not permitted
+11-14 11:24:44.542  1716  1716 E libc    : failed to raise ambient capability 22: Operation not permitted
+11-14 11:24:44.543  1716  1716 E libc    : failed to raise ambient capability 23: Operation not permitted
+11-14 11:24:44.544  1716  1716 E libc    : failed to raise ambient capability 24: Operation not permitted
+11-14 11:24:44.545  1716  1716 E libc    : failed to raise ambient capability 25: Operation not permitted
+11-14 11:24:44.546  1716  1716 E libc    : failed to raise ambient capability 26: Operation not permitted
+11-14 11:24:44.546  1716  1716 E libc    : failed to raise ambient capability 27: Operation not permitted
+11-14 11:24:44.547  1716  1716 E libc    : failed to raise ambient capability 28: Operation not permitted
+11-14 11:24:44.547  1716  1716 E libc    : failed to raise ambient capability 29: Operation not permitted
+11-14 11:24:44.548  1716  1716 E libc    : failed to raise ambient capability 30: Operation not permitted
+11-14 11:24:44.548  1716  1716 E libc    : failed to raise ambient capability 31: Operation not permitted
+11-14 11:24:44.550  1716  1716 E libc    : failed to raise ambient capability 32: Operation not permitted
+11-14 11:24:44.551  1716  1716 E libc    : failed to raise ambient capability 33: Operation not permitted
+11-14 11:24:44.551  1716  1716 E libc    : failed to raise ambient capability 34: Operation not permitted
+11-14 11:24:44.552  1716  1716 E libc    : failed to raise ambient capability 35: Operation not permitted
+11-14 11:24:44.553  1716  1716 E libc    : failed to raise ambient capability 36: Operation not permitted
+11-14 11:24:44.554  1716  1716 E libc    : failed to raise ambient capability 37: Operation not permitted
+11-14 11:24:44.879  1718  1718 E DEBUG   : failed to readlink /proc/1714/fd/0: Permission denied
+11-14 11:24:44.883  1718  1718 E DEBUG   : failed to readlink /proc/1714/fd/1: Permission denied
+11-14 11:24:44.885  1718  1718 E DEBUG   : failed to readlink /proc/1714/fd/2: Permission denied
+11-14 11:24:44.886  1718  1718 E DEBUG   : failed to readlink /proc/1714/fd/3: Permission denied
+11-14 11:24:44.887  1718  1718 E DEBUG   : failed to readlink /proc/1714/fd/4: Permission denied
+11-14 11:24:44.887  1718  1718 E DEBUG   : failed to readlink /proc/1714/fd/5: Permission denied
+11-14 11:24:44.888  1718  1718 E DEBUG   : failed to readlink /proc/1714/fd/6: Permission denied
+11-14 11:24:44.889  1718  1718 E DEBUG   : failed to readlink /proc/1714/fd/7: Permission denied
+11-14 11:24:44.890  1718  1718 E DEBUG   : failed to readlink /proc/1714/fd/8: Permission denied
+11-14 11:24:44.891  1718  1718 E DEBUG   : failed to readlink /proc/1714/fd/9: Permission denied
+11-14 11:24:44.892  1718  1718 E DEBUG   : failed to readlink /proc/1714/fd/10: Permission denied
+11-14 11:24:44.892  1718  1718 E DEBUG   : failed to readlink /proc/1714/fd/11: Permission denied
+11-14 11:24:44.893  1718  1718 E DEBUG   : failed to readlink /proc/1714/fd/12: Permission denied
+11-14 11:24:44.894  1718  1718 E DEBUG   : failed to readlink /proc/1714/fd/13: Permission denied
+11-14 11:24:44.895  1718  1718 E DEBUG   : failed to readlink /proc/1714/fd/14: Permission denied
+11-14 11:24:44.895  1718  1718 E DEBUG   : failed to readlink /proc/1714/fd/15: Permission denied
+11-14 11:24:44.898  1718  1718 E DEBUG   : failed to readlink /proc/1714/fd/16: Permission denied
+11-14 11:24:44.901  1718  1718 E DEBUG   : failed to readlink /proc/1714/fd/17: Permission denied
+11-14 11:24:44.902  1718  1718 E DEBUG   : failed to readlink /proc/1714/fd/18: Permission denied
+11-14 11:24:44.902  1718  1718 E DEBUG   : failed to readlink /proc/1714/fd/19: Permission denied
+11-14 11:24:44.903  1718  1718 E DEBUG   : failed to readlink /proc/1714/fd/20: Permission denied
+11-14 11:24:44.903  1718  1718 E DEBUG   : failed to readlink /proc/1714/fd/21: Permission denied
+11-14 11:24:44.904  1718  1718 E DEBUG   : failed to readlink /proc/1714/fd/22: Permission denied
+11-14 11:24:44.904  1718  1718 E DEBUG   : failed to readlink /proc/1714/fd/23: Permission denied
+11-14 11:24:44.905  1718  1718 E DEBUG   : failed to readlink /proc/1714/fd/24: Permission denied
+11-14 11:24:44.906  1718  1718 E DEBUG   : failed to readlink /proc/1714/fd/25: Permission denied
+11-14 11:24:44.907  1718  1718 E DEBUG   : failed to readlink /proc/1714/fd/26: Permission denied
+11-14 11:24:44.907  1718  1718 E DEBUG   : failed to readlink /proc/1714/fd/27: Permission denied
+11-14 11:24:44.907  1718  1718 E DEBUG   : failed to readlink /proc/1714/fd/28: Permission denied
+11-14 11:24:44.908  1718  1718 E DEBUG   : failed to readlink /proc/1714/fd/29: Permission denied
+11-14 11:24:44.910  1718  1718 E DEBUG   : failed to readlink /proc/1714/fd/30: Permission denied
+11-14 11:24:44.911  1718  1718 E DEBUG   : failed to readlink /proc/1714/fd/31: Permission denied
+11-14 11:24:44.912  1718  1718 E DEBUG   : failed to readlink /proc/1714/fd/32: Permission denied
+11-14 11:24:44.912  1718  1718 E DEBUG   : failed to readlink /proc/1714/fd/33: Permission denied
+11-14 11:24:44.914  1718  1718 E DEBUG   : failed to readlink /proc/1714/fd/34: Permission denied
+11-14 11:24:44.914  1718  1718 E DEBUG   : failed to readlink /proc/1714/fd/35: Permission denied
+11-14 11:24:44.928  1718  1718 F crash_dump64: crash_dump.cpp:474] failed to attach to thread 1714, already traced by 0 ()
+11-14 11:24:44.967   251   251 I tombstoned: received crash request for pid 1714
+11-14 11:24:44.956   364   364 I perfetto: probes_producer.cc:230  Ftrace setup (target_buf=2)
+11-14 11:24:45.051   495   522 W ActivityManager: Slow operation: 1650ms so far, now at startProcess: returned from zygote!
+11-14 11:24:45.053   495   522 W ActivityManager: Slow operation: 1653ms so far, now at startProcess: done updating battery stats
+11-14 11:24:45.054   495   522 W ActivityManager: Slow operation: 1654ms so far, now at startProcess: building log message
+11-14 11:24:45.055   495   522 I ActivityManager: Start proc 1714:io.github.wwpol.brapmony.debug/u0a77 for pre-top-activity {io.github.wwpol.brapmony.debug/lol.mony.harmony.MainActivity}
+11-14 11:24:45.055   495   522 W ActivityManager: Slow operation: 1655ms so far, now at startProcess: starting to update pids map
+11-14 11:24:45.059   495   522 W ActivityManager: Slow operation: 1658ms so far, now at startProcess: done updating pids map
+11-14 11:24:45.074  1714  1714 F libc    : crash_dump helper failed to exec
+11-14 11:24:45.108   251   251 W tombstoned: crash socket received short read of length 0 (expected 12)
+11-14 11:24:45.111   901  1600 I MediaProvider: Begin Intent { act=android.intent.action.PACKAGE_FULLY_REMOVED dat=package:io.github.wwpol.brapmony.debug flg=0x5000010 cmp=com.android.providers.media.module/com.android.providers.media.MediaService (has extras) }
+11-14 11:24:45.130   258   258 I Zygote  : Process 1714 exited due to signal 6 (Aborted)
+11-14 11:24:45.151   364   364 I perfetto: ftrace_procfs.cc:176    enabled ftrace
+11-14 11:24:45.235   901  1600 I MediaProvider: End Intent { act=android.intent.action.PACKAGE_FULLY_REMOVED dat=package:io.github.wwpol.brapmony.debug flg=0x5000010 cmp=com.android.providers.media.module/com.android.providers.media.MediaService (has extras) }
+11-14 11:24:45.796   495   509 D ConnectivityService: Data stall detected with methods: 2
+11-14 11:24:45.803   744  1497 D NetworkMonitor/101: isDataStall: result=true, tcp packets received=0, latest tcp fail rate=100
+11-14 11:24:45.808   744  1497 D NetworkMonitor/101: Suspecting data stall, reevaluate
+11-14 11:24:46.113   744  1726 D NetworkMonitor/101: PROBE_DNS connectivitycheck.gstatic.com 277ms OK 142.251.150.120,2001:4860:4826:7800::
+11-14 11:24:46.742   744  1725 D NetworkMonitor/101: PROBE_DNS www.google.com 897ms OK 142.251.153.119,142.251.154.119,142.251.151.119,142.251.156.119,142.251.152.119,142.251.155.119,142.251.157.119,142.251.150.119,2001:4860:482a:7700::,2001:4860:482d:7700::,2001:4860:482b:7700::,2001:4860:4828:7700::,2001:4860:4827:7700::,2001:4860:4829:7700::,2001:4860:482c:7700::,2001:4860:4826:7700::
+11-14 11:24:46.822   495   893 E TaskPersister: File error accessing recents directory (directory doesn't exist?).
+11-14 11:24:46.864   744  1726 D NetworkMonitor/101: PROBE_HTTP http://connectivitycheck.gstatic.com/generate_204 time=714ms ret=204 request={Connection=[close], User-Agent=[Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/60.0.3112.32 Safari/537.36]} headers={null=[HTTP/1.1 204 No Content], Connection=[close], Content-Length=[0], Cross-Origin-Resource-Policy=[cross-origin], Date=[Sat, 14 Nov 2026 16:24:45 GMT], X-Android-Received-Millis=[1794673486853], X-Android-Response-Source=[NETWORK 204], X-Android-Selected-Protocol=[http/1.1], X-Android-Sent-Millis=[1794673486356]}
+11-14 11:24:47.576   744  1725 D NetworkMonitor/101: PROBE_HTTPS https://www.google.com/generate_204 time=804ms ret=204 request={Connection=[close], User-Agent=[Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/60.0.3112.32 Safari/537.36]} headers={null=[HTTP/1.1 204 No Content], Alt-Svc=[h3=":443"; ma=2592000,h3-29=":443"; ma=2592000], Connection=[close], Content-Length=[0], Cross-Origin-Resource-Policy=[cross-origin], Date=[Sat, 14 Nov 2026 16:24:47 GMT], X-Android-Received-Millis=[1794673487553], X-Android-Response-Source=[NETWORK 204], X-Android-Selected-Protocol=[http/1.1], X-Android-Sent-Millis=[1794673487517]}
+11-14 11:24:47.596   744  1724 D NetworkMonitor/101: isCaptivePortal: isSuccessful()=true isPortal()=false RedirectUrl=null isPartialConnectivity()=false Time=1774ms
+11-14 11:24:47.646   495   604 D ConnectivityService: [101 WIFI] validation passed
+11-14 11:24:48.367   276   336 W EmuHWC2 : No layers, exit, buffer 0x0
+11-14 11:24:48.584   276   336 I chatty  : uid=1000(system) HwBinder:276_2 identical 4 lines
+11-14 11:24:48.599   276   336 W EmuHWC2 : No layers, exit, buffer 0x0
+11-14 11:24:49.339   495   515 W system_server: Long monitor contention with owner android.anim (516) at void com.android.server.wm.WindowSurfacePlacer$Traverser.run()(WindowSurfacePlacer.java:59) waiters=0 in void com.android.server.wm.ActivityTaskManagerService.lambda$notifyEnterAnimationComplete$1$ActivityTaskManagerService(android.os.IBinder) for 149ms
+11-14 11:24:49.703   364   364 I perfetto: probes_producer.cc:329  Producer stop (id=2)
+11-14 11:24:49.737   364   364 I perfetto: ftrace_procfs.cc:183    disabled ftrace
+11-14 11:24:49.752     0     0 W perfetto: disabled ftrace
+11-14 11:24:49.748   365   365 I perfetto: ng_service_impl.cc:1948 Tracing session 2 ended, total sessions:0
+11-14 11:24:50.962   495   512 W Looper  : Slow dispatch took 116ms android.fg h=android.os.Handler c=<recycled PooledLambda@947ff47> m=0
+11-14 11:24:53.261   495   515 W ActivityTaskManager: Launch timeout has expired, giving up wake lock!
+11-14 11:24:55.063   495   521 W ActivityManager: Process ProcessRecord{7e6bfee 1714:io.github.wwpol.brapmony.debug/u0a77} failed to attach
+11-14 11:24:55.078   495   521 I ActivityManager: Killing 1714:io.github.wwpol.brapmony.debug/u0a77 (adj -10000): start timeout
+11-14 11:24:55.091   495   523 I libprocessgroup: Successfully killed process cgroup uid 10077 pid 1714 in 0ms
+11-14 11:24:57.095   390   390 W livelock: sample 4.377s
+11-14 11:25:06.628   495   510 D WifiNl80211Manager: Scan result ready event
+11-14 11:25:06.634   495   510 D WifiNative: Scan result ready event
+11-14 11:25:07.711   495   510 D ConnectivityService: Data stall detected with methods: 2
+11-14 11:25:07.718   744  1497 D NetworkMonitor/101: isDataStall: result=true, tcp packets received=0, latest tcp fail rate=100
+11-14 11:25:07.719   744  1497 D NetworkMonitor/101: Suspecting data stall, reevaluate
+11-14 11:25:08.000   744  1735 D NetworkMonitor/101: PROBE_DNS connectivitycheck.gstatic.com 239ms OK 142.251.150.120,2001:4860:4826:7800::
+11-14 11:25:08.568   744  1734 D NetworkMonitor/101: PROBE_DNS www.google.com 800ms OK 142.251.153.119,142.251.154.119,142.251.151.119,142.251.156.119,142.251.152.119,142.251.155.119,142.251.157.119,142.251.150.119,2001:4860:482a:7700::,2001:4860:482d:7700::,2001:4860:482b:7700::,2001:4860:4828:7700::,2001:4860:4827:7700::,2001:4860:4829:7700::,2001:4860:482c:7700::,2001:4860:4826:7700::
+11-14 11:25:08.646   744  1735 D NetworkMonitor/101: PROBE_HTTP http://connectivitycheck.gstatic.com/generate_204 time=623ms ret=204 request={Connection=[close], User-Agent=[Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/60.0.3112.32 Safari/537.36]} headers={null=[HTTP/1.1 204 No Content], Connection=[close], Content-Length=[0], Cross-Origin-Resource-Policy=[cross-origin], Date=[Sat, 14 Nov 2026 16:25:07 GMT], X-Android-Received-Millis=[1794673508634], X-Android-Response-Source=[NETWORK 204], X-Android-Selected-Protocol=[http/1.1], X-Android-Sent-Millis=[1794673508134]}
+11-14 11:25:09.423   744  1734 D NetworkMonitor/101: PROBE_HTTPS https://www.google.com/generate_204 time=834ms ret=204 request={Connection=[close], User-Agent=[Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/60.0.3112.32 Safari/537.36]} headers={null=[HTTP/1.1 204 No Content], Alt-Svc=[h3=":443"; ma=2592000,h3-29=":443"; ma=2592000], Connection=[close], Content-Length=[0], Cross-Origin-Resource-Policy=[cross-origin], Date=[Sat, 14 Nov 2026 16:25:08 GMT], X-Android-Received-Millis=[1794673509398], X-Android-Response-Source=[NETWORK 204], X-Android-Selected-Protocol=[http/1.1], X-Android-Sent-Millis=[1794673509361]}
+11-14 11:25:09.444   744  1733 D NetworkMonitor/101: isCaptivePortal: isSuccessful()=true isPortal()=false RedirectUrl=null isPartialConnectivity()=false Time=1696ms
+11-14 11:25:09.495   495   604 D ConnectivityService: [101 WIFI] validation passed
+11-14 11:25:10.287     0     0 D logd    : logdr: UID=0 GID=0 PID=1744 n tail=0 logMask=99 pid=0 start=0ns timeout=0ns
