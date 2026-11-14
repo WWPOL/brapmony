@@ -1,5 +1,7 @@
 # Server profiles, pronouns and nickname permissions
 
+Superseded in part by `docs/specs/2026-11-13-server-profiles-v2-design.md` (storage, loading, federation).
+
 Status: design, awaiting approval (2026-11-09). PR 2 of the stack in
 `2026-11-09-discord-migration-design.md` ("Delivery stack").
 
