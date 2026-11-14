@@ -50,6 +50,24 @@ object AvatarUrl {
         return base.newBuilder().encodedPath(prefix + rooted).query(null).fragment(null).build().toString()
     }
 
+    /**
+     * A server's icon or banner, resolved the same way an avatar is.
+     *
+     * `servers.icon` and `servers.banner` are written by the same uploader that writes
+     * `profiles.avatar_url`, so they hold the same three shapes: an absolute URL, a site-relative
+     * path, or a bare storage path. A bare path names the `server-icons` bucket, which is where
+     * the web client's server uploader puts them.
+     */
+    fun resolveServer(baseUrl: String?, path: String?): String? {
+        val raw = path?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+        if (SCHEME.matches(raw) || raw.startsWith("/")) return resolve(baseUrl, raw)
+        val base = baseUrl?.toHttpUrlOrNull() ?: return null
+        val prefix = base.encodedPath.trimEnd('/')
+        return base.newBuilder()
+            .encodedPath(prefix + "/storage/v1/object/public/server-icons/" + raw.trimStart('/'))
+            .query(null).fragment(null).build().toString()
+    }
+
     /** True when [url] is something an image loader can actually fetch. */
     fun isFetchable(url: String?): Boolean =
         url != null && (url.startsWith("http://") || url.startsWith("https://") ||

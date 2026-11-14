@@ -45,33 +45,49 @@ class ChatRepository(private val rest: RestApi) {
             serializer = ListSerializer(Message.serializer())).map { page -> page.reversed() }
 
     suspend fun sendChannelMessage(endpoint: Endpoint, token: String, channelId: String,
-                                   text: String, replyTo: String? = null, threadId: String? = null): Result<Message> = runCatching {
+                                   text: String, replyTo: String? = null, threadId: String? = null,
+                                   nonce: String? = null): Result<Message> = runCatching {
         // Fail closed until this client implements Harmony's own encrypted envelope.
         val encryption = rest.rpcValue(endpoint, token, "effective_channel_encryption",
             buildJsonObject { put("p_channel_id", channelId) }.toString(), JsonElement.serializer()).getOrThrow()
         if (requiresEncryption(encryption)) error("This channel requires encryption. Encrypted messaging is not implemented in this client yet; nothing was sent.")
-        insertMessage(endpoint, token, text, channelId, null, replyTo, threadId)
+        insertMessage(endpoint, token, text, channelId, null, replyTo, threadId, nonce)
     }
 
     suspend fun sendDirectMessage(endpoint: Endpoint, token: String, conversationId: String,
-                                  text: String, replyTo: String? = null, threadId: String? = null): Result<Message> = runCatching {
+                                  text: String, replyTo: String? = null, threadId: String? = null,
+                                  nonce: String? = null): Result<Message> = runCatching {
         val encryption = rest.select(endpoint, token, "conversation_encryption_settings",
             filters = listOf("conversation_id" to "eq.$conversationId"),
             serializer = ListSerializer(JsonObject.serializer())).getOrThrow()
         if (encryption.any { (it["encryption_enabled"] as? JsonPrimitive)?.booleanOrNull == true }) {
             error("This conversation requires encryption. Encrypted messaging is not implemented in this client yet; nothing was sent.")
         }
-        insertMessage(endpoint, token, text, null, conversationId, replyTo, threadId)
+        insertMessage(endpoint, token, text, null, conversationId, replyTo, threadId, nonce)
     }
 
+    /**
+     * Inserts one message, carrying the client nonce in `metadata` as the web client does.
+     *
+     * The nonce is what lets a retry be recognised as the same message: the reference's outbox
+     * reads `metadata.client_nonce` back to match an acknowledged row to the row it drew while
+     * the send was in flight.
+     */
     private suspend fun insertMessage(endpoint: Endpoint, token: String, text: String,
-                                      channelId: String?, conversationId: String?, replyTo: String?, threadId: String?): Message {
+                                      channelId: String?, conversationId: String?, replyTo: String?,
+                                      threadId: String?, nonce: String?): Message {
         require(text.isNotBlank()) { "Write a message first." }
         val profileId = ProfileRepository(rest).mine(endpoint, token)?.profile?.id ?: error("Your profile could not be loaded. Nothing was sent.")
         val body = buildJsonObject {
             put("user_id", profileId)
             channelId?.let { put("channel_id", it) }; conversationId?.let { put("conversation_id", it) }
             replyTo?.let { put("reply_to", it) }; threadId?.let { put("thread_id", it) }
+            nonce?.let { value ->
+                put("metadata", buildJsonObject {
+                    put("created_via", "harmony_android")
+                    put("client_nonce", value)
+                })
+            }
             put("content", buildJsonArray { add(buildJsonObject { put("type", "text"); put("text", text) }) })
         }
         return rest.insert(endpoint, token, "messages", body.toString(),

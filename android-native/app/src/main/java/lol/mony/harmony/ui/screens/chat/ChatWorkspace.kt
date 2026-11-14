@@ -7,6 +7,14 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.width
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextOverflow
+import coil.compose.AsyncImage
+import coil.request.ImageRequest
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
@@ -45,11 +53,8 @@ fun ChatWorkspace(state: AppState, appearance: VisualThemeSettings) {
             onBack = { state.openChannelId.value = null })
         conversationId != null -> RoomScreen(state, conversationId!!, true, appearance,
             onBack = { state.openConversationId.value = null })
-        else -> Row(Modifier.fillMaxSize()) {
-            ServerRail(state)
-            if (showingDms || serverId == null) DirectMessages(state, Modifier.weight(1f))
-            else ChannelList(state, serverId!!, Modifier.weight(1f))
-        }
+        else -> if (showingDms || serverId == null) DirectMessages(state, Modifier.fillMaxSize())
+            else ChannelList(state, serverId!!, Modifier.fillMaxSize())
     }
 }
 
@@ -89,13 +94,18 @@ private fun ChannelList(state: AppState, serverId: String, modifier: Modifier) {
             }
         } catch (error: Exception) { failure = error.message }
     }
+    val baseUrl = state.auth.state.collectAsState().value.let { (it as? AuthState.SignedIn)?.endpoint?.baseUrl }
     Column(modifier.fillMaxHeight()) {
+        // The server's own banner and icon, as the web client's channel sidebar header shows
+        // them: the banner fills a strip, the icon overlaps its lower edge, and the name sits
+        // beside them. A server without a banner simply gets the plain bar.
+        ServerHeader(tree?.server, baseUrl)
         TopAppBar(title = { Text(tree?.server?.name ?: "Channels", maxLines = 1) },
             actions = {
                 IconButton(onClick = { state.serverTrees.value = state.serverTrees.value - serverId; retry++ }) {
-                    Icon(Icons.Default.Refresh, "Refresh channels")
+                    Icon(Icons.Default.Refresh, "Refresh")
                 }
-                IconButton(onClick = { management = true }) { Icon(Icons.Default.Settings, "Server settings and members") }
+                IconButton(onClick = { management = true }) { Icon(Icons.Default.Settings, "Server settings") }
             })
         when {
             failure != null -> ErrorState(failure!!) { retry++ }
@@ -142,16 +152,57 @@ private fun ChannelList(state: AppState, serverId: String, modifier: Modifier) {
                         }
                     }
                     if (loaded.channels.isEmpty()) item {
-                        EmptyState("No channels", "There are no channels you can view in this server.")
+                        EmptyState("No channels", "You cannot view any channel in this server yet.")
                     }
                 }
             }
         }
     }
-    if (voice != null) AlertDialog(onDismissRequest = { voice = null },
-        title = { Text(voice!!.name) },
-        text = { Text("Voice and video are not implemented in this native client yet. No call was joined.") },
-        confirmButton = { TextButton(onClick = { voice = null }) { Text("Close") } })
+    // A voice channel opens the call screen, which owns its own permission requests and its
+    // own explanation when a call cannot be joined.
+    if (voice != null) VoiceChannelScreen(state, voice!!, onClose = { voice = null })
+}
+
+/**
+ * The server's banner and icon, as the web client's channel sidebar header draws them.
+ *
+ * The banner is a wide strip at the top; the icon sits on the strip's lower edge, half over it,
+ * with the name beside. A server that has neither still gets its name, so the header is never
+ * empty space. Both images resolve through the instance because the columns hold relative paths
+ * as often as absolute URLs.
+ */
+@Composable
+private fun ServerHeader(server: Server?, baseUrl: String?) {
+    if (server == null) return
+    val banner = AvatarUrl.resolveServer(baseUrl, server.banner)
+    Column(Modifier.fillMaxWidth().testTag("server-header")) {
+        Box(Modifier.fillMaxWidth().height(if (banner != null) 88.dp else 0.dp)) {
+            if (banner != null) {
+                AsyncImage(
+                    model = ImageRequest.Builder(LocalContext.current).data(banner).crossfade(true).build(),
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize().testTag("server-banner"),
+                )
+            }
+        }
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            ServerAvatar(server.name, server.icon, size = 40.dp, selected = true, baseUrl = baseUrl)
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text(server.name, style = MaterialTheme.typography.titleMedium, maxLines = 1,
+                    overflow = TextOverflow.Ellipsis)
+                if (server.memberCount > 0) Text(
+                    if (server.memberCount == 1) "1 member" else server.memberCount.toString() + " members",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+    }
 }
 
 @Composable

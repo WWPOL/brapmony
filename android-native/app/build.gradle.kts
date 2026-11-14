@@ -98,6 +98,9 @@ dependencies {
     implementation(libs.okhttp)
     implementation(libs.okhttp.logging)
     implementation(libs.coil.compose)
+    // LiveKit is the transport Harmony's own voice stack speaks; the web client uses its JS
+    // SDK against the same rooms, so a call placed here is a call the web client can hear.
+    implementation(libs.livekit.android)
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)

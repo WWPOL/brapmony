@@ -342,6 +342,17 @@ data class Message(
     @SerialName("updated_at") val updatedAt: String? = null,
 ) {
     /**
+     * The nonce this send carried, as the reference stores it in `messages.metadata`.
+     *
+     * The web client puts a `client_nonce` in a message's metadata so a send that is retried or
+     * raced by realtime can be recognised as the same message rather than a second one. This
+     * client reads the same field, so its own optimistic row reconciles against an acknowledged
+     * row exactly as the web client's outbox does.
+     */
+    val clientNonce: String?
+        get() = (metadata as? JsonObject)?.stringOrNull("client_nonce")
+
+    /**
      * The text a message shows: its parts rendered the way the web client's
      * `convertMessagePartsToText` does, so a mention, an emoji or a link is not silently dropped.
      */
@@ -389,9 +400,29 @@ data class Thread(
     @SerialName("server_id") val serverId: String? = null,
     val name: String? = null,
     @SerialName("message_count") val messageCount: Int = 0,
+    val archived: Boolean = false,
+    val locked: Boolean = false,
+    @SerialName("auto_archive_duration") val autoArchiveDuration: Int? = null,
     @SerialName("created_at") val createdAt: String? = null,
     @SerialName("last_message_at") val lastActivityAt: String? = null,
-)
+) {
+    /**
+     * Whether this thread still belongs in the sidebar's open list, by the reference's rule
+     * (`isThreadExpired` in `src/stores/useThreads.ts`): a thread that was archived is gone,
+     * and so is one whose own auto-archive clock ran out after its last message.
+     *
+     * A thread with neither a last message nor a duration cannot expire, which is what keeps
+     * a just-created thread visible before its first reply arrives.
+     */
+    fun isActive(now: java.time.Instant = java.time.Instant.now()): Boolean {
+        if (archived) return false
+        val last = lastActivityAt?.let { runCatching { java.time.Instant.parse(it) }.getOrNull() }
+            ?: return true
+        val minutes = autoArchiveDuration ?: return true
+        if (minutes <= 0) return true
+        return last.plusSeconds(minutes.toLong() * 60).isAfter(now)
+    }
+}
 
 /** A direct-message conversation and the people in it. */
 @Serializable

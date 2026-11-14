@@ -1,3 +1,16 @@
 <resources>
     <string name="app_name">Brapmony</string>
+
+    <!-- Notification channels. Each is a stable id the person can tune in system settings, so
+         the names must say what kind of activity it carries. -->
+    <string name="channel_messages_name">Messages</string>
+    <string name="channel_messages_description">Direct messages and channel messages</string>
+    <string name="channel_mentions_name">Mentions</string>
+    <string name="channel_mentions_description">Messages that mention you or your roles</string>
+    <string name="channel_social_name">Social</string>
+    <string name="channel_social_description">Replies, boosts, follows and reactions on your posts</string>
+    <string name="channel_calls_name">Calls</string>
+    <string name="channel_calls_description">Incoming calls and missed calls</string>
+    <string name="call_channel_name">Ongoing call</string>
+    <string name="call_channel_description">Shown while you are in a voice or video call</string>
 </resources>

@@ -17,6 +17,11 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
+        // The LiveKit Android SDK pulls audioswitch from JitPack, which is where that
+        // library publishes; no other dependency here uses it.
+        maven("https://jitpack.io") {
+            content { includeGroupByRegex("com\\.github\\.davidliu.*") }
+        }
     }
 }
 

@@ -60,6 +60,7 @@ fun ServerRail(
     modifier: Modifier = Modifier,
 ) {
     val signedIn = state.auth.state.collectAsState().value as? AuthState.SignedIn
+    val baseUrl = signedIn?.endpoint?.baseUrl
     val harmony = LocalHarmonyColors.current
     val scope = rememberCoroutineScope()
     var servers by remember { mutableStateOf<List<ServerWithMembership>>(emptyList()) }
@@ -85,18 +86,12 @@ fun ServerRail(
         }
     }
 
-    Box(
-        modifier = modifier
-            .fillMaxHeight()
-            .width(76.dp)
-            .background(harmony.surfaceSidebar),
-    ) {
+    Box(modifier = modifier.fillMaxHeight().fillMaxWidth()) {
         Column(
             modifier = Modifier
                 .fillMaxHeight()
-                .statusBarsPadding()
                 .verticalScroll(rememberScrollState())
-                .padding(vertical = 12.dp),
+                .padding(vertical = 6.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
@@ -136,11 +131,11 @@ fun ServerRail(
                         url = entry.server.icon,
                         selected = selected == entry.server.id,
                         size = 48.dp,
+                        baseUrl = baseUrl,
                     )
                 }
             }
             if (servers.isNotEmpty() || !loading) {
-                Spacer(Modifier.height(2.dp))
                 IconButton(
                     onClick = { state.showCreateServer.value = true },
                     modifier = Modifier

@@ -137,10 +137,6 @@ class AppState(
     private val _threadsByChannel = MutableStateFlow<Map<String, List<Thread>>>(emptyMap())
     val threadsByChannel: StateFlow<Map<String, List<Thread>>> = _threadsByChannel.asStateFlow()
 
-    fun rememberThreads(channelId: String, threads: List<Thread>) {
-        _threadsByChannel.update { it + (channelId to threads) }
-    }
-
     fun rememberThread(thread: Thread) {
         _threadsByChannel.update { current ->
             val existing = current[thread.channelId].orEmpty()
@@ -154,7 +150,56 @@ class AppState(
         channelsByServer.value = emptyMap()
         serverTrees.value = emptyMap()
         conversations.value = null
+        rooms.clear()
     }
+
+    // ---- open rooms -----------------------------------------------------------------------
+
+    /**
+     * The messages already read, per room, so a channel paints its history at once instead of
+     * showing a spinner every time it is opened.
+     *
+     * A room's key carries the account and instance it was read under, so two accounts on one
+     * device can never share a row. The cache is dropped on sign-out and on an account change.
+     */
+    val rooms = lol.mony.harmony.ui.screens.chat.RoomCache()
+
+    /** The room key a cache entry uses: account, instance and room, in that order. */
+    fun roomKey(roomId: String, direct: Boolean, threadId: String? = null): String {
+        val session = auth.state.value as? AuthState.SignedIn
+        val account = session?.profile?.id ?: profileId.value ?: "anonymous"
+        val instance = session?.endpoint?.baseUrl ?: ""
+        return listOf(account, instance, if (direct) "dm" else "channel", roomId, threadId ?: "").joinToString("|")
+    }
+
+    /**
+     * Only the *open* threads of a channel, by the reference's rule: archived threads and
+     * threads whose auto-archive clock has run out are not in the sidebar.
+     *
+     * The channel list used to nest every thread the instance returned, which put closed
+     * conversations back in front of the reader on every visit.
+     */
+    fun rememberThreads(channelId: String, threads: List<Thread>) {
+        val active = threads.filter { it.isActive() }
+            .sortedWith(compareByDescending<Thread> { it.lastActivityAt ?: it.createdAt ?: "" })
+        _threadsByChannel.update { it + (channelId to active) }
+    }
+
+    // ---- live connection ------------------------------------------------------------------
+
+    /**
+     * Whether the instance is currently reachable, and why not when it is not.
+     *
+     * The app shows a banner for [LiveStatus.Offline] and nothing at all while it is connected:
+     * an always-visible "connected" label is noise that makes a real outage harder to notice.
+     */
+    private val _live = MutableStateFlow<LiveStatus>(LiveStatus.Connecting)
+    val live: StateFlow<LiveStatus> = _live.asStateFlow()
+
+    fun markLive(status: LiveStatus) { _live.value = status }
+
+    /** True while something has failed and a retry is worth offering. */
+    val isOffline: Boolean get() = _live.value is LiveStatus.Offline
 
     fun setTyping(channelId: String, names: List<String>) {
         _typing.update { it + (channelId to names) }
@@ -250,6 +295,19 @@ class AppState(
         openThreadId.value = null
         profileId.value = null
     }
+}
+
+/** What the live connection is doing, as the banner reports it. */
+sealed interface LiveStatus {
+    /** Before the first connection attempt has answered; no banner. */
+    data object Connecting : LiveStatus
+    /** Realtime is attached and the room is being kept current; no banner. */
+    data object Connected : LiveStatus
+    /**
+     * The instance cannot be reached, or realtime was refused. The banner names what is wrong
+     * in a way a person can act on, and offers a retry.
+     */
+    data class Offline(val reason: String) : LiveStatus
 }
 
 data class UnreadBadges(

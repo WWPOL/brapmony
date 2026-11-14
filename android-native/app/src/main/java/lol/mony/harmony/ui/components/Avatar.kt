@@ -14,6 +14,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
@@ -78,7 +79,14 @@ fun Avatar(
     }
 }
 
-/** A server's icon: the picture, else its initials on a rounded square, as the rail shows them. */
+/**
+ * A server's icon: its uploaded picture, else its initials on a rounded square.
+ *
+ * `servers.icon` holds the same mix of forms an avatar does -- an absolute URL, a site-relative
+ * path, or a bare storage path under the `server-icons` bucket -- so it resolves through
+ * [AvatarUrl] against the instance rather than being handed to the image loader raw. That raw
+ * path is why a server with an icon still drew its initials.
+ */
 @Composable
 fun ServerAvatar(
     name: String,
@@ -86,10 +94,11 @@ fun ServerAvatar(
     modifier: Modifier = Modifier,
     size: Dp = 44.dp,
     selected: Boolean = false,
+    baseUrl: String? = null,
 ) {
     val shape = RoundedCornerShape(if (selected) 16.dp else 22.dp)
     val harmony: HarmonyColors = LocalHarmonyColors.current
-    val image = AvatarUrl.resolve(null, url)
+    val image = AvatarUrl.resolveServer(baseUrl, url)
     if (image != null) {
         AsyncImage(
             model = image,
@@ -97,7 +106,8 @@ fun ServerAvatar(
             contentScale = ContentScale.Crop,
             modifier = modifier
                 .size(size)
-                .clip(shape),
+                .clip(shape)
+                .testTag("server-icon"),
         )
         return
     }

@@ -17,6 +17,7 @@ fun SignedInShell(state: AppState, appearance: VisualThemeSettings,
         when (destination) {
             TopDestination.Chats -> ChatWorkspace(state, appearance)
             TopDestination.Social -> SocialHomeScreen(state)
+            TopDestination.Files -> lol.mony.harmony.ui.screens.drive.DriveScreen(state, onBack = { tab = TopDestination.You.name })
             TopDestination.Notifications -> NotificationsScreen(state)
             TopDestination.You -> YouScreen(state, appearance, onAppearanceChange, onSignOut)
         }
