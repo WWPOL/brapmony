@@ -24,6 +24,9 @@ import lol.mony.harmony.ui.theme.*
 fun HarmonyRoot(state: AppState) {
     val auth by state.auth.state.collectAsState()
     val scope = rememberCoroutineScope()
+    // The application holds the notification coordinator; a composition local would need the
+    // activity, which the restore path does not have.
+    val app = androidx.compose.ui.platform.LocalContext.current.applicationContext as? lol.mony.harmony.HarmonyApp
     var startupError by remember { mutableStateOf<String?>(null) }
     var retry by remember { mutableIntStateOf(0) }
     var showPicker by remember { mutableStateOf(false) }
@@ -46,6 +49,9 @@ fun HarmonyRoot(state: AppState) {
         val profile = session.profile ?: return@LaunchedEffect
         try {
             state.onSignedIn(session)
+            // Delivery starts with the session and stops with it, so the tray can never show
+            // one account's activity while another is signed in.
+            app?.notifications?.start()
             val token = state.auth.freshToken() ?: error("Your session expired. Sign in again.")
             val info = state.servers.instanceInfo(session.endpoint, token)
             instanceName = info.name
@@ -100,7 +106,10 @@ fun HarmonyRoot(state: AppState) {
                                 } catch (error: Exception) { recover(error) }
                             }
                         },
-                        onSignOut = { scope.launch { state.signOut() } },
+                        onSignOut = { scope.launch {
+                            app?.notifications?.stop()
+                            state.signOut()
+                        } },
                     )
                 }
             }

@@ -57,6 +57,43 @@ class AccountRepository(
         ).getOrThrow().singleOrNull() ?: error("Your profile was not saved. Refresh and try again.")
     }
 
+    /**
+     * Uploads a picture to the instance's storage and returns the public URL.
+     *
+     * This is the same contract the web client's `uploadImageObject` uses: an object under
+     * `<folder>/<stem>-<timestamp>.<ext>` in a public bucket, uploaded with the account's own
+     * token so the bucket's policies decide who may write. A fresh name per upload is
+     * deliberate -- it is what lets an avatar change propagate instead of being masked by a
+     * cached copy of the old picture at the same path.
+     */
+    suspend fun uploadImage(
+        endpoint: Endpoint, token: String, bucket: String, folder: String, stem: String,
+        bytes: ByteArray, extension: String, contentType: String,
+    ): Result<String> = io {
+        require(bytes.isNotEmpty()) { "That picture is empty." }
+        val name = "$stem-" + System.currentTimeMillis() + "." + extension
+        val path = "$folder/$name"
+        rest.uploadObject(endpoint, token, bucket, path, bytes, contentType)
+        endpoint.baseUrl.trimEnd('/') + "/storage/v1/object/public/$bucket/$path"
+    }
+
+    /** Points the profile at a freshly uploaded picture and returns the stored row. */
+    suspend fun setAvatar(endpoint: Endpoint, token: String, profileId: String, url: String): Result<AccountProfile> = io {
+        rest.update(
+            endpoint, token, "profiles", listOf("id" to "eq.$profileId"),
+            buildJsonObject { put("avatar_url", url) }.toString(),
+            returning = PROFILE_COLUMNS, serializer = ListSerializer(AccountProfile.serializer()),
+        ).getOrThrow().singleOrNull() ?: error("The picture was uploaded but the profile was not updated.")
+    }
+
+    suspend fun setBanner(endpoint: Endpoint, token: String, profileId: String, url: String): Result<AccountProfile> = io {
+        rest.update(
+            endpoint, token, "profiles", listOf("id" to "eq.$profileId"),
+            buildJsonObject { put("banner_url", url) }.toString(),
+            returning = PROFILE_COLUMNS, serializer = ListSerializer(AccountProfile.serializer()),
+        ).getOrThrow().singleOrNull() ?: error("The picture was uploaded but the profile was not updated.")
+    }
+
     suspend fun appearance(endpoint: Endpoint, token: String, profileId: String): Result<VisualThemeSettings> = io {
         VisualThemeSettings.fromJson(readProfile(endpoint, token, profileId).appearanceSettings)
     }

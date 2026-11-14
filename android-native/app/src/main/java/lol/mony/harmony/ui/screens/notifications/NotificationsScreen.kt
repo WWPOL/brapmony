@@ -65,6 +65,8 @@ import kotlinx.coroutines.launch
 import lol.mony.harmony.data.model.Notification
 import lol.mony.harmony.data.model.NotificationFormatter
 import lol.mony.harmony.data.model.NotificationInboxFilter
+import lol.mony.harmony.data.model.NotificationDestination
+import lol.mony.harmony.data.model.NotificationRouter
 import lol.mony.harmony.data.model.NotificationTarget
 import lol.mony.harmony.data.repo.NotificationRepository
 import lol.mony.harmony.data.session.AuthState
@@ -125,13 +127,27 @@ fun NotificationsScreen(
         }
     }
 
+    /**
+     * Opens what the notification names, inside this app.
+     *
+     * The destination is resolved by the same rules the reference's `resolveNotificationRoute`
+     * uses, and handed to the shell, which opens the exact conversation, channel or thread.
+     * Only a destination this app cannot draw -- a social post with no surface here -- falls
+     * back to the existing preview sheet, which reads the real row through the same account's
+     * token. Nothing opens an external URL.
+     */
     fun open(notification: Notification) {
         scope.launch {
+            val destination = NotificationRouter.destination(notification)
             inbox.open(notification) { updated ->
                 when (val target = updated.target) {
                     is NotificationTarget.Post -> if (onOpenPost != null) onOpenPost(target.id) else previewTarget = target
                     is NotificationTarget.Profile -> if (onOpenProfile != null) onOpenProfile(target.id) else previewTarget = target
-                    null -> detail = updated
+                    null -> when (destination) {
+                        is NotificationDestination.Unavailable -> detail = updated
+                        NotificationDestination.Chats -> detail = updated
+                        else -> state.pendingDestination.value = destination
+                    }
                 }
             }
         }
@@ -173,6 +189,7 @@ fun NotificationsScreen(
                     Spacer(Modifier.weight(1f))
                     if (ui.items.isNotEmpty()) Text("${ui.items.size} loaded", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
+                NotificationPermissionNotice()
                 if (working && ui.items.isNotEmpty()) LinearProgressIndicator(Modifier.fillMaxWidth())
                 ui.actionError?.let { error -> NotificationError(error, enabled = !working, onRetry = { scope.launch { inbox.retryAction() } }) }
                 ui.loadError?.let { shown ->
@@ -250,6 +267,40 @@ fun NotificationsScreen(
 private sealed interface NotificationDeleteRequest {
     data object All : NotificationDeleteRequest
     data class One(val notification: Notification) : NotificationDeleteRequest
+}
+
+/**
+ * What the system is doing with this app's notifications, and the way back when they are off.
+ *
+ * Nothing is drawn when everything is allowed: a banner that says "notifications work" is
+ * noise. When they are refused the notice says so plainly and offers the one useful action,
+ * which is the system's own settings page -- the app never asks for the permission twice.
+ */
+@Composable
+private fun NotificationPermissionNotice() {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val app = context.applicationContext as? lol.mony.harmony.HarmonyApp ?: return
+    val state by app.notifications.permission.collectAsStateWithLifecycle()
+    if (state == lol.mony.harmony.data.model.NotificationPermissionState.Granted) return
+    val copy = when (state) {
+        lol.mony.harmony.data.model.NotificationPermissionState.NotAsked ->
+            "Android has not been asked to show notifications yet."
+        lol.mony.harmony.data.model.NotificationPermissionState.Denied ->
+            "Notifications are off for this app. New messages will not reach you until you allow them."
+        lol.mony.harmony.data.model.NotificationPermissionState.ChannelsDisabled ->
+            "One or more notification categories are turned off in system settings."
+        lol.mony.harmony.data.model.NotificationPermissionState.Granted -> return
+    }
+    Surface(color = MaterialTheme.colorScheme.secondaryContainer, modifier = Modifier.fillMaxWidth()) {
+        Row(Modifier.padding(start = 16.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Outlined.NotificationsNone, null, Modifier.size(16.dp))
+            Spacer(Modifier.size(8.dp))
+            Text(copy, Modifier.weight(1f).padding(vertical = 8.dp), style = MaterialTheme.typography.bodySmall)
+            TextButton(onClick = { lol.mony.harmony.notifications.HarmonyNotifications.openNotificationSettings(context) }) {
+                Text("Settings")
+            }
+        }
+    }
 }
 
 @Composable

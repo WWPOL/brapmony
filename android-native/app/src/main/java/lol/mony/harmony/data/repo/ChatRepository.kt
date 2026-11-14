@@ -145,6 +145,11 @@ class ChatRepository(private val rest: RestApi) {
         thread(endpoint, token, id).getOrThrow() ?: error("The new thread could not be loaded.")
     }
 
+    /** One message by id, for a notification that names a message outside the loaded page. */
+    suspend fun messageById(endpoint: Endpoint, token: String, messageId: String): Message? =
+        rest.select(endpoint, token, "messages", filters = listOf("id" to "eq.$messageId", "is_deleted" to "eq.false"),
+            limit = 1, serializer = ListSerializer(Message.serializer())).getOrNull()?.firstOrNull()
+
     suspend fun reactionsFor(endpoint: Endpoint, token: String, messageIds: Collection<String>): Result<Map<String, List<Reaction>>> = runCatching {
         if (messageIds.isEmpty()) return@runCatching emptyMap()
         rest.select(endpoint, token, "reactions", filters = listOf("message_id" to "in.(${messageIds.take(PAGE).joinToString(",")})"),

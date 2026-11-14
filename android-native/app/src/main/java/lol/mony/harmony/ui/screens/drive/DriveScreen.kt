@@ -209,7 +209,7 @@ private fun DriveBrowser(
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (failure: Exception) {
-                mutationError = failure.message ?: "Drive could not save this change. Try again."
+                mutationError = failure.message ?: "That change could not be saved. Try again."
             } finally {
                 busy = false
             }
@@ -272,7 +272,7 @@ private fun DriveBrowser(
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (failure: Exception) {
-            error = failure.message ?: "Drive could not load. Check your connection and try again."
+            error = failure.message ?: "Files could not load. Check your connection and try again."
         } finally {
             loading = false
         }
@@ -301,7 +301,7 @@ private fun DriveBrowser(
             Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                 IconButton(onClick = ::back) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, "Back") }
                 Column(Modifier.weight(1f).padding(vertical = 12.dp)) {
-                    Text("Drive", style = MaterialTheme.typography.headlineSmall, modifier = Modifier.semantics { heading() })
+                    Text("Files", style = MaterialTheme.typography.headlineSmall, modifier = Modifier.semantics { heading() })
                     Text("Files you keep and share in Harmony", style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
@@ -309,7 +309,7 @@ private fun DriveBrowser(
             }
             val data = snapshot
             if (data != null && !data.usage.enabled) {
-                DriveNotice("Drive is turned off on this instance.", "Your existing attachments remain governed by the instance's upload and room rules.")
+                DriveNotice("Files are turned off on this instance.", "Your existing attachments remain governed by the instance's upload and room rules.")
                 return@Column
             }
             if (data != null) {
@@ -344,7 +344,7 @@ private fun DriveBrowser(
             }
             if (data != null && query.view == DriveView.Folder && search.isBlank() && query.folderId != null) {
                 Row(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                    TextButton(onClick = { go(DriveView.Folder) }) { Text("My Drive") }
+                    TextButton(onClick = { go(DriveView.Folder) }) { Text("My files") }
                     driveBreadcrumbs(data.folders, query.folderId).forEach { folder ->
                         Text("/")
                         TextButton(onClick = { go(DriveView.Folder, folder.id) }) { Text(folder.name) }
@@ -365,7 +365,7 @@ private fun DriveBrowser(
                 style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp))
             if (query.view == DriveView.Trash) Text("Files in trash are deleted after 30 days. Deleting now cannot be undone.",
                 style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp))
-            if (saving) Text("Saving file… Keep Drive open until the save finishes.", modifier = Modifier.padding(20.dp).semantics { liveRegion = LiveRegionMode.Polite })
+            if (saving) Text("Saving… Keep this screen open until it finishes.", modifier = Modifier.padding(20.dp).semantics { liveRegion = LiveRegionMode.Polite })
             if (loading) LinearProgressIndicator(Modifier.fillMaxWidth())
             when {
                 error != null -> Column(Modifier.padding(20.dp)) {

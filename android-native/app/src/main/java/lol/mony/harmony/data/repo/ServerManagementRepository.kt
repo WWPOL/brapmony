@@ -160,10 +160,48 @@ class ServerManagementRepository(private val rest: RestApi) {
         ServerManagementPage(rows.map { ServerManagementMember(it, people[it.userId]) }, memberships.size > PAGE_SIZE)
     }
 
-    suspend fun roles(endpoint: Endpoint, token: String, serverId: String, offset: Int = 0): Result<ServerManagementPage<ServerManagementRole>> = io {
-        page(rest.select(endpoint, token, "server_roles", ROLE_COLUMNS, listOf("server_id" to "eq.$serverId"),
+    /**
+     * One page of a server's roles, highest first.
+     *
+     * [query] searches the *whole* role collection on the instance, not the pages already
+     * loaded: PostgREST's `or` filter runs against the same table, so a role on page nine is
+     * found exactly as one on page one. A search and an unfiltered list therefore return rows
+     * with the same ordering, which is what keeps a role in its place as pages arrive.
+     */
+    suspend fun roles(endpoint: Endpoint, token: String, serverId: String, offset: Int = 0,
+                      query: String = ""): Result<ServerManagementPage<ServerManagementRole>> = io {
+        val filters = buildList {
+            add("server_id" to "eq.$serverId")
+            val term = query.trim()
+            if (term.isNotEmpty()) {
+                // Escape the characters PostgREST's `or` and `like` grammars treat specially, so
+                // a role genuinely named "a,b" is searchable.
+                val escaped = term.replace("\\", "\\\\").replace(",", "\\,").replace("(", "\\(")
+                    .replace(")", "\\)").replace("%", "\\%").replace("_", "\\_")
+                add("or" to "(name.ilike.*$escaped*,id.eq.$escaped)")
+            }
+        }
+        page(rest.select(endpoint, token, "server_roles", ROLE_COLUMNS, filters,
             order = "position.desc,id.asc", limit = PAGE_SIZE + 1, offset = offset.coerceAtLeast(0),
             serializer = ListSerializer(ServerManagementRole.serializer())).getOrThrow())
+    }
+
+    /**
+     * Every role a member could be given, read through the same searchable listing.
+     *
+     * The member editor needs the whole catalogue to offer a choice; it walks the pages with a
+     * bound so a server with a very large role set cannot stall the dialog.
+     */
+    suspend fun allRoles(endpoint: Endpoint, token: String, serverId: String, query: String = ""): Result<List<ServerManagementRole>> = io {
+        val out = mutableListOf<ServerManagementRole>()
+        var offset = 0
+        repeat(MAX_ROLE_PAGES) {
+            val page = roles(endpoint, token, serverId, offset, query).getOrThrow()
+            out += page.items
+            if (!page.hasMore) return@io out
+            offset += page.items.size
+        }
+        out
     }
 
     suspend fun memberRoles(endpoint: Endpoint, token: String, serverId: String, profileId: String): Result<List<ServerManagementUserRole>> = io {
@@ -273,6 +311,9 @@ class ServerManagementRepository(private val rest: RestApi) {
         if (error != null && (error !is ApiException || error.status != 204)) throw error
         check(!exists()) { "The item was not removed. You may not have permission." }
     }
+
+    /** How many pages the member editor's role catalogue walks before giving up. */
+    private val MAX_ROLE_PAGES get() = 20
 
     private suspend fun <T> io(block: suspend () -> T): Result<T> = withContext(Dispatchers.IO) {
         try { Result.success(block()) } catch (cancelled: CancellationException) { throw cancelled }

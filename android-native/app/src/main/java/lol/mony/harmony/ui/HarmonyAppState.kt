@@ -54,6 +54,15 @@ class AppState(
     /** A thread the channel list opened, which the room reads and then clears. */
     val openThreadId = MutableStateFlow<String?>(null)
 
+    /**
+     * A message a notification asked for, which the room scrolls to and highlights once, then
+     * clears. It survives the room not being open yet: the room reads it when it opens.
+     */
+    val focusMessageId = MutableStateFlow<String?>(null)
+
+    /** The destination a tapped notification named, for the shell to open. */
+    val pendingDestination = MutableStateFlow<lol.mony.harmony.data.model.NotificationDestination?>(null)
+
     /** The open conversation: a channel id, or a DM conversation id. */
     val openChannelId = MutableStateFlow<String?>(null)
     val openConversationId = MutableStateFlow<String?>(null)

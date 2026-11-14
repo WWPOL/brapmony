@@ -80,7 +80,7 @@ internal fun DriveMoveDialog(folders: List<DriveFolder>, movingFolderId: String?
     var selected by remember { mutableStateOf<String?>(null) }
     AlertDialog(onDismissRequest = onDismiss, title = { Text("Move to folder") }, text = {
         Column(Modifier.heightIn(max = androidx.compose.ui.unit.Dp(420f)).verticalScroll(rememberScrollState())) {
-            TextButton(onClick = { selected = null }, enabled = !busy) { Text(if (selected == null) "✓ My Drive" else "My Drive") }
+            TextButton(onClick = { selected = null }, enabled = !busy) { Text(if (selected == null) "✓ My files" else "My files") }
             targets.forEach { folder ->
                 TextButton(onClick = { selected = folder.id }, enabled = !busy) {
                     Text((if (selected == folder.id) "✓ " else "") + driveBreadcrumbs(folders, folder.id).joinToString(" / ") { it.name })

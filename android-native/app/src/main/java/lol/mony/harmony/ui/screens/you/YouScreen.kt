@@ -92,7 +92,7 @@ fun YouScreen(
                         style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis,
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-                TextButton(onClick = { drive = true }, contentPadding = PaddingValues(horizontal = 8.dp)) { Text("Drive") }
+                TextButton(onClick = { drive = true }, contentPadding = PaddingValues(horizontal = 8.dp)) { Text("Files") }
                 TextButton(onClick = { confirmSignOut = true }, contentPadding = PaddingValues(horizontal = 8.dp)) { Text("Sign out") }
             }
             // LICENSE-ADDITIONAL-TERMS §1: visible, canonical attribution within one tap of the shell.

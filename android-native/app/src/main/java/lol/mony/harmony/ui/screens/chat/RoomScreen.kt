@@ -102,6 +102,16 @@ fun RoomScreen(state: AppState, roomId: String, direct: Boolean, appearance: Vis
     var reactors by remember(cacheKey) { mutableStateOf<Pair<Message, String>?>(null) }
     val live by state.live.collectAsState()
     val sizes = LocalSizes.current
+    // A notification can name a message far older than the page this room opens on. The id is
+    // taken once, the room pages back until it is in hand, and it is highlighted until the
+    // person scrolls away from it.
+    var focusId by remember(cacheKey) { mutableStateOf(state.focusMessageId.value) }
+    var highlighted by remember(cacheKey) { mutableStateOf<String?>(null) }
+    LaunchedEffect(cacheKey) {
+        val wanted = state.focusMessageId.value ?: return@LaunchedEffect
+        state.focusMessageId.value = null
+        focusId = wanted
+    }
 
     suspend fun load(older: Boolean = false) {
         val key = state.roomKey(roomId, direct, thread?.id)
@@ -227,8 +237,32 @@ fun RoomScreen(state: AppState, roomId: String, direct: Boolean, appearance: Vis
     LaunchedEffect(cacheKey) {
         // The cached rows paint first; the refresh then merges into them. The scroll goes to
         // the newest row only when the room is opened, never on a later refresh.
-        if (room.rows.isNotEmpty()) list.scrollToItem(room.rows.lastIndex)
+        if (room.rows.isNotEmpty() && state.focusMessageId.value == null) list.scrollToItem(room.rows.lastIndex)
         load()
+    }
+    // Pages back until the target message is on screen, then scrolls to it and marks it. A
+    // message the account can no longer see is reported once, without its text.
+    LaunchedEffect(cacheKey, focusId, room.rows.size) {
+        val wanted = focusId ?: return@LaunchedEffect
+        var pages = 0
+        while (room.rows.none { it.message.id == wanted } && pages < lol.mony.harmony.notifications.NotificationTargets.MAX_TARGET_PAGES &&
+            (room.moreOlder || pages == 0)) {
+            pages++
+            val before = room.rows.size
+            load(older = true)
+            if (room.rows.size == before) break
+        }
+        val index = room.rows.indexOfFirst { it.message.id == wanted }
+        if (index >= 0) {
+            list.scrollToItem(index)
+            highlighted = wanted
+            kotlinx.coroutines.delay(2_500)
+            highlighted = null
+            focusId = null
+        } else if (pages >= lol.mony.harmony.notifications.NotificationTargets.MAX_TARGET_PAGES || !room.moreOlder) {
+            failure = "That message is no longer available."
+            focusId = null
+        }
     }
     LaunchedEffect(roomId) {
         try {
@@ -320,6 +354,7 @@ fun RoomScreen(state: AppState, roomId: String, direct: Boolean, appearance: Vis
                         onShowReactors = { emoji -> reactors = row.message to emoji },
                         onReply = { reply = row.message },
                         onRetry = { if (row.isFailed) send(row.message.plainText, row.message.replyTo, row.nonce ?: row.key, row.key) },
+                        highlighted = highlighted == row.message.id,
                     )
                 }
             }
@@ -574,6 +609,7 @@ private fun MessageRow(
     appearance: VisualThemeSettings, reactions: List<Reaction>, myId: String,
     onActions: () -> Unit, onReact: (String) -> Unit, onAuthor: (String?) -> Unit,
     onShowReactors: (String) -> Unit, onReply: () -> Unit, onRetry: () -> Unit,
+    highlighted: Boolean = false,
 ) {
     val message = row.message
     val sizes = LocalSizes.current
@@ -587,7 +623,9 @@ private fun MessageRow(
     val offset = animateFloatAsState(drag, label = "reply-offset").value
     val revealed = offset >= with(density) { replyThreshold.toPx() }
 
-    Box(Modifier.fillMaxWidth()) {
+    Box(Modifier.fillMaxWidth()
+        .then(if (highlighted) Modifier.background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)) else Modifier)
+        .testTag(if (highlighted) "message-highlighted" else "message-row-" + row.key)) {
         // The feedback sits under the row and slides in as the row moves aside.
         if (offset > 0f) Box(Modifier.matchParentSize().padding(start = 12.dp), contentAlignment = Alignment.CenterStart) {
             Icon(Icons.AutoMirrored.Filled.Reply, "Reply",

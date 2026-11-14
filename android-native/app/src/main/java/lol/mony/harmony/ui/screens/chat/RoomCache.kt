@@ -92,26 +92,37 @@ class RoomCache {
         /**
          * Merges [page], the instance's answer for a room, into the rows already held.
          *
-         * A row the list already holds keeps its place and takes the instance's version, so an
-         * edit lands without the list jumping. A pending send whose nonce the page carries
-         * becomes the acknowledged row. A pending or failed send the page does not mention stays
-         * put: the person's own message must not vanish because a refresh raced it. When
-         * [replaceTail] is set the page describes the newest end of the room, so a confirmed row
-         * inside the page's window that the page no longer contains was deleted on the instance.
+         * The rules, in the order they apply:
+         *
+         *  1. A pending send whose nonce the page carries becomes the page's row, so the
+         *     acknowledged message replaces the greyed one instead of appearing twice.
+         *  2. A row the page contains takes the instance's version in place, which is how an
+         *     edit lands without the list moving.
+         *  3. A pending or failed send the page does not mention stays where it is. The
+         *     person's own message must not vanish because a refresh raced it.
+         *  4. With [replaceTail], a *confirmed* row that sits inside the page's own time window
+         *     and is missing from it was deleted on the instance, and is dropped. Rows older
+         *     than the window are kept: they came from an older page and the page says nothing
+         *     about them.
+         *  5. Anything else the page names is inserted, and the whole list is ordered by time
+         *     and id so two pages arriving out of order still read in the order they were sent.
          */
         fun reconcile(existing: List<RoomRow>, page: List<Message>, replaceTail: Boolean = true): List<RoomRow> {
             val byId = page.associateBy { it.id }
             val nonces = page.mapNotNull { it.clientNonce }.toSet()
             val oldestIncoming = page.minOfOrNull { it.createdAt }
+            val newestIncoming = page.maxOfOrNull { it.createdAt }
             val kept = mutableListOf<RoomRow>()
             for (row in existing) {
+                val insideWindow = oldestIncoming != null && newestIncoming != null &&
+                    row.message.createdAt >= oldestIncoming && row.message.createdAt <= newestIncoming
                 when {
                     row.nonce != null && row.nonce in nonces -> Unit
                     row.message.id in byId -> kept += row.copy(
                         message = byId.getValue(row.message.id), state = RowState.Sent, nonce = null,
                     )
                     row.state !is RowState.Sent -> kept += row
-                    replaceTail && oldestIncoming != null && row.message.createdAt >= oldestIncoming -> Unit
+                    replaceTail && insideWindow -> Unit
                     else -> kept += row
                 }
             }

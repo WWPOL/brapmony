@@ -172,7 +172,7 @@ data class DriveFileCard(
 }
 
 enum class DriveView(val wire: String, val label: String, val needsContext: Boolean = false) {
-    Folder("folder", "My Drive"), All("all", "All files"), Recent("recent", "Recent"),
+    Folder("folder", "My files"), All("all", "All files"), Recent("recent", "Recent"),
     Temporary("ephemeral", "Temporary"), Trash("trash", "Trash"),
     Server("server", "Server", true), Channel("channel", "Channel", true),
     Conversation("conversation", "Conversation", true), Dms("dms", "Direct messages"),
@@ -199,9 +199,9 @@ data class DriveQuery(
     val offset: Int = 0,
 ) {
     init {
-        require(limit in 1..500) { "A Drive page must contain 1 to 500 files." }
-        require(offset >= 0) { "A Drive offset cannot be negative." }
-        require(!view.needsContext || !contextId.isNullOrBlank()) { "Choose a Drive context first." }
+        require(limit in 1..500) { "A page must contain 1 to 500 files." }
+        require(offset >= 0) { "A page offset cannot be negative." }
+        require(!view.needsContext || !contextId.isNullOrBlank()) { "Choose a folder first." }
     }
 }
 

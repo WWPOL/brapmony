@@ -206,6 +206,34 @@ class RestApi(
         return execute(request) { json.decodeFromString(serializer, it) }
     }
 
+    /**
+     * Uploads one object to a storage bucket, as supabase-js's `storage.upload` does.
+     *
+     * The bucket's own policies authorise the write with the same token, so nothing here can
+     * widen what an account may store. `upsert=false` matches the web client: an object is
+     * written under a fresh name rather than replacing another account's file.
+     */
+    suspend fun uploadObject(
+        endpoint: Endpoint,
+        token: String,
+        bucket: String,
+        path: String,
+        bytes: ByteArray,
+        contentType: String,
+    ) {
+        val url = (endpoint.baseUrl.trimEnd('/') + "/storage/v1/object/$bucket/" + path.trimStart('/')).toHttpUrl()
+        val request = Request.Builder()
+            .url(url)
+            .header("apikey", endpoint.anonKey)
+            .header("Authorization", "Bearer $token")
+            .header("x-upsert", "false")
+            .header("cache-control", "31536000")
+            .post(bytes.toRequestBody(contentType.toMediaType()))
+            .build()
+        val answer = networkResult { client.answer(request) }.getOrThrow()
+        if (!answer.successful) throw ApiException(explain(answer.text, answer.status), answer.status)
+    }
+
     /** PostgREST errors carry `message`, `details` and `hint`; show the most specific sentence. */
     private fun explain(text: String, status: Int): String {
         val body = runCatching { json.decodeFromString(JsonObject.serializer(), text) }.getOrNull()

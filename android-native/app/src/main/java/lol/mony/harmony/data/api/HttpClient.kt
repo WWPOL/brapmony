@@ -12,6 +12,9 @@ import java.util.concurrent.TimeUnit
  * `Authorization`, exactly as `@supabase/supabase-js` does.
  */
 object Http {
+    /** The instance API every repository shares, for code that cannot be handed one. */
+    val rest: RestApi by lazy { RestApi(client) }
+
     val client: OkHttpClient by lazy {
         OkHttpClient.Builder()
             .connectTimeout(20, TimeUnit.SECONDS)
