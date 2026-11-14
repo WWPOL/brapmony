@@ -53,6 +53,7 @@ not do it. Nothing is marked closed on the strength of a type definition or a te
 | Reply reference | Shows the replied-to author and text | The bare word `Reply` | The bare word `Reply` | **Partial** |
 | Reactions | Pills with count; a tooltip names who reacted; a picker adds one | Pills with count, no identities | Tapping a pill names every reactor with their own name and picture; long-pressing a pill adds or removes your reaction | `RoomScreen` reactors sheet; `reactionLabel` |
 | Rich content | Every message part | Crashed the page on an emoji object | Every part decodes and draws | `MessagePartContractTest`, `EmojiImageRenderTest` |
+| Row metrics | 40dp avatar, 16dp gap, 1rem medium name, 8dp meta gap, primary BOT tag | 36dp avatar, 10dp gap, semi-bold 14sp name, text BOT marker | The reference's own numbers, with the account's appearance still deciding theme and density | `docs/build/evidence/android-native-render/author-header-grouping.png`, `AuthorHeaderTest` |
 | Attachments | Images drawn inline with alt text; video and files named with their size | A sentence saying it does not draw them | Images draw as pictures; video and files name themselves with a human size | `anImageAttachmentDrawsThePicture`, `aByteCountReadsAsAPersonWouldWriteIt` |
 
 ## 4. Navigation and layout
@@ -86,7 +87,19 @@ not do it. Nothing is marked closed on the strength of a type definition or a te
 - `AppState` keeps the server tree, the DM list and the threads per channel, and drops all of them on sign-out or an account change.
 - The channel list nests each channel's open threads under it, with their reply counts.
 
-## 6. Genuine remaining limitations
+## 6. The seven reports from using the app
+
+| Report | What was wrong | What it does now | Evidence |
+| --- | --- | --- | --- |
+| 1. Cannot see who reacted | A pill carried a count and nothing else | Tapping a pill names every reactor with their own display name and picture | `RoomScreen` reactors sheet |
+| 2. A three-dot menu on every message | The actions were behind a per-row button | No per-row button: long-press a row, or long-press a reaction pill to toggle it | `RoomScreen.MessageRow` |
+| 3. Newest thread messages fail to load | `threadMessages` ordered ascending, so a thread opened on its oldest page | Orders descending and takes the newest page, then pages backwards | `ChatPagingTest` (4 tests) |
+| 4. Tapping an author does nothing | Nothing was tappable | Tapping the picture or the name opens the profile sheet | `RoomScreen` author sheet |
+| 5. Generic Android, not Harmony | 36dp avatar, 10dp gap, semi-bold name, text BOT marker | The reference's metrics and a primary-coloured BOT tag | `author-header-grouping.png` |
+| 6. Open threads missing from the sidebar | Threads were only in a sheet | Each channel nests its threads with reply counts; a new thread appears at once | `AppStateCacheTest` (3 thread tests) |
+| 7. Lists reload on every navigation | The channel tree and DM list were re-read each visit | Both are kept, cleared by a refresh, and dropped on sign-out or an account change | `AppStateCacheTest` (2 cache tests) |
+
+## 8. Genuine remaining limitations
 
 These are not hidden behind a label. They are what the native client still does not do, in the
 order they matter for daily messaging.
@@ -101,7 +114,7 @@ order they matter for daily messaging.
 8. **The profile surface is a sheet on a message**, not the full profile screen with posts and followers.
 9. **A tapped image does not open full screen.** The web client opens a lightbox; here the picture draws at its inline size only.
 
-## 7. How each claim was checked
+## 9. How each claim was checked
 
 - Author and avatar resolution: JVM unit tests against `MockWebServer` with real row shapes.
 - Painting: a Robolectric render test asserting a pixel of a known-colour PNG.
