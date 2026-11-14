@@ -3,8 +3,36 @@
 A Kotlin / Jetpack Compose Material 3 client for Harmony instances, alongside the existing
 Tauri Android client. **This is not a parity-complete replacement.** Do not deploy it as one:
 voice/video, encryption/recovery, push, uploads and several other flows are not implemented.
-The [design](../docs/build/native-android.md) and [parity inventory](../docs/build/native-android-parity.md)
-explain the boundaries. The existing Android client is unchanged.
+The [design](../docs/build/native-android.md), the [parity inventory](../docs/build/native-android-parity.md)
+and the [parity matrix](../docs/build/native-android-parity-matrix.md) explain the boundaries and
+name every gap that remains. The existing Android client is unchanged.
+
+## Layout
+
+```
+android-native/
+  app/src/main/java/lol/mony/harmony/
+    data/api/        PostgREST and auth transport
+    data/model/      the wire shapes, one file per table family
+    data/repo/       one repository per surface
+    data/session/    the stored session and its token
+    ui/components/   shared drawing: Avatar, MessageContent, AvatarUrl
+    ui/screens/      one package per destination
+    ui/theme/        the account's own appearance
+  app/src/test/      JVM and Robolectric tests, mirroring the packages above
+```
+
+## Testing
+
+Unit and render tests run on the JVM and need no device:
+
+```sh
+./gradlew :app:testDebugUnitTest :app:lintDebug
+```
+
+Anything that needs a real screen runs on an **emulator**, never on a person's phone.
+A physical phone is not part of this workflow: installing on one replaces an app somebody
+is using, and driving it takes their screen.
 
 ## Build
 

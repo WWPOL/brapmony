@@ -7,6 +7,7 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
@@ -66,22 +67,30 @@ fun RoomScreen(state: AppState, roomId: String, direct: Boolean, appearance: Vis
     var searchRows by remember { mutableStateOf<List<Message>?>(null) }
     var live by remember(roomId) { mutableStateOf("Connecting to live updates…") }
     val people by state.people.collectAsState()
+    val bots by state.bots.collectAsState()
+    var selectedProfile by remember(roomKey) { mutableStateOf<String?>(null) }
+    var reactors by remember(roomKey) { mutableStateOf<Pair<Message, String>?>(null) }
     val harmony = LocalHarmonyColors.current
     val sizes = LocalSizes.current
 
     suspend fun load(older: Boolean = false) {
         try {
             val token = state.auth.freshToken() ?: error("Your session expired. Sign in again.")
+            // Every surface pages backwards from the newest message, so `before` is the
+            // oldest row currently on screen. A thread paged the other way round returned its
+            // oldest messages and looked as though it had stopped receiving replies.
+            val cursor = if (older) messages.firstOrNull()?.createdAt else null
             val page = when {
-                thread != null -> state.chats.threadMessages(session.endpoint, token, thread!!.id).getOrThrow()
-                direct -> state.chats.directMessages(session.endpoint, token, roomId, if (older) messages.firstOrNull()?.createdAt else null).getOrThrow()
-                else -> state.chats.channelMessages(session.endpoint, token, roomId, if (older) messages.firstOrNull()?.createdAt else null).getOrThrow()
+                thread != null -> state.chats.threadMessages(session.endpoint, token, thread!!.id, cursor).getOrThrow()
+                direct -> state.chats.directMessages(session.endpoint, token, roomId, cursor).getOrThrow()
+                else -> state.chats.channelMessages(session.endpoint, token, roomId, cursor).getOrThrow()
             }
-            messages = if (older) (page + messages).distinctBy { it.id } else if (messages.size > ChatRepositoryPage) {
-                (messages.filter { old -> page.none { it.id == old.id } } + page).sortedBy { it.createdAt }
-            } else page
-            olderAvailable = page.size >= ChatRepositoryPage && thread == null
-            state.rememberPeople(state.profiles.byIds(session.endpoint, token, messages.mapNotNull { it.userId }.distinct()).values)
+            messages = if (older) (page + messages).distinctBy { it.id }
+                else if (messages.size > ChatRepositoryPage) {
+                    (messages.filter { old -> page.none { it.id == old.id } } + page).sortedBy { it.createdAt }
+                } else page
+            olderAvailable = page.size >= ChatRepositoryPage
+            state.resolveAuthors(session.endpoint, token, messages)
             reactions = state.chats.reactionsFor(session.endpoint, token, messages.takeLast(50).map { it.id }).getOrThrow()
             if (!older) {
                 val last = page.lastOrNull()?.id
@@ -107,6 +116,16 @@ fun RoomScreen(state: AppState, roomId: String, direct: Boolean, appearance: Vis
         try { work() } catch (error: Exception) { failure = error.message ?: "The action failed." }
     } }
 
+    // A thread opened from the channel list is picked up here, then cleared so returning to
+    // the channel later opens the channel itself.
+    LaunchedEffect(roomId) {
+        val wanted = state.openThreadId.value ?: return@LaunchedEffect
+        state.openThreadId.value = null
+        runCatching {
+            val token = state.auth.freshToken() ?: return@LaunchedEffect
+            state.chats.thread(session.endpoint, token, wanted).getOrThrow()
+        }.getOrNull()?.let { thread = it }
+    }
     LaunchedEffect(roomKey) {
         draft = state.sessionStore.draft(roomKey); draftReady = true
         load()
@@ -164,7 +183,8 @@ fun RoomScreen(state: AppState, roomId: String, direct: Boolean, appearance: Vis
                 IconButton(onClick = { action { val token = state.auth.freshToken() ?: return@action
                     pins = state.chats.pinned(session.endpoint, token, roomId).getOrThrow() } }) { Icon(Icons.Default.PushPin, "Pinned messages") }
                 IconButton(onClick = { action { val token = state.auth.freshToken() ?: return@action
-                    threads = state.chats.threads(session.endpoint, token, roomId).getOrThrow() } }) { Icon(Icons.Default.Forum, "Threads") }
+                    threads = state.chats.threads(session.endpoint, token, roomId).getOrThrow()
+                    state.rememberThreads(roomId, threads.orEmpty()) } }) { Icon(Icons.Default.Forum, "Threads") }
             }
         })
         Text(live, Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 3.dp), style = MaterialTheme.typography.labelSmall,
@@ -176,15 +196,27 @@ fun RoomScreen(state: AppState, roomId: String, direct: Boolean, appearance: Vis
             else LazyColumn(state = list, modifier = Modifier.fillMaxSize().testTag("message-list"),
                 contentPadding = PaddingValues(vertical = 8.dp)) {
                 if (olderAvailable) item { TextButton(onClick = { action { load(true) } }) { Text("Load older messages") } }
-                items(messages, key = { it.id }) { message ->
-                    MessageRow(message, people[message.userId], appearance, reactions[message.id].orEmpty(), myId,
-                        onActions = { selected = message }, onReact = { emoji -> action { react(message, emoji) } })
+                itemsIndexed(messages, key = { _, message -> message.id }) { index, message ->
+                    val previous = messages.getOrNull(index - 1)
+                    MessageRow(
+                        message = message,
+                        author = message.author(people, bots),
+                        showHeader = showsAuthorHeader(message, previous),
+                        baseUrl = session.endpoint.baseUrl,
+                        appearance = appearance,
+                        reactions = reactions[message.id].orEmpty(),
+                        myId = myId,
+                        onActions = { selected = message },
+                        onReact = { emoji -> action { react(message, emoji) } },
+                        onAuthor = { profileId -> selectedProfile = profileId },
+                        onShowReactors = { emoji -> reactors = message to emoji },
+                    )
                 }
             }
         }
         if (openReply != null) Surface(color = MaterialTheme.colorScheme.surfaceContainerHigh) {
             Row(Modifier.fillMaxWidth().padding(start = 16.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text("Replying to ${people[openReply.userId]?.shownName ?: "message"}: ${openReply.plainText.take(60)}",
+                Text("Replying to ${openReply.author(people, bots).name}: ${openReply.plainText.take(60)}",
                     Modifier.weight(1f), style = MaterialTheme.typography.bodySmall)
                 IconButton(onClick = { reply = null }) { Icon(Icons.Default.Close, "Cancel reply") }
             }
@@ -268,7 +300,13 @@ fun RoomScreen(state: AppState, roomId: String, direct: Boolean, appearance: Vis
             Text("Pinned messages", Modifier.padding(16.dp), style = MaterialTheme.typography.titleLarge)
             LazyColumn(Modifier.testTag("pinned-list")) {
                 if (rows.isEmpty()) item { Text("No pinned messages", Modifier.padding(16.dp)) }
-                items(rows, key = { it.id }) { row -> MessageContent(row, sizes.messageSp, Modifier.padding(16.dp)) }
+                items(rows, key = { it.id }) { row ->
+                    Column(Modifier.padding(16.dp)) {
+                        Text(row.author(people, bots).name, style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.SemiBold)
+                        MessageContent(row, sizes.messageSp)
+                    }
+                }
             }
         }
     }
@@ -284,13 +322,64 @@ fun RoomScreen(state: AppState, roomId: String, direct: Boolean, appearance: Vis
             }
         }
     }
+    // Who reacted: the pill shows a count, this names them. The identities come from the    // reaction rows the page already loaded, resolved through the same people map the row    // drew its author from, so a reactor is never a placeholder.    val openReactors = reactors    if (openReactors != null) {        val (reactedMessage, emoji) = openReactors        val who = reactions[reactedMessage.id].orEmpty().filter { it.emoji == emoji }        ModalBottomSheet(onDismissRequest = { reactors = null }) {            Column(Modifier.fillMaxWidth().padding(16.dp)) {                Text(emoji + @Q@  @Q@ + who.size, style = MaterialTheme.typography.titleMedium,                    modifier = Modifier.testTag(@Q@reactors-title@Q@))                Spacer(Modifier.height(8.dp))                if (who.isEmpty()) Text(@Q@No one has reacted yet.@Q@, style = MaterialTheme.typography.bodyMedium)                for (reaction in who) {                    val person = reaction.userId?.let { people[it] }                    val name = person?.shownName ?: reaction.userId?.let { @Q@Account @Q@ + it.take(8) } ?: @Q@Someone@Q@                    Row(verticalAlignment = Alignment.CenterVertically,                        modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp)) {                        Avatar(name, person?.avatarUrl, size = 32.dp, baseUrl = session.endpoint.baseUrl)                        Spacer(Modifier.width(10.dp))                        Text(name, style = MaterialTheme.typography.bodyLarge)                    }                }            }        }    }
+    // Tapping an author opens who they are, as the web client's profile card does. This is the
+    // only place a message row offers the account's own details, so it reads the same resolved
+    // profile the row drew from rather than fetching a second copy.
+    val openProfileId = selectedProfile
+    if (openProfileId != null) {
+        val person = people[openProfileId]
+        ModalBottomSheet(onDismissRequest = { selectedProfile = null }) {
+            Column(Modifier.fillMaxWidth().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                if (person != null) {
+                    Avatar(person.shownName, person.avatarUrl, size = 88.dp, baseUrl = session.endpoint.baseUrl,
+                        modifier = Modifier.testTag("author-profile-avatar"))
+                    Spacer(Modifier.height(12.dp))
+                    Text(person.shownName, style = MaterialTheme.typography.headlineSmall,
+                        modifier = Modifier.testTag("author-profile-name"))
+                    val handle = person.handle()
+                    Text(handle, style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    if (!person.pronouns.isNullOrBlank()) Text(person.pronouns!!,
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    if (!person.bio.isNullOrBlank()) {
+                        Spacer(Modifier.height(12.dp))
+                        Text(person.bio!!, style = MaterialTheme.typography.bodyMedium)
+                    }
+                    if (person.authUserId != null && person.authUserId != myId) {
+                        Spacer(Modifier.height(16.dp))
+                        Button(onClick = {
+                            val other = person.id
+                            selectedProfile = null
+                            action {
+                                val token = state.auth.freshToken() ?: error("Sign in again.")
+                                val conversation = state.chats.openDirectConversation(session.endpoint, token, myId, other).getOrThrow()
+                                state.openConversationId.value = conversation
+                                state.showingDms.value = true
+                            }
+                        }) { Text("Message") }
+                    }
+                } else {
+                    Text("This account could not be read.", style = MaterialTheme.typography.bodyMedium)
+                }
+                Spacer(Modifier.height(16.dp))
+                TextButton(onClick = { selectedProfile = null }) { Text("Close") }
+            }
+        }
+    }
     if (openSearchOpen) ModalBottomSheet(onDismissRequest = { searchOpen = false }) {
         Column(Modifier.padding(16.dp)) {
             OutlinedTextField(query, { query = it }, label = { Text("Search messages") }, modifier = Modifier.fillMaxWidth())
             Button(onClick = { action { val token = state.auth.freshToken() ?: return@action
                 searchRows = state.chats.search(session.endpoint, token, query, channelId = if (direct) null else roomId).getOrThrow() } },
                 enabled = query.isNotBlank()) { Text("Search") }
-            LazyColumn { items(openSearchRows.orEmpty(), key = { it.id }) { row -> MessageContent(row, sizes.messageSp, Modifier.padding(vertical = 12.dp)) }
+            LazyColumn { items(openSearchRows.orEmpty(), key = { it.id }) { row ->
+                Column(Modifier.padding(vertical = 12.dp)) {
+                    Text(row.author(people, bots).name, style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.SemiBold)
+                    MessageContent(row, sizes.messageSp)
+                }
+            }
                 if (openSearchRows?.isEmpty() == true) item { Text("No results") } }
         }
     }
@@ -302,36 +391,81 @@ private const val ChatRepositoryPage = 50
 internal fun countLabel(count: Int, noun: String): String =
     count.toString() + " " + noun + (if (count == 1) "" else "s")
 
+/**
+ * Whether a row repeats the author's header, as the web client's `shouldShowHeader` decides.
+ *
+ * One author's consecutive messages group under a single header until five minutes pass, the
+ * author changes, the message answers something, or a system event interrupts. Grouping is what
+ * makes a busy channel readable; drawing the header on every row wastes the width a phone has.
+ */
+internal fun showsAuthorHeader(message: Message, previous: Message?): Boolean {
+    if (previous == null) return true
+    if (message.isSystem || previous.isSystem) return true
+    if (message.authorKey() != previous.authorKey()) return true
+    if (message.replyTo != null) return true
+    val gap = runCatching {
+        Instant.parse(message.createdAt).toEpochMilli() - Instant.parse(previous.createdAt).toEpochMilli()
+    }.getOrDefault(Long.MAX_VALUE)
+    return gap > 5 * 60 * 1000
+}
+
 @Composable
-private fun MessageRow(message: Message, profile: Profile?, appearance: VisualThemeSettings, reactions: List<Reaction>,
-                       myId: String, onActions: () -> Unit, onReact: (String) -> Unit) {
+private fun MessageRow(message: Message, author: MessageAuthor, showHeader: Boolean, baseUrl: String?,
+                       appearance: VisualThemeSettings, reactions: List<Reaction>, myId: String,
+                       onActions: () -> Unit, onReact: (String) -> Unit, onAuthor: (String?) -> Unit,
+                       onShowReactors: (String) -> Unit) {
     val sizes = LocalSizes.current
-    val name = profile?.shownName ?: if (message.isSystem) "System" else "Unknown account"
+    val name = if (message.isSystem) "System" else author.name
     val time = runCatching { DateTimeFormatter.ofPattern(if (appearance.use24HourTime) "HH:mm" else "h:mm a")
         .withZone(ZoneId.systemDefault()).format(Instant.parse(message.createdAt)) }.getOrDefault("")
     Row(Modifier.fillMaxWidth().combinedClickable(onClick = {}, onLongClick = onActions)
         .padding(horizontal = 12.dp, vertical = sizes.rowVerticalPadding)) {
-        if (!appearance.compactMode) { Avatar(name, profile?.avatarUrl, size = 36.dp); Spacer(Modifier.width(10.dp)) }
+        if (!appearance.compactMode) {
+            if (showHeader) {
+                Avatar(name, author.avatarPath, size = 36.dp, baseUrl = baseUrl,
+                    modifier = Modifier.combinedClickable(onClick = { onAuthor(author.profileId) }, onLongClick = onActions))
+            } else {
+                // A grouped row keeps the avatar's width so the text column stays aligned.
+                Spacer(Modifier.size(36.dp))
+            }
+            Spacer(Modifier.width(10.dp))
+        }
         Column(Modifier.weight(1f)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(name, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.labelLarge)
-                if (appearance.showTimestamps) Text(time, Modifier.padding(start = 8.dp), style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (showHeader) Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(name, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.labelLarge,
+                    modifier = Modifier.combinedClickable(onClick = { onAuthor(author.profileId) }, onLongClick = onActions))
+                if (author.isBot) Text("BOT", Modifier.padding(start = 6.dp),
+                    style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
                 if (message.isPinned) Icon(Icons.Default.PushPin, "Pinned", Modifier.padding(start = 6.dp).size(12.dp))
             }
             if (message.replyTo != null) Text("↳ Reply", style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
-            MessageContent(message, sizes.messageSp,
+            MessageContent(message, sizes.messageSp, baseUrl = baseUrl,
                 encryptedNotice = if (message.encrypted) "Encrypted message — keys are not available in this client" else null)
             if (message.hasAttachmentParts) Text("This message also carries an attachment or poll this client does not draw yet.",
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            if (reactions.isNotEmpty()) Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 reactions.groupBy { it.emoji }.forEach { (emoji, group) ->
-                    FilterChip(selected = group.any { it.userId == myId }, onClick = { onReact(emoji) },
-                        label = { Text("${if (group.first().emojiId != null) "Custom emoji" else emoji} ${group.size}") })
+                    val mine = group.any { it.userId == myId }
+                    Surface(
+                        shape = MaterialTheme.shapes.small,
+                        color = if (mine) MaterialTheme.colorScheme.primaryContainer
+                        else MaterialTheme.colorScheme.surfaceContainerHigh,
+                        modifier = Modifier
+                            .combinedClickable(onClick = { onShowReactors(emoji) }, onLongClick = { onReact(emoji) })                            .testTag("reaction-" + emoji),
+                    ) {
+                        Text(
+                            reactionLabel(group.first()) + " " + group.size,
+                            Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                            style = MaterialTheme.typography.labelMedium,
+                        )
+                    }
                 }
             }
         }
-        IconButton(onClick = onActions, modifier = Modifier.size(32.dp)) { Icon(Icons.Default.MoreHoriz, "Message actions", Modifier.size(18.dp)) }
     }
 }
+
+/** What a reaction pill shows for its emoji: the custom emoji's name, else the glyph. */
+private fun reactionLabel(reaction: Reaction): String =
+    if (reaction.emojiId != null) ":custom:" else reaction.emoji

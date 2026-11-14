@@ -28,11 +28,21 @@ class ChatRepository(private val rest: RestApi) {
             serializer = ListSerializer(Message.serializer())).getOrThrow().reversed()
     }
 
+    /**
+     * A page of a thread's messages, oldest-to-newest, ending at the newest.
+     *
+     * The newest page is what a thread opens on, so the query orders *descending* and takes the
+     * first page, exactly as the web client's `ThreadService.getThreadMessages` does. Ordering
+     * ascending and taking the first page instead returns the *oldest* messages, which is why a
+     * long thread looked like it had stopped receiving replies.
+     */
     suspend fun threadMessages(endpoint: Endpoint, token: String, threadId: String,
-                               limit: Int = PAGE): Result<List<Message>> = rest.select(endpoint, token, "messages",
-        filters = listOf("thread_id" to "eq.$threadId", "is_deleted" to "eq.false"),
-        order = "created_at.asc,id.asc", limit = limit.coerceIn(1, PAGE),
-        serializer = ListSerializer(Message.serializer()))
+                               before: String? = null, limit: Int = PAGE): Result<List<Message>> =
+        rest.select(endpoint, token, "messages", filters = buildList {
+            add("thread_id" to "eq.$threadId"); add("is_deleted" to "eq.false")
+            before?.let { add("created_at" to "lt.$it") }
+        }, order = "created_at.desc,id.desc", limit = limit.coerceIn(1, PAGE),
+            serializer = ListSerializer(Message.serializer())).map { page -> page.reversed() }
 
     suspend fun sendChannelMessage(endpoint: Endpoint, token: String, channelId: String,
                                    text: String, replyTo: String? = null, threadId: String? = null): Result<Message> = runCatching {

@@ -67,20 +67,34 @@ private fun ChannelList(state: AppState, serverId: String, modifier: Modifier) {
             onChanged = { retry++; state.serversRevision.value++ })
         return
     }
+    val threads by state.threadsByChannel.collectAsState()
     LaunchedEffect(serverId, retry) {
+        // A cached tree is shown at once; the channel list only re-reads when the person asks
+        // for a refresh, so moving between channels does not re-fetch the server each time.
+        val cached = state.serverTrees.value[serverId]
+        if (cached != null && retry == 0) { tree = cached; return@LaunchedEffect }
         try {
             failure = null
             val session = state.auth.state.value as? AuthState.SignedIn ?: return@LaunchedEffect
             val token = state.auth.freshToken() ?: error("Your session expired. Sign in again.")
             val server = state.servers.server(session.endpoint, token, serverId) ?: error("This server is no longer available.")
-            tree = state.servers.tree(session.endpoint, token, server).getOrThrow()
-            state.channelsByServer.value = state.channelsByServer.value + (serverId to tree!!.channels)
+            val loaded = state.servers.tree(session.endpoint, token, server).getOrThrow()
+            tree = loaded
+            state.serverTrees.value = state.serverTrees.value + (serverId to loaded)
+            state.channelsByServer.value = state.channelsByServer.value + (serverId to loaded.channels)
+            // The open threads are part of the channel list, as they are on the web.
+            for (channel in loaded.channels) {
+                runCatching { state.chats.threads(session.endpoint, token, channel.id).getOrThrow() }
+                    .onSuccess { state.rememberThreads(channel.id, it) }
+            }
         } catch (error: Exception) { failure = error.message }
     }
     Column(modifier.fillMaxHeight()) {
         TopAppBar(title = { Text(tree?.server?.name ?: "Channels", maxLines = 1) },
             actions = {
-                IconButton(onClick = { retry++ }) { Icon(Icons.Default.Refresh, "Refresh channels") }
+                IconButton(onClick = { state.serverTrees.value = state.serverTrees.value - serverId; retry++ }) {
+                    Icon(Icons.Default.Refresh, "Refresh channels")
+                }
                 IconButton(onClick = { management = true }) { Icon(Icons.Default.Settings, "Server settings and members") }
             })
         when {
@@ -101,14 +115,30 @@ private fun ChannelList(state: AppState, serverId: String, modifier: Modifier) {
                                 style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                         items(channels, key = { it.id }) { channel ->
-                            ListItem(headlineContent = { Text(channel.name, fontWeight = if (unread.channel(channel.id) > 0)
-                                FontWeight.SemiBold else FontWeight.Normal) },
-                                leadingContent = { Icon(if (channel.channelType.isVoice) Icons.Default.VolumeUp else Icons.Default.Tag, null) },
-                                supportingContent = channel.description?.let { description -> ({ Text(description, maxLines = 2) }) },
-                                trailingContent = if (unread.channel(channel.id) > 0) ({ Badge { Text("${unread.channel(channel.id)}") } }) else null,
-                                modifier = Modifier.testTag("channel-${channel.name}").clickable {
-                                    if (channel.channelType.isVoice) voice = channel else state.openChannelId.value = channel.id
-                                })
+                            Column {
+                                ListItem(headlineContent = { Text(channel.name,
+                                    fontWeight = if (unread.channel(channel.id) > 0) FontWeight.SemiBold else FontWeight.Normal) },
+                                    leadingContent = { Icon(if (channel.channelType.isVoice) Icons.Default.VolumeUp else Icons.Default.Tag, null) },
+                                    supportingContent = channel.description?.let { description -> ({ Text(description, maxLines = 2) }) },
+                                    trailingContent = if (unread.channel(channel.id) > 0) ({ Badge { Text("" + unread.channel(channel.id)) } }) else null,
+                                    modifier = Modifier.testTag("channel-" + channel.name).clickable {
+                                        if (channel.channelType.isVoice) voice = channel else state.openChannelId.value = channel.id
+                                    })
+                                // Open threads nest under their channel, as the web client's sidebar does.
+                                for (openThread in threads[channel.id].orEmpty()) {
+                                    ListItem(
+                                        headlineContent = { Text(openThread.name ?: "Thread", maxLines = 1) },
+                                        leadingContent = { Icon(Icons.Default.Forum, null, Modifier.size(16.dp)) },
+                                        supportingContent = { Text(openThread.messageCount.toString() + " replies") },
+                                        modifier = Modifier.padding(start = 24.dp)
+                                            .testTag("thread-" + openThread.id)
+                                            .clickable {
+                                                state.openChannelId.value = channel.id
+                                                state.openThreadId.value = openThread.id
+                                            },
+                                    )
+                                }
+                            }
                         }
                     }
                     if (loaded.channels.isEmpty()) item {
@@ -134,17 +164,30 @@ private fun DirectMessages(state: AppState, modifier: Modifier) {
     var starting by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val unread by state.unread.collectAsState()
+    val session = state.auth.state.collectAsState().value as? AuthState.SignedIn
+    val baseUrl = session?.endpoint?.baseUrl
+    val cachedConversations by state.conversations.collectAsState()
     LaunchedEffect(retry) {
+        // The list a person has already seen is shown at once; it re-reads only on a refresh,
+        // so going into a DM and back does not reload every conversation.
+        val cached = state.conversations.value
+        if (cached != null && retry == 0) { rows = cached; return@LaunchedEffect }
         try {
             failure = null
-            val session = state.auth.state.value as? AuthState.SignedIn ?: return@LaunchedEffect
+            val signedIn = state.auth.state.value as? AuthState.SignedIn ?: return@LaunchedEffect
             val token = state.auth.freshToken() ?: error("Sign in again.")
-            rows = state.chats.conversations(session.endpoint, token, session.profile!!.id, state.profiles).getOrThrow()
+            val myId = signedIn.profile?.id ?: return@LaunchedEffect
+            val loaded = state.chats.conversations(signedIn.endpoint, token, myId, state.profiles).getOrThrow()
+            rows = loaded
+            state.conversations.value = loaded
+            state.rememberPeople(loaded.flatMap { it.participants })
         } catch (error: Exception) { failure = error.message }
     }
     Column(modifier.fillMaxHeight()) {
         TopAppBar(title = { Text("Messages") }, actions = {
-            IconButton(onClick = { retry++ }) { Icon(Icons.Default.Refresh, "Refresh conversations") }
+            IconButton(onClick = { state.conversations.value = null; retry++ }) {
+                Icon(Icons.Default.Refresh, "Refresh conversations")
+            }
             IconButton(onClick = { start = true }) { Icon(Icons.Default.Edit, "New message") }
         })
         val openFailure = failure
@@ -158,7 +201,8 @@ private fun DirectMessages(state: AppState, modifier: Modifier) {
                 items(rows.orEmpty(), key = { it.conversation.id }) { row ->
                     ListItem(headlineContent = { Text(row.title) },
                         supportingContent = { Text(if (row.conversation.type == "group") "Group conversation" else "Direct message") },
-                        leadingContent = { Avatar(row.title, row.participants.firstOrNull()?.avatarUrl) },
+                        leadingContent = { Avatar(row.title, row.participants.firstOrNull()?.avatarUrl,
+                            baseUrl = baseUrl) },
                         trailingContent = if (unread.conversation(row.conversation.id) > 0) ({ Badge { Text("${unread.conversation(row.conversation.id)}") } }) else null,
                         modifier = Modifier.clickable { state.openConversationId.value = row.conversation.id })
                 }

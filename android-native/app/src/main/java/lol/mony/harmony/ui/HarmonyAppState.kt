@@ -10,9 +10,14 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.flow.first
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
+import lol.mony.harmony.data.model.Bot
+import lol.mony.harmony.data.model.DirectConversation
+import lol.mony.harmony.data.model.ServerTree
+import lol.mony.harmony.data.model.Thread
 import lol.mony.harmony.data.model.Channel
 import lol.mony.harmony.data.model.Profile
 import lol.mony.harmony.data.model.UnreadCountRow
+import lol.mony.harmony.data.repo.BotRepository
 import lol.mony.harmony.data.repo.ChatRepository
 import lol.mony.harmony.data.repo.ProfileRepository
 import lol.mony.harmony.data.repo.ServerRepository
@@ -34,6 +39,7 @@ class AppState(
     val auth: AuthRepository = container.auth,
     val servers: ServerRepository = container.servers,
     val chats: ChatRepository = container.chats,
+    val botRepo: BotRepository = container.bots,
     val profiles: ProfileRepository = container.profiles,
     val settings: SettingsRepository = container.settings,
     val sessionStore: SessionStore = container.sessionStore,
@@ -45,6 +51,9 @@ class AppState(
     val selectedServerId = MutableStateFlow<String?>(null)
     val showingDms = MutableStateFlow(true)
 
+    /** A thread the channel list opened, which the room reads and then clears. */
+    val openThreadId = MutableStateFlow<String?>(null)
+
     /** The open conversation: a channel id, or a DM conversation id. */
     val openChannelId = MutableStateFlow<String?>(null)
     val openConversationId = MutableStateFlow<String?>(null)
@@ -54,6 +63,15 @@ class AppState(
 
     /** Channels per server, filled by the channel column and read by the rail's badges. */
     val channelsByServer = MutableStateFlow<Map<String, List<Channel>>>(emptyMap())
+
+    /**
+     * The server trees read so far, so moving between channels does not re-read a server@AP@s
+     * channels and categories on every visit. Cleared on sign-out and by a pull to refresh.
+     */
+    val serverTrees = MutableStateFlow<Map<String, ServerTree>>(emptyMap())
+
+    /** The DM list read so far; null until it has been read once. */
+    val conversations = MutableStateFlow<List<DirectConversation>?>(null)
 
     /** Set by the rail's "+", cleared by the create-server sheet. */
     val showCreateServer = MutableStateFlow(false)
@@ -65,7 +83,20 @@ class AppState(
     val typing: StateFlow<Map<String, List<String>>> = _typing.asStateFlow()
 
     private val _people = MutableStateFlow<Map<String, Profile>>(emptyMap())
+
+    /**
+     * The profiles resolved so far, keyed by both `profiles.id` and `profiles.auth_user_id`.
+     *
+     * A message names its author by `profiles.id`, but the session, membership rows and the JWT
+     * speak `auth_user_id`; for an account made before its profile they differ, so both keys
+     * point at the same row and either spelling finds the person.
+     */
     val people: StateFlow<Map<String, Profile>> = _people.asStateFlow()
+
+    private val _bots = MutableStateFlow<Map<String, Bot>>(emptyMap())
+
+    /** The bots resolved so far, keyed by `bots.id`, which is what `messages.bot_id` points at. */
+    val bots: StateFlow<Map<String, Bot>> = _bots.asStateFlow()
 
     fun rememberPeople(profiles: Collection<Profile>) {
         if (profiles.isEmpty()) return
@@ -73,13 +104,57 @@ class AppState(
             val next = current.toMutableMap()
             for (profile in profiles) {
                 next[profile.id] = profile
-                profile.authUserId?.let { next[it] = profile }
+                profile.authUserId?.takeIf { it.isNotBlank() }?.let { next[it] = profile }
             }
             next
         }
     }
 
+    fun rememberBots(bots: Collection<Bot>) {
+        if (bots.isEmpty()) return
+        _bots.update { current -> current + bots.associateBy { it.id } }
+    }
+
     fun person(authUserId: String?): Profile? = authUserId?.let { _people.value[it] }
+
+    /**
+     * Resolves every author a page of messages names, so no row draws a name it has not looked
+     * up. A failed lookup is swallowed on purpose: the row then draws what the message itself
+     * carries, which is better than emptying the page over one unreadable profile.
+     */
+    suspend fun resolveAuthors(
+        endpoint: lol.mony.harmony.data.api.Endpoint,
+        token: String,
+        messages: Collection<lol.mony.harmony.data.model.Message>,
+    ) {
+        val known = _people.value
+        val userIds = messages.mapNotNull { it.userId }.filter { it !in known }.distinct()
+        val botIds = messages.mapNotNull { it.botId }.filter { it !in _bots.value }.distinct()
+        if (userIds.isNotEmpty()) runCatching { rememberPeople(container.profiles.byIds(endpoint, token, userIds).values) }
+        if (botIds.isNotEmpty()) runCatching { rememberBots(botRepo.byIds(endpoint, token, botIds).values) }
+    }
+
+    private val _threadsByChannel = MutableStateFlow<Map<String, List<Thread>>>(emptyMap())
+    val threadsByChannel: StateFlow<Map<String, List<Thread>>> = _threadsByChannel.asStateFlow()
+
+    fun rememberThreads(channelId: String, threads: List<Thread>) {
+        _threadsByChannel.update { it + (channelId to threads) }
+    }
+
+    fun rememberThread(thread: Thread) {
+        _threadsByChannel.update { current ->
+            val existing = current[thread.channelId].orEmpty()
+            current + (thread.channelId to (listOf(thread) + existing.filter { it.id != thread.id }))
+        }
+    }
+
+    /** Forgets every cached list, so nothing from one account can show under another. */
+    fun forgetCachedLists() {
+        _threadsByChannel.value = emptyMap()
+        channelsByServer.value = emptyMap()
+        serverTrees.value = emptyMap()
+        conversations.value = null
+    }
 
     fun setTyping(channelId: String, names: List<String>) {
         _typing.update { it + (channelId to names) }
@@ -119,6 +194,8 @@ class AppState(
     suspend fun onSignedIn(session: AuthState.SignedIn) {
         val token = auth.freshToken() ?: return
         val profile = session.profile ?: return
+        // A different account must start from an empty cache, never the previous one's lists.
+        if (profileId.value != null && profileId.value != profile.id) forgetCachedLists()
         profileId.value = profile.id
         rememberPeople(listOf(profile))
         refreshUnread()
@@ -163,10 +240,14 @@ class AppState(
         auth.signOut()
         _unread.value = UnreadBadges()
         _people.value = emptyMap()
-        channelsByServer.value = emptyMap()
+        _bots.value = emptyMap()
+        // Every cached list goes with the session, so the next account can never be shown the
+        // previous one's channels, conversations or threads.
+        forgetCachedLists()
         selectedServerId.value = null
         openChannelId.value = null
         openConversationId.value = null
+        openThreadId.value = null
         profileId.value = null
     }
 }
