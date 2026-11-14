@@ -5,6 +5,16 @@ official mobile app, and to prove the result by driving it on an emulator. This
 document records how that verification is done here, why it is split the way it
 is, and what the split costs.
 
+## A real phone is also part of this
+
+The emulator below is the constrained host, but a physical phone is reachable over
+wireless ADB, and it is the device the missing-author bug was reported from. A
+build can therefore be installed over the existing app with `adb install -r -t` --
+no uninstall, no `pm clear`, so the session and drafts survive -- and captured with
+`adb exec-out screencap -p`, which does produce real pixels. The screenshots in
+`docs/build/evidence/android-native-device/` were taken that way, against a real
+instance with real message data.
+
 ## The constraint
 
 This host has no `/dev/kvm`. The Android emulator therefore runs the guest CPU
