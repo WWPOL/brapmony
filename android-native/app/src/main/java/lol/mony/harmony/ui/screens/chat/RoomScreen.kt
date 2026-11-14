@@ -9,6 +9,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -422,21 +423,21 @@ private fun MessageRow(message: Message, author: MessageAuthor, showHeader: Bool
         .padding(horizontal = 12.dp, vertical = sizes.rowVerticalPadding)) {
         if (!appearance.compactMode) {
             if (showHeader) {
-                Avatar(name, author.avatarPath, size = 36.dp, baseUrl = baseUrl,
+                Avatar(name, author.avatarPath, size = 40.dp, baseUrl = baseUrl,
                     modifier = Modifier.combinedClickable(onClick = { onAuthor(author.profileId) }, onLongClick = onActions))
             } else {
                 // A grouped row keeps the avatar's width so the text column stays aligned.
-                Spacer(Modifier.size(36.dp))
+                Spacer(Modifier.size(40.dp))
             }
-            Spacer(Modifier.width(10.dp))
+            Spacer(Modifier.width(16.dp))
         }
         Column(Modifier.weight(1f)) {
-            if (showHeader) Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(name, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.labelLarge,
+            if (showHeader) Row(verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(name, fontWeight = FontWeight.Medium, fontSize = 16.sp,
                     modifier = Modifier.combinedClickable(onClick = { onAuthor(author.profileId) }, onLongClick = onActions))
-                if (author.isBot) Text("BOT", Modifier.padding(start = 6.dp),
-                    style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
-                if (message.isPinned) Icon(Icons.Default.PushPin, "Pinned", Modifier.padding(start = 6.dp).size(12.dp))
+                if (author.isBot) BotBadge()
+                if (message.isPinned) Icon(Icons.Default.PushPin, "Pinned", Modifier.size(12.dp))
             }
             if (message.replyTo != null) Text("↳ Reply", style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -466,6 +467,27 @@ private fun MessageRow(message: Message, author: MessageAuthor, showHeader: Bool
     }
 }
 
+/**
+ * The badge the web client puts after a bot's name: a small primary-coloured tag.
+ *
+ * It is what tells a person the account is a bot before they read the message, so it is
+ * drawn with the same weight and colour as the reference rather than as plain text.
+ */
+@Composable
+private fun BotBadge() {
+    Surface(
+        color = MaterialTheme.colorScheme.primary,
+        shape = RoundedCornerShape(3.dp),
+    ) {
+        Text(
+            "BOT",
+            Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
+            fontSize = 10.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onPrimary,
+        )
+    }
+}
 /** What a reaction pill shows for its emoji: the custom emoji's name, else the glyph. */
 private fun reactionLabel(reaction: Reaction): String =
     if (reaction.emojiId != null) ":custom:" else reaction.emoji
