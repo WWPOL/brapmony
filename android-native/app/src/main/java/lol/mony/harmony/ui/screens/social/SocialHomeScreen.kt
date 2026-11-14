@@ -156,7 +156,7 @@ private fun SocialFeature(state: AppState, initial: SocialRoute, onClose: (() ->
         },
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding)) {
-            if (actionError != null) SocialError(actionError!!, onRetry = { updates.clear(); revision++; actionError = null }, onDismiss = { actionError = null })
+            actionError?.let { shown -> SocialError(shown, onRetry = { updates.clear(); revision++; actionError = null }, onDismiss = { actionError = null }) }
             when (route) {
                 SocialRoute.Feed -> {
                     Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -243,7 +243,7 @@ private fun SocialPostFeed(
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 96.dp)) {
         item { header() }
         if (loading && !loaded) item { SocialLoading() }
-        if (error != null) item { SocialError(error!!, onRetry = { scope.launch { fetch(retryReset) } }) }
+        error?.let { shown -> item { SocialError(shown, onRetry = { scope.launch { fetch(retryReset) } }) } }
         if (loaded && posts.isEmpty() && !loading && error == null) item { SocialMessage(emptyText) }
         items(posts, key = { it.id }) { postContent(it) }
         if (loaded && cursor != null) item {
@@ -316,13 +316,13 @@ private fun SocialProfileContent(
                         }
                     }) { Text(when { followBusy -> "Saving…"; held?.pending == true -> "Withdraw request"; held?.following == true -> "Unfollow"; person.manuallyApprovesFollowers -> "Request to follow"; else -> "Follow" }) }
                 } else TextButton(onClick = { navigate(SocialRoute.People(targetId, true, true)) }) { Text("Manage follow requests") }
-                if (error != null) SocialError(error!!, onRetry = {
+                error?.let { shown -> SocialError(shown, onRetry = {
                     scope.launch {
                         try { val a = state.socialAccess(); relationship = repo.relationship(a.endpoint, a.token, a.profileId, targetId); error = null }
                         catch (e: CancellationException) { throw e }
                         catch (e: Exception) { error = e.message ?: "Could not refresh follow state." }
                     }
-                })
+                }) }
             }
             HorizontalDivider()
         }
@@ -348,7 +348,7 @@ private fun SocialTrendingTags(state: AppState, repo: SocialRepository, revision
         if (tags.isNotEmpty()) Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             tags.forEach { tag -> SuggestionChip(onClick = { onOpen(tag.tag) }, label = { Text("#${tag.tag}") }) }
         }
-        if (error != null) Text(error!!, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+        error?.let { shown -> Text(shown, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error) }
     }
 }
 
@@ -377,7 +377,7 @@ private fun SocialSearch(state: AppState, repo: SocialRepository, onProfile: (St
         }
         Text("Search accounts already known to your instance. Enter #tag to browse public posts.", Modifier.padding(horizontal = 20.dp, vertical = 8.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         if (busy) LinearProgressIndicator(Modifier.fillMaxWidth())
-        if (error != null) SocialError(error!!, ::search)
+        error?.let { shown -> SocialError(shown, ::search) }
         LazyColumn {
             if (results?.isEmpty() == true && !busy) item { SocialMessage("No accounts matched this name on your instance.") }
             items(results.orEmpty(), key = { it.id }) { person -> SocialPersonRow(state, person, { onProfile(person.id) }) }
@@ -406,7 +406,7 @@ private fun SocialPeople(state: AppState, repo: SocialRepository, route: SocialR
     LaunchedEffect(route, revision) { load(true) }
     LazyColumn(Modifier.fillMaxSize()) {
         if (busy) item { LinearProgressIndicator(Modifier.fillMaxWidth()) }
-        if (error != null) item { SocialError(error!!, { scope.launch { load(!loaded) } }) }
+        error?.let { shown -> item { SocialError(shown, { scope.launch { load(!loaded) } }) } }
         if (loaded && rows.isEmpty() && error == null) item { SocialMessage(if (route.pending) "No pending follow requests." else "No accounts to show yet.") }
         items(rows, key = { it.id }) { person ->
             SocialPersonRow(state, person, { onProfile(person.id) })
@@ -450,7 +450,7 @@ private fun SocialLists(state: AppState, repo: SocialRepository, revision: Int, 
     }
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp)) {
         if (lists == null && error == null) item { SocialLoading() }
-        if (error != null) item { SocialError(error!!, { retry++ }) }
+        error?.let { shown -> item { SocialError(shown, { retry++ }) } }
         if (lists?.isEmpty() == true) item { SocialMessage("Create a list to give a group of followed accounts its own timeline.") }
         items(lists.orEmpty(), key = { it.id }) { list ->
             ListItem(headlineContent = { Text(list.title) }, supportingContent = { Text(list.description ?: if (list.isPublic) "Public list" else "Private list") },
@@ -508,7 +508,7 @@ private fun SocialMembers(state: AppState, repo: SocialRepository, list: SocialL
                 }) { Icon(Icons.Outlined.Search, "Search accounts") }
             }
             if (busy) LinearProgressIndicator(Modifier.fillMaxWidth())
-            if (error != null) SocialError(error!!, { retry++ })
+            error?.let { shown -> SocialError(shown, { retry++ }) }
         }
         items(results.filter { p -> members.orEmpty().none { it.accountId == p.id } }, key = { "search:${it.id}" }) { person ->
             SocialPersonRow(state, person, {}) { TextButton(enabled = !busy, onClick = { change(person.id, true) }) { Text("Add") } }
@@ -551,7 +551,7 @@ private fun SocialComposer(state: AppState, repo: SocialRepository, draft: Socia
             }
             OutlinedTextField(warning, { warning = it }, Modifier.fillMaxWidth(), enabled = !busy, label = { Text("Content warning (optional)") })
             Row(verticalAlignment = Alignment.CenterVertically) { Switch(sensitive, { sensitive = it }, enabled = !busy); Spacer(Modifier.width(12.dp)); Text("Mark content as sensitive", style = MaterialTheme.typography.bodyMedium) }
-            if (error != null) SocialError(error!!, onRetry = { error = null })
+            error?.let { shown -> SocialError(shown, onRetry = { error = null }) }
             Button(enabled = text.isNotBlank() && !busy, modifier = Modifier.fillMaxWidth(), onClick = {
                 busy = true; error = null
                 scope.launch {
@@ -592,7 +592,7 @@ private fun SocialListEditor(state: AppState, repo: SocialRepository, list: Soci
             Text("These options are stored with your list. Its timeline currently shows members' public and unlisted posts.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Row(verticalAlignment = Alignment.CenterVertically) { Switch(exclusive, { exclusive = it }, enabled = !busy); Spacer(Modifier.width(12.dp)); Text("Exclusive list") }
             Row(verticalAlignment = Alignment.CenterVertically) { Switch(public, { public = it }, enabled = !busy); Spacer(Modifier.width(12.dp)); Text("Public list") }
-            if (error != null) SocialError(error!!, { error = null })
+            error?.let { shown -> SocialError(shown, { error = null }) }
             Button(enabled = !busy && title.isNotBlank(), modifier = Modifier.fillMaxWidth(), onClick = {
                 busy = true; error = null
                 scope.launch {

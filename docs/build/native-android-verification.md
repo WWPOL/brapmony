@@ -49,6 +49,14 @@ row on screen and the row in the database are the same row), the server tile and
 its channel column, a channel room, the message-actions sheet, server management
 and its Members tab, Social, Alerts, You, the appearance panel and Drive.
 
+A second run drives the two screens that were crashing on a real phone: a
+channel history seeded with the payload shape that broke it (an emoji part whose
+`emoji` is an object, mixed with text) and the Threads and pinned sheets whose
+deferred lists read a nullable the tap had just cleared. Both are in
+`docs/build/evidence/android-native-emulator/` as `16`-`19`, and the run also
+reads the crash buffer after each phase and requires it to hold no
+`FATAL EXCEPTION`. It installs over the existing app without clearing its data.
+
 It does **not** cover what the screen looked like. Every capture path was
 tried and all of them fail the same way:
 
@@ -88,6 +96,19 @@ re-renders with the app's default and requires the pixels to differ. Run
 against an account set to a custom light look with a crimson accent, that pair
 is `chats-account-appearance.png` and `chats-account-default.png`.
 
+`MessagePartRenderTest` draws a history whose parts are the shapes the instance
+really stores and requires each one in the tree, so a build that swallowed the
+decode error instead of rendering the part would fail. `EmojiImageRenderTest`
+goes further on the one part that is a picture: it points the emoji at a
+`file://` PNG and waits until a pixel of that PNG's colour is in the capture, so
+an image that never loads fails instead of passing on the alt text.
+
+`ThreadSheetJourneyTest` drives the sheets that crashed: it opens Threads, taps
+a thread and requires the thread's own messages, then dismisses and reopens the
+sheet, and does the same for pinned messages and message actions. It is the
+regression for `threads!!` (and its `pins!!` twin) being read inside a deferred
+`LazyColumn` after the tap had already set the state to null.
+
 ### Journeys: `NativeJourneyTest`
 
 These drive the semantics tree, which is what a touch target and a TalkBack user
@@ -103,7 +124,7 @@ journey measures the preview's repaint by counting differing pixels between two
 captures, so a theme change that never reached the nested `HarmonyTheme` fails
 instead of looking plausible.
 
-192 tests pass in total, including the pre-existing model and repository tests.
+208 tests pass in total, including the pre-existing model and repository tests.
 
 ### The cost of the split
 
@@ -121,7 +142,7 @@ at `U/U` and says so.
 bash e2e/stack.sh up     # answers on http://localhost:54480
 bash e2e/stack.sh seed   # writes e2e/fixture.json
 
-# 2. the JVM checks (192 tests; the render and journey tests skip themselves
+# 2. the JVM checks (208 tests; the render and journey tests skip themselves
 #    when the variables below are absent)
 cd android-native
 HARMONY_RENDER_OUT=/tmp/harmony-render \

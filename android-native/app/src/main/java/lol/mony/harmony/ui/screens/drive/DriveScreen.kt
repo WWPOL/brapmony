@@ -456,9 +456,16 @@ private fun DriveBrowser(
             } })
         is DriveDialog.Move -> DriveMoveDialog(snapshot?.folders.orEmpty(), current.folder?.id, busy, mutationError, dismiss) { destination ->
             mutate {
-                request { endpoint, token -> if (current.file != null) {
-                    repository.moveFiles(endpoint, token, listOf(current.file.id), destination).map { count -> check(count == 1) { "The file was not moved. Refresh Drive." } }
-                } else repository.moveFolder(endpoint, token, current.folder!!.id, destination).map { } }
+                request { endpoint, token ->
+                    val file = current.file
+                    if (file != null) {
+                        repository.moveFiles(endpoint, token, listOf(file.id), destination).map { count -> check(count == 1) { "The file was not moved. Refresh Drive." } }
+                    } else {
+                        val folder = current.folder
+                        if (folder == null) Result.success(0)
+                        else repository.moveFolder(endpoint, token, folder.id, destination).map { 0 }
+                    }
+                }
                 "Moved to folder."
             }
         }
@@ -467,15 +474,17 @@ private fun DriveBrowser(
             val title = if (current.folder != null) "Delete folder?" else if (permanent) "Delete file permanently?" else "Move file to trash?"
             val description = when {
                 current.folder != null -> "Delete ${current.folder.name} and its subfolders. Kept files move to trash. Temporary files are deleted permanently. Existing messages can lose access to these files."
-                permanent -> "Delete ${current.file!!.displayName} wherever it is used. This cannot be undone."
-                else -> "Move ${current.file!!.displayName} to trash. Messages using this file can no longer open it. Trash is deleted after 30 days."
+                permanent -> "Delete ${current.file?.displayName ?: "this file"} wherever it is used. This cannot be undone."
+                else -> "Move ${current.file?.displayName ?: "this file"} to trash. Messages using this file can no longer open it. Trash is deleted after 30 days."
             }
             DriveConfirmDialog(title, description, busy, mutationError, dismiss) {
                 mutate {
+                    val file = current.file
                     val count = request { endpoint, token -> when {
                         current.folder != null -> repository.deleteFolder(endpoint, token, current.folder.id)
-                        permanent -> repository.deleteForever(endpoint, token, listOf(current.file!!.id))
-                        else -> repository.trash(endpoint, token, listOf(current.file!!.id))
+                        file != null && permanent -> repository.deleteForever(endpoint, token, listOf(file.id))
+                        file != null -> repository.trash(endpoint, token, listOf(file.id))
+                        else -> Result.success(0)
                     } }
                     if (current.folder == null) check(count == 1) { "The file changed or is no longer yours. Refresh Drive." }
                     if (current.folder != null) "Folder deleted; $count files affected." else if (permanent) "File deleted permanently." else "File moved to trash."

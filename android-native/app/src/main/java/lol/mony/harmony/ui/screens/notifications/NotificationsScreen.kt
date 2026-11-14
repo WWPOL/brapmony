@@ -175,8 +175,8 @@ fun NotificationsScreen(
                 }
                 if (working && ui.items.isNotEmpty()) LinearProgressIndicator(Modifier.fillMaxWidth())
                 ui.actionError?.let { error -> NotificationError(error, enabled = !working, onRetry = { scope.launch { inbox.retryAction() } }) }
-                if (ui.loadError != null) {
-                    NotificationError(ui.loadError!!, enabled = !working, onRetry = { scope.launch { inbox.retryLoad() } })
+                ui.loadError?.let { shown ->
+                    NotificationError(shown, enabled = !working, onRetry = { scope.launch { inbox.retryLoad() } })
                 }
                 when {
                     ui.loading && ui.items.isEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {

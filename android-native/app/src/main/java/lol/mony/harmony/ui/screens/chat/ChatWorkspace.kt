@@ -147,12 +147,15 @@ private fun DirectMessages(state: AppState, modifier: Modifier) {
             IconButton(onClick = { retry++ }) { Icon(Icons.Default.Refresh, "Refresh conversations") }
             IconButton(onClick = { start = true }) { Icon(Icons.Default.Edit, "New message") }
         })
-        if (failure != null) ErrorBanner(failure!!) { failure = null }
+        val openFailure = failure
+        if (openFailure != null) ErrorBanner(openFailure) { failure = null }
         when {
             rows == null && failure == null -> LoadingState("Loading conversations")
             rows.isNullOrEmpty() -> EmptyState("Your conversations", "Start a conversation with someone on your instance.", "New message") { start = true }
+            // The list is drawn after this body returns, so it closes over the rows it was
+            // given rather than re-reading the nullable state they came from.
             else -> LazyColumn(Modifier.fillMaxSize().testTag("conversation-list")) {
-                items(rows!!, key = { it.conversation.id }) { row ->
+                items(rows.orEmpty(), key = { it.conversation.id }) { row ->
                     ListItem(headlineContent = { Text(row.title) },
                         supportingContent = { Text(if (row.conversation.type == "group") "Group conversation" else "Direct message") },
                         leadingContent = { Avatar(row.title, row.participants.firstOrNull()?.avatarUrl) },
@@ -166,7 +169,8 @@ private fun DirectMessages(state: AppState, modifier: Modifier) {
         text = { Column {
             OutlinedTextField(handle, { handle = it }, label = { Text("Username or @handle") }, enabled = !starting,
                 singleLine = true, modifier = Modifier.testTag("new-message-handle"))
-            if (failure != null) Text(failure!!, color = MaterialTheme.colorScheme.error)
+            val dialogFailure = failure
+            if (dialogFailure != null) Text(dialogFailure, color = MaterialTheme.colorScheme.error)
         } },
         confirmButton = { TextButton(enabled = handle.isNotBlank() && !starting, onClick = {
             starting = true

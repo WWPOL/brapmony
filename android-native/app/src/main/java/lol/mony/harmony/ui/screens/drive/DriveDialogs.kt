@@ -267,8 +267,9 @@ internal fun DriveLinkDialog(
     AlertDialog(onDismissRequest = onDismiss, title = { Text("Link access") }, text = {
         Column(Modifier.heightIn(max = androidx.compose.ui.unit.Dp(480f)).verticalScroll(rememberScrollState())) {
             Text(file.displayName, style = MaterialTheme.typography.titleSmall)
-            if (loadError != null) {
-                DriveError(loadError!!)
+            val shownError = loadError
+            if (shownError != null) {
+                DriveError(shownError)
                 TextButton(onClick = { revision++ }) { Text("Try again") }
             } else if (link == null) CircularProgressIndicator()
             else {
@@ -294,7 +295,9 @@ internal fun DriveLinkDialog(
                     }
                     link?.linkExpiresAt?.let { Text("Current expiry: $it", style = MaterialTheme.typography.bodySmall) }
                 }
-                TextButton(onClick = { clipboard.setText(AnnotatedString(driveLinkUrl(endpoint, link!!.token))); copied = true }, enabled = !busy) { Text(if (copied) "Address copied" else "Copy address") }
+                val address = link?.let { driveLinkUrl(endpoint, it.token) }
+                TextButton(onClick = { if (address != null) { clipboard.setText(AnnotatedString(address)); copied = true } },
+                    enabled = !busy && address != null) { Text(if (copied) "Address copied" else "Copy address") }
                 Text("Copying the address does not change access.", style = MaterialTheme.typography.bodySmall)
                 TextButton(onClick = { resetConfirm = true }, enabled = !busy) { Text("Reset address") }
             }

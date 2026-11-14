@@ -30,6 +30,16 @@ rotation, system appearance or device rendering.
 - `drive.png` -- the Drive browser with quota, filters and its empty state.
 - `server-management*.png` -- server management across its Overview, Channels,
   Members, Roles, Invites and Bans tabs.
+- `message-parts.png` -- one channel history whose parts are the shapes the
+  instance stores: text and an emoji object in one sentence, a mention, a
+  channel reference, a unicode emoji, an unresolved shortcode, and a poll.
+- `message-emoji-image.png` -- `shipping [image] today`: the custom emoji drawn
+  as its own picture, inline in the sentence, from a `file://` PNG so the
+  assertion is on pixels rather than on the alt text.
+- `thread-sheet-open.png`, `thread-opened.png` -- the room's Threads sheet, and
+  the thread it opens, which is the transition that used to crash the app.
+- `pinned-sheet.png`, `actions-sheet.png` -- the pinned-messages sheet and the
+  message-actions sheet, both of which read the same cleared nullable.
 
 ## The account's own look
 

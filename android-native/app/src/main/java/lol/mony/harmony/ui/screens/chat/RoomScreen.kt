@@ -135,6 +135,21 @@ fun RoomScreen(state: AppState, roomId: String, direct: Boolean, appearance: Vis
     }
     BackHandler { if (thread != null) thread = null else onBack() }
 
+    // Deferred content -- a bottom sheet's body, a lazy list's items, a dialog's buttons -- runs
+    // after this composable body has returned, so each one closes over an immutable snapshot of
+    // the state it draws. Reading the mutable `var` there is how opening a thread from the sheet
+    // crashed: the row's click set `threads = null`, and the list's next recomposition then
+    // dereferenced it.
+    val openFailure = failure
+    val openReply = reply
+    val openSelected = selected
+    val openEdit = edit
+    val openDelete = delete
+    val openPins = pins
+    val openThreads = threads
+    val openSearchRows = searchRows
+    val openSearchOpen = searchOpen
+
     Column(Modifier.fillMaxSize().imePadding()) {
         TopAppBar(title = { Column {
             Text(thread?.name ?: title, maxLines = 1, style = MaterialTheme.typography.titleMedium)
@@ -154,7 +169,7 @@ fun RoomScreen(state: AppState, roomId: String, direct: Boolean, appearance: Vis
         })
         Text(live, Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 3.dp), style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant)
-        if (failure != null) ErrorBanner(failure!!) { failure = null }
+        if (openFailure != null) ErrorBanner(openFailure) { failure = null }
         Box(Modifier.weight(1f).fillMaxWidth()) {
             if (loading && messages.isEmpty()) LoadingState("Loading messages")
             else if (messages.isEmpty()) EmptyState("Start the conversation", "Messages sent here will appear in this ${if (direct) "conversation" else "channel"}.")
@@ -167,9 +182,9 @@ fun RoomScreen(state: AppState, roomId: String, direct: Boolean, appearance: Vis
                 }
             }
         }
-        if (reply != null) Surface(color = MaterialTheme.colorScheme.surfaceContainerHigh) {
+        if (openReply != null) Surface(color = MaterialTheme.colorScheme.surfaceContainerHigh) {
             Row(Modifier.fillMaxWidth().padding(start = 16.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text("Replying to ${people[reply!!.userId]?.shownName ?: "message"}: ${reply!!.plainText.take(60)}",
+                Text("Replying to ${people[openReply.userId]?.shownName ?: "message"}: ${openReply.plainText.take(60)}",
                     Modifier.weight(1f), style = MaterialTheme.typography.bodySmall)
                 IconButton(onClick = { reply = null }) { Icon(Icons.Default.Close, "Cancel reply") }
             }
@@ -198,8 +213,10 @@ fun RoomScreen(state: AppState, roomId: String, direct: Boolean, appearance: Vis
             }
         }
     }
-    if (selected != null) {
-        val message = selected!!
+    // The message-actions sheet. `message` is captured once, so a click that closes the sheet
+    // cannot leave the body reading a cleared state.
+    if (openSelected != null) {
+        val message = openSelected
         ModalBottomSheet(onDismissRequest = { selected = null }) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
                 listOf("👍", "❤️", "😂", "🎉", "👀").forEach { emoji ->
@@ -219,7 +236,7 @@ fun RoomScreen(state: AppState, roomId: String, direct: Boolean, appearance: Vis
                 } }, Modifier.fillMaxWidth()) { Text(if (message.isPinned) "Unpin message" else "Pin message") }
             }
             if (message.userId == myId) {
-                if (!message.encrypted && message.content.all { it.type == "text" }) {
+                if (message.isEditable) {
                     TextButton(onClick = { edit = message; editText = message.plainText; selected = null }, Modifier.fillMaxWidth()) { Text("Edit message") }
                 }
                 TextButton(onClick = { delete = message; selected = null }, Modifier.fillMaxWidth()) { Text("Delete message", color = MaterialTheme.colorScheme.error) }
@@ -227,42 +244,63 @@ fun RoomScreen(state: AppState, roomId: String, direct: Boolean, appearance: Vis
             Spacer(Modifier.height(24.dp))
         }
     }
-    if (edit != null) AlertDialog(onDismissRequest = { edit = null }, title = { Text("Edit message") },
-        text = { OutlinedTextField(editText, { editText = it }, modifier = Modifier.testTag("message-edit-text")) },
-        confirmButton = { TextButton(enabled = editText.isNotBlank(), onClick = { val id = edit!!.id; edit = null; action {
-            val token = state.auth.freshToken() ?: error("Sign in again.")
-            state.chats.editMessage(session.endpoint, token, id, editText).getOrThrow(); load()
-        } }) { Text("Save") } }, dismissButton = { TextButton(onClick = { edit = null }) { Text("Cancel") } })
-    if (delete != null) AlertDialog(onDismissRequest = { delete = null }, title = { Text("Delete this message?") },
-        text = { Text("This cannot be undone.") }, confirmButton = { TextButton(onClick = { val id = delete!!.id; delete = null; action {
-            val token = state.auth.freshToken() ?: error("Sign in again.")
-            state.chats.deleteMessage(session.endpoint, token, id).getOrThrow(); load()
-        } }) { Text("Delete", color = MaterialTheme.colorScheme.error) } },
-        dismissButton = { TextButton(onClick = { delete = null }) { Text("Cancel") } })
-    if (pins != null) ModalBottomSheet(onDismissRequest = { pins = null }) {
-        Text("Pinned messages", Modifier.padding(16.dp), style = MaterialTheme.typography.titleLarge)
-        LazyColumn { if (pins!!.isEmpty()) item { Text("No pinned messages", Modifier.padding(16.dp)) }
-            items(pins!!, key = { it.id }) { Text(it.plainText, Modifier.padding(16.dp)) } }
+    if (openEdit != null) {
+        val message = openEdit
+        AlertDialog(onDismissRequest = { edit = null }, title = { Text("Edit message") },
+            text = { OutlinedTextField(editText, { editText = it }, modifier = Modifier.testTag("message-edit-text")) },
+            confirmButton = { TextButton(enabled = editText.isNotBlank(), onClick = { edit = null; action {
+                val token = state.auth.freshToken() ?: error("Sign in again.")
+                state.chats.editMessage(session.endpoint, token, message.id, editText).getOrThrow(); load()
+            } }) { Text("Save") } }, dismissButton = { TextButton(onClick = { edit = null }) { Text("Cancel") } })
     }
-    if (threads != null) ModalBottomSheet(onDismissRequest = { threads = null }) {
-        Text("Threads", Modifier.padding(16.dp), style = MaterialTheme.typography.titleLarge)
-        LazyColumn { if (threads!!.isEmpty()) item { Text("No threads yet. Open a message's actions to start one.", Modifier.padding(16.dp)) }
-            items(threads!!, key = { it.id }) { row -> ListItem(headlineContent = { Text(row.name ?: "Thread") },
-                supportingContent = { Text("${row.messageCount} messages") }, modifier = Modifier.combinedClickable(onClick = { thread = row; threads = null })) } }
+    if (openDelete != null) {
+        val message = openDelete
+        AlertDialog(onDismissRequest = { delete = null }, title = { Text("Delete this message?") },
+            text = { Text("This cannot be undone.") }, confirmButton = { TextButton(onClick = { delete = null; action {
+                val token = state.auth.freshToken() ?: error("Sign in again.")
+                state.chats.deleteMessage(session.endpoint, token, message.id).getOrThrow(); load()
+            } }) { Text("Delete", color = MaterialTheme.colorScheme.error) } },
+            dismissButton = { TextButton(onClick = { delete = null }) { Text("Cancel") } })
     }
-    if (searchOpen) ModalBottomSheet(onDismissRequest = { searchOpen = false }) {
+    if (openPins != null) {
+        val rows = openPins
+        ModalBottomSheet(onDismissRequest = { pins = null }) {
+            Text("Pinned messages", Modifier.padding(16.dp), style = MaterialTheme.typography.titleLarge)
+            LazyColumn(Modifier.testTag("pinned-list")) {
+                if (rows.isEmpty()) item { Text("No pinned messages", Modifier.padding(16.dp)) }
+                items(rows, key = { it.id }) { row -> MessageContent(row, sizes.messageSp, Modifier.padding(16.dp)) }
+            }
+        }
+    }
+    if (openThreads != null) {
+        val rows = openThreads
+        ModalBottomSheet(onDismissRequest = { threads = null }) {
+            Text("Threads", Modifier.padding(16.dp), style = MaterialTheme.typography.titleLarge)
+            LazyColumn(Modifier.testTag("thread-list")) {
+                if (rows.isEmpty()) item { Text("No threads yet. Open a message's actions to start one.", Modifier.padding(16.dp)) }
+                items(rows, key = { it.id }) { row -> ListItem(headlineContent = { Text(row.name ?: "Thread") },
+                    supportingContent = { Text(countLabel(row.messageCount, "message")) },
+                    modifier = Modifier.combinedClickable(onClick = { thread = row; threads = null })) }
+            }
+        }
+    }
+    if (openSearchOpen) ModalBottomSheet(onDismissRequest = { searchOpen = false }) {
         Column(Modifier.padding(16.dp)) {
             OutlinedTextField(query, { query = it }, label = { Text("Search messages") }, modifier = Modifier.fillMaxWidth())
             Button(onClick = { action { val token = state.auth.freshToken() ?: return@action
                 searchRows = state.chats.search(session.endpoint, token, query, channelId = if (direct) null else roomId).getOrThrow() } },
                 enabled = query.isNotBlank()) { Text("Search") }
-            LazyColumn { items(searchRows.orEmpty(), key = { it.id }) { Text(it.plainText, Modifier.padding(vertical = 12.dp)) }
-                if (searchRows?.isEmpty() == true) item { Text("No results") } }
+            LazyColumn { items(openSearchRows.orEmpty(), key = { it.id }) { row -> MessageContent(row, sizes.messageSp, Modifier.padding(vertical = 12.dp)) }
+                if (openSearchRows?.isEmpty() == true) item { Text("No results") } }
         }
     }
 }
 
 private const val ChatRepositoryPage = 50
+
+/** `1 message`, `2 messages`: a count and its noun, as the web client writes it. */
+internal fun countLabel(count: Int, noun: String): String =
+    count.toString() + " " + noun + (if (count == 1) "" else "s")
 
 @Composable
 private fun MessageRow(message: Message, profile: Profile?, appearance: VisualThemeSettings, reactions: List<Reaction>,
@@ -283,12 +321,9 @@ private fun MessageRow(message: Message, profile: Profile?, appearance: VisualTh
             }
             if (message.replyTo != null) Text("↳ Reply", style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
-            SelectionContainer {
-                Text(if (message.encrypted) "Encrypted message — keys are not available in this client" else message.plainText,
-                    fontSize = sizes.messageSp.sp, modifier = Modifier.testTag("message-${message.id}"),
-                    color = if (message.isSystem) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface)
-            }
-            if (message.content.any { it.type != "text" }) Text("This message contains media or other content not rendered here.",
+            MessageContent(message, sizes.messageSp,
+                encryptedNotice = if (message.encrypted) "Encrypted message — keys are not available in this client" else null)
+            if (message.hasAttachmentParts) Text("This message also carries an attachment or poll this client does not draw yet.",
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 reactions.groupBy { it.emoji }.forEach { (emoji, group) ->

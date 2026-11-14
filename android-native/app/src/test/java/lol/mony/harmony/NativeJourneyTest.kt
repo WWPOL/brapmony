@@ -3,6 +3,7 @@ package lol.mony.harmony
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
@@ -102,7 +103,12 @@ class NativeJourneyTest {
         compose.capture("journey-channels")
 
         compose.onNodeWithTag("channel-general").performClick()
-        settle("channel message from alice")
+        // Any row of the channel's own history, not one named fixture row: the channel is
+        // shared with every other test that writes to it, so a fixed marker eventually pages
+        // out and the wait would fail on a screen that had loaded correctly.
+        compose.waitUntil(180_000) {
+            compose.onAllNodesWithContentDescription("Message actions").fetchSemanticsNodes().isNotEmpty()
+        }
         compose.capture("journey-channel-room")
 
         val text = "native channel journey " + System.currentTimeMillis()

@@ -464,6 +464,19 @@ tabs; the Members list with both accounts and their per-member actions; Social;
 Alerts with real notification rows; You; the appearance panel with its four
 themes and live preview; and Drive with its quota, filters and empty state.
 
+A second device run covers the two screens that were crashing on a real phone.
+`#general` was seeded over PostgREST with the payload shape that killed it -- a
+message whose `content` mixes text with an emoji part whose `emoji` is an
+object -- alongside the shapes around it (an emoji row with no file, a unicode
+codepoint, a legacy bare string, an unresolved shortcode). The channel opened
+and drew every row; the emoji with a file is an image node carrying
+`:blobcat:` as its description, the unicode one is a `TextView` holding the
+glyph, and the fileless one shows its shortcode. The message-actions sheet,
+the Threads sheet and its dismissal all still work over that history, the room
+is still on screen afterwards, and `logcat -b crash` holds no `FATAL
+EXCEPTION`. The install was `adb install -r -t` with no `pm clear`, so the
+app's data was kept.
+
 **No screenshots exist.** Every capture path returns a uniform black 480x960
 image (0 of 460800 pixels non-black): `screencap` over `exec-out`, `screencap`
 to a file then `adb pull`, the emulator console's own screenshot, and
@@ -491,7 +504,17 @@ wearing the account's look rather than its own.
 `NativeJourneyTest` drives the semantics tree for the bottom bar, the rail, a
 DM and a channel message (both read back from the instance), a refused
 sign-in, the register and reset forms, and an appearance change measured by
-pixel difference. 193 tests pass.
+pixel difference.
+
+`MessagePartRenderTest` draws a channel history whose parts are the shapes the
+instance stores -- text and an emoji object in one sentence, a mention, a
+channel reference, a unicode emoji, an unresolved shortcode, a poll -- and
+requires each in the tree; `EmojiImageRenderTest` proves the picture branch
+actually paints by waiting for a pixel of a local PNG's colour in the
+capture. `ThreadSheetJourneyTest` is the regression for the phone crash: it
+opens Threads, taps a thread, requires the thread's own messages, then
+dismisses and reopens the sheet, and does the same for pinned messages and
+message actions. 208 tests pass.
 
 These are supporting evidence. They show what the composables draw and which
 nodes they expose, given real rows; they cannot show touch, IME, lifecycle,

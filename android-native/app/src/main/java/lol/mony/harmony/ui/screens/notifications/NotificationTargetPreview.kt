@@ -83,7 +83,7 @@ internal fun NotificationTargetPreview(
                         CircularProgressIndicator(Modifier.size(24.dp))
                         Text("Loading ${if (target is NotificationTarget.Post) "post" else "profile"}")
                     }
-                    error != null -> NotificationError(error!!, enabled = true, onRetry = { attempt++ })
+                    error != null -> error?.let { shown -> NotificationError(shown, enabled = true, onRetry = { attempt++ }) }
                     else -> {
                         profile?.let { person ->
                             NotificationPerson(person, endpoint.baseUrl)

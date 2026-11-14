@@ -58,6 +58,35 @@ shows. They are in the order the journeys were driven.
 - `15-drive.xml` -- tapped `Drive`: quota, `My Drive`, the type filters and
   the empty state
 
+## The object-emoji channel, on the device
+
+`16`-`19` are a second run, after the message-part fix, against a channel whose
+history was seeded with the exact payload shape that broke the phone: a message
+whose `content` mixes text with an emoji part whose `emoji` is an **object**
+(an `emojis` row), plus the shapes around it (an emoji row with no file, a
+unicode codepoint, a legacy bare string, an unresolved shortcode).
+
+- `16-channel-room-object-emoji.xml` -- `#general` after tapping
+  `channel-general`, with those rows on screen: `shipping`, `today`, `bridged`
+  and `unicode` are all there, and the emoji nodes carry their own tags.
+- `17-actions-object-emoji.xml` -- tapped `Message actions`: reactions, reply,
+  copy, thread, pin and edit still open over that history.
+- `18-threads-sheet.xml` -- tapped `Threads`: the sheet lists the threads, which
+  is the screen whose deferred `LazyColumn` dereferenced a cleared nullable and
+  crashed the app.
+- `19-room-after-sheets.xml` -- after backing out of both sheets: the room is
+  still on screen and still holds `Message actions`, so nothing died.
+
+The run also read the crash buffer after each phase (`logcat -d -b crash`) and
+found no `FATAL EXCEPTION`. The object emoji is an **image** node in the tree --
+`resource-id=emoji-blobcat`, `class=android.view.View`,
+`content-desc=:blobcat:` -- while the unicode emoji is a `TextView` holding
+`í ¼í¾‰` and the fileless one shows `:bridged:`, which is the fallback order the
+renderer intends.
+
+That run installed over the existing app without clearing its data
+(`adb install -r -t`, no `pm clear`), so the session it already had was kept.
+
 Every dump was produced by
 `e2e/android-native/device-journey.sh`, which boots, installs, signs in and drives
 this sequence in one run -- the emulator does not outlive the sandbox that starts
