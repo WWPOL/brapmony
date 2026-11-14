@@ -4,6 +4,8 @@ Every command in this directory ran against an emulator named explicitly
 (`emulator-5558`). No physical device was attached, selected or written to. The
 reported failure is on a Galaxy S23 Ultra; nothing here touched a phone.
 
+![The reproduction: the reported abort, then the repair](repro4-evidence.png)
+
 The mechanism is in
 [the data-directory notes](../../native-android-launch-data-directory.md).
 
