@@ -4,6 +4,7 @@ import android.content.Context
 import lol.mony.harmony.data.api.AuthApi
 import lol.mony.harmony.data.api.Http
 import lol.mony.harmony.data.api.RestApi
+import lol.mony.harmony.data.repo.BotRepository
 import lol.mony.harmony.data.repo.ChatRepository
 import lol.mony.harmony.data.repo.ProfileRepository
 import lol.mony.harmony.data.repo.ServerRepository
@@ -25,6 +26,7 @@ class AppContainer(context: Context, store: SessionStore = SessionStore(context.
     val profiles: ProfileRepository = ProfileRepository(rest)
     val servers: ServerRepository = ServerRepository(rest)
     val chats: ChatRepository = ChatRepository(rest)
+    val bots: BotRepository = BotRepository(rest)
     val settings: SettingsRepository = SettingsRepository(rest)
 
     val auth: AuthRepository = AuthRepository(sessionStore, authApi, profiles)

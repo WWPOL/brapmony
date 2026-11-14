@@ -27,8 +27,14 @@ data class Profile(
     @SerialName("notification_settings") val notificationSettings: JsonElement? = null,
     @SerialName("created_at") val createdAt: String? = null,
     @SerialName("last_seen_at") val lastSeenAt: String? = null,
-    val status: String? = null,
-    @SerialName("custom_status") val customStatus: String? = null,
+    /**
+     * `profiles.status` is a `smallint` (0 offline, 1 online, 2 idle, 3 do-not-disturb), not a
+     * string. Declaring it as one made every profile fail to decode, which is why no author
+     * name or avatar ever reached the message list.
+     */
+    val status: JsonElement? = null,
+    /** `profiles.custom_status` is `jsonb`, not a string: `{"text": "...", "emoji": ...}`. */
+    @SerialName("custom_status") val customStatus: JsonElement? = null,
 ) {
     /** The handle people see: `@name`, and `@name@domain` away from this instance. */
     fun handle(localDomain: String? = null): String {

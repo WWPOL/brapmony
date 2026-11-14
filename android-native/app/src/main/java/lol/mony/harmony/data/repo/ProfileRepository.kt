@@ -27,16 +27,31 @@ class ProfileRepository(private val rest: RestApi) {
         serializer = ListSerializer(Profile.serializer()),
     ).getOrThrow().firstOrNull()
 
-    /** Profiles for a set of ids, in the order asked; missing ids are simply absent. */
+    /**
+     * Profiles for a set of ids; missing ids are simply absent.
+     *
+     * Read one row at a time so a single row this build cannot decode costs that one author
+     * rather than the page. PostgREST answers a mixed-type column without complaint; it is the
+     * client's own decoding that used to fail the whole list.
+     */
     suspend fun byIds(endpoint: Endpoint, token: String, ids: Collection<String>): Map<String, Profile> {
-        if (ids.isEmpty()) return emptyMap()
-        val unique = ids.distinct()
-        val found = rest.select(
-            endpoint, token, "profiles", PROFILE_COLUMNS,
-            listOf("id" to "in.(${unique.joinToString(",")})"),
-            serializer = ListSerializer(Profile.serializer()),
-        ).getOrThrow()
-        return found.associateBy { it.id }
+        val unique = ids.distinct().filter { it.isNotBlank() }
+        if (unique.isEmpty()) return emptyMap()
+        return unique.chunked(CHUNK).flatMap { chunk ->
+            runCatching {
+                rest.select(
+                    endpoint, token, "profiles", PROFILE_COLUMNS,
+                    listOf("id" to "in.(${chunk.joinToString(",")})"),
+                    serializer = ListSerializer(Profile.serializer()),
+                ).getOrThrow()
+            }.getOrElse { error ->
+                // The page was refused as a whole; fall back to reading each row on its own so
+                // one bad row does not hide the rest.
+                chunk.mapNotNull { id ->
+                    runCatching { byId(endpoint, token, id) }.getOrNull()
+                }
+            }
+        }.associateBy { it.id }
     }
 
     suspend fun byAuthUserIds(
@@ -139,9 +154,21 @@ class ProfileRepository(private val rest: RestApi) {
     private fun authUserIdOf(token: String): String = Jwt.subject(token) ?: ""
 
     companion object {
-        private const val PROFILE_COLUMNS =
+        /**
+         * What a person's row draws, and only that.
+         *
+         * `status` and `custom_status` are the two columns whose *types* once broke every
+         * lookup: they are `smallint` and `jsonb` in the schema, and declaring them as strings
+         * made the decoder throw on the first profile, which emptied the whole page and left
+         * every message reading "Unknown account". They are asked for as `JsonElement` now,
+         * and a row this build cannot read no longer costs the rest of the page.
+         */
+        const val PROFILE_COLUMNS =
             "id,auth_user_id,username,display_name,avatar_url,banner_url,bio,pronouns,domain," +
                 "is_local,appearance_settings,created_at,status,custom_status"
+
+        /** PostgREST's `in.(...)` list is a URL parameter; keep it well inside a sane length. */
+        const val CHUNK = 40
     }
 }
 

@@ -1,6 +1,8 @@
 package lol.mony.harmony.ui.components
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
@@ -12,6 +14,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
@@ -44,6 +47,8 @@ fun MessageContent(
     fontSize: Double,
     modifier: Modifier = Modifier,
     encryptedNotice: String? = null,
+    /** The instance an attachment's relative URL resolves against. */
+    baseUrl: String? = null,
 ) {
     val sizes = LocalSizes.current
     val style = MaterialTheme.typography.bodyMedium.copy(fontSize = fontSize.sp)
@@ -65,7 +70,7 @@ fun MessageContent(
     Column(modifier = modifier) {
         for (run in runs(message.content)) {
             if (run.block) {
-                BlockPart(run.parts.first(), style, muted)
+                BlockPart(run.parts.first(), style, muted, baseUrl)
             } else {
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(3.dp),
@@ -156,15 +161,12 @@ fun EmojiPart(part: ContentPart, messageSp: Double, modifier: Modifier = Modifie
 
 /** A part that stands on its own line: an attachment, a sticker, a poll, a system event. */
 @Composable
-private fun BlockPart(part: ContentPart, style: androidx.compose.ui.text.TextStyle, muted: androidx.compose.ui.graphics.Color) {
+private fun BlockPart(part: ContentPart, style: androidx.compose.ui.text.TextStyle,
+                       muted: androidx.compose.ui.graphics.Color, baseUrl: String?) {
     val caption = MaterialTheme.typography.bodySmall.copy(color = muted)
     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 2.dp)) {
         when (part.type) {
-            "file" -> {
-                val label = part.fileName ?: part.altText ?: (part.fileType ?: "file")
-                Text("Attachment: " + label, style = style, color = muted,
-                    modifier = Modifier.testTag("attachment-" + label))
-            }
+            "file" -> FilePart(part, style, muted, baseUrl)
             "sticker" -> {
                 if (!part.url.isNullOrBlank()) {
                     AsyncImage(model = part.url, contentDescription = part.description ?: part.name ?: "Sticker",
@@ -181,6 +183,61 @@ private fun BlockPart(part: ContentPart, style: androidx.compose.ui.text.TextSty
                 style = caption)
         }
     }
+}
+
+/**
+ * An attachment: the picture itself when it is an image, a labelled card for anything else.
+ *
+ * The web client draws images inline, sized to a maximum, with the alt text beneath; a video
+ * or a document gets a card naming it. Announcing every attachment as a sentence -- which this
+ * client used to do -- makes a channel of pictures unreadable.
+ */
+@Composable
+private fun FilePart(part: ContentPart, style: androidx.compose.ui.text.TextStyle,
+                     muted: androidx.compose.ui.graphics.Color, baseUrl: String?) {
+    val url = AvatarUrl.resolve(baseUrl, part.url)
+    val isImage = part.fileType == "image" || part.mimeType?.startsWith("image/") == true ||
+        part.url?.let { path -> IMAGE_EXTENSIONS.any { ext -> path.substringBefore('?').endsWith(ext, ignoreCase = true) } } == true
+    val alt = part.altText?.takeIf { it.isNotBlank() }
+
+    if (url != null && isImage) {
+        Column(Modifier.padding(vertical = 4.dp)) {
+            AsyncImage(
+                model = ImageRequest.Builder(LocalContext.current).data(url).crossfade(true).build(),
+                contentDescription = alt ?: part.fileName ?: "Image attachment",
+                contentScale = ContentScale.Fit,
+                modifier = Modifier
+                    .widthIn(max = 280.dp)
+                    .heightIn(max = 320.dp)
+                    .clip(MaterialTheme.shapes.medium)
+                    .testTag("attachment-image"),
+            )
+            if (alt != null) Text(alt, style = MaterialTheme.typography.bodySmall.copy(color = muted),
+                modifier = Modifier.widthIn(max = 280.dp).padding(top = 2.dp))
+        }
+        return
+    }
+    val label = part.fileName ?: alt ?: (part.fileType ?: "file")
+    val kind = when {
+        part.fileType == "video" || part.mimeType?.startsWith("video/") == true -> "Video"
+        part.fileType == "audio" || part.mimeType?.startsWith("audio/") == true -> "Audio"
+        else -> "File"
+    }
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 2.dp)) {
+        Text(kind + ": " + label, style = style, color = muted,
+            modifier = Modifier.testTag("attachment-" + label))
+        part.fileSize?.let { Text("  " + humanSize(it), style = MaterialTheme.typography.labelSmall, color = muted) }
+    }
+}
+
+/** The extensions an image attachment may carry when the part does not say it is one. */
+private val IMAGE_EXTENSIONS = listOf("png", "jpg", "jpeg", "gif", "webp", "avif", "bmp")
+
+/** A byte count as a person reads it. */
+internal fun humanSize(bytes: Long): String = when {
+    bytes >= 1024L * 1024 -> String.format(java.util.Locale.ROOT, "%.1f MB", bytes / 1024.0 / 1024.0)
+    bytes >= 1024L -> String.format(java.util.Locale.ROOT, "%.1f KB", bytes / 1024.0)
+    else -> "$bytes B"
 }
 
 /** `#RRGGBB` or `#RGB` as a role colour; anything else leaves the caller's own colour in place. */

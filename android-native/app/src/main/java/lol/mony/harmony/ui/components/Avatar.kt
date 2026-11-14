@@ -39,9 +39,14 @@ fun Avatar(
     size: Dp = 40.dp,
     shape: androidx.compose.ui.graphics.Shape = CircleShape,
     contentDescription: String? = null,
+    /** The instance this avatar belongs to, so a relative path resolves against it. */
+    baseUrl: String? = null,
 ) {
     val fallback = initialsOf(name)
     val background = colorFor(name)
+    // The row may hold an absolute URL, a site-relative path or a bare storage path; resolve it
+    // here so every caller gets a picture without each one remembering to.
+    val image = AvatarUrl.resolve(baseUrl, url)
     Box(
         modifier = modifier
             .size(size)
@@ -49,10 +54,10 @@ fun Avatar(
             .background(background, shape),
         contentAlignment = Alignment.Center,
     ) {
-        if (!url.isNullOrBlank() && !url.endsWith("default_avatar.webp")) {
+        if (image != null) {
             AsyncImage(
                 model = ImageRequest.Builder(LocalContext.current)
-                    .data(url)
+                    .data(image)
                     .crossfade(true)
                     .build(),
                 contentDescription = contentDescription ?: name,
@@ -84,9 +89,10 @@ fun ServerAvatar(
 ) {
     val shape = RoundedCornerShape(if (selected) 16.dp else 22.dp)
     val harmony: HarmonyColors = LocalHarmonyColors.current
-    if (!url.isNullOrBlank()) {
+    val image = AvatarUrl.resolve(null, url)
+    if (image != null) {
         AsyncImage(
-            model = url,
+            model = image,
             contentDescription = name,
             contentScale = ContentScale.Crop,
             modifier = modifier
