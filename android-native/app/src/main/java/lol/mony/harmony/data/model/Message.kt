@@ -390,6 +390,23 @@ data class Reaction(
     val emoji: String get() = customEmojiContent ?: emojiId ?: "?"
     /** True for a custom emoji, whose `emoji_id` names an `emojis` row rather than a codepoint. */
     val isCustom: Boolean get() = emojiId != null
+
+    /**
+     * What one pill is: the custom emoji's row id when there is one, else the stored content.
+     *
+     * This is the identity a pill is drawn under, the one a tap toggles, and the one the
+     * reactor list filters by, so all three agree about which reactions belong together. The
+     * display label cannot do that job: every custom emoji's label is `:custom:`, so two
+     * different custom pills would be one group and a tap would remove the wrong one.
+     */
+    val key: String get() = emojiId ?: customEmojiContent ?: emoji
+
+    /**
+     * What to write back to `reactions.custom_emoji_content` when this account toggles the
+     * pill. Joining an existing pill sends the content that pill already carries, which is what
+     * the instance's own `check_reaction_emoji` trigger expects.
+     */
+    val content: String get() = customEmojiContent ?: emojiId ?: emoji
 }
 
 @Serializable
@@ -459,14 +476,21 @@ data class DirectConversation(
             .ifBlank { "Conversation" }
 }
 
-/** One row of the `get_unread_counts` RPC, as the web client's `UnreadCount` type reads it. */
+/**
+ * One row of the `get_unread_counts` RPC.
+ *
+ * The column is **`unread_messages`** (`db_schema/migrations/20261011100001_unread_badge_fixes.sql`,
+ * and the web client reads it as `row.unread_messages` in `src/stores/useDM.ts`). This row used
+ * to name it `unread_count`, a column neither the function nor the `unread_counts` table has,
+ * so every count decoded to the default 0 and no badge ever drew.
+ */
 @Serializable
 data class UnreadCountRow(
     @SerialName("server_id") val serverId: String? = null,
     @SerialName("channel_id") val channelId: String? = null,
     @SerialName("conversation_id") val conversationId: String? = null,
     @SerialName("unread_mentions") val unreadMentions: Int = 0,
-    @SerialName("unread_count") val unreadCount: Int = 0,
+    @SerialName("unread_messages") val unreadMessages: Int = 0,
     @SerialName("last_read_message_id") val lastReadMessageId: String? = null,
     val muted: Boolean = false,
 )

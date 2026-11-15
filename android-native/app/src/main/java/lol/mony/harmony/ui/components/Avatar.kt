@@ -83,7 +83,7 @@ fun Avatar(
  * A server's icon: its uploaded picture, else its initials on a rounded square.
  *
  * `servers.icon` holds the same mix of forms an avatar does -- an absolute URL, a site-relative
- * path, or a bare storage path under the `server-icons` bucket -- so it resolves through
+ * path, or a bare storage path under the `server_icons` bucket -- so it resolves through
  * [AvatarUrl] against the instance rather than being handed to the image loader raw. That raw
  * path is why a server with an icon still drew its initials.
  */
@@ -98,16 +98,16 @@ fun ServerAvatar(
 ) {
     val shape = RoundedCornerShape(if (selected) 16.dp else 22.dp)
     val harmony: HarmonyColors = LocalHarmonyColors.current
-    val image = AvatarUrl.resolveServer(baseUrl, url)
+    val image = AvatarUrl.resolveServerIcon(baseUrl, url)
     if (image != null) {
         AsyncImage(
             model = image,
             contentDescription = name,
             contentScale = ContentScale.Crop,
-            modifier = modifier
-                .size(size)
-                .clip(shape)
-                .testTag("server-icon"),
+            // The tag names the branch that drew: the picture is proof the image branch ran,
+            // the monogram below is proof it did not. It is applied after the caller's
+            // modifier so a caller cannot accidentally replace it.
+            modifier = modifier.size(size).clip(shape).testTag("server-icon-image"),
         )
         return
     }
@@ -115,7 +115,8 @@ fun ServerAvatar(
         modifier = modifier
             .size(size)
             .clip(shape)
-            .background(colorFor(name), shape),
+            .background(colorFor(name), shape)
+            .testTag("server-icon-monogram"),
         contentAlignment = Alignment.Center,
     ) {
         Text(

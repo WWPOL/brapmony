@@ -164,14 +164,25 @@ fun RoomScreen(state: AppState, roomId: String, direct: Boolean, appearance: Vis
             state.markLive(LiveStatus.Offline("You are offline. Messages will refresh when the connection returns."))
         } finally { loading = false; refreshing = false }
     }
-    suspend fun react(message: Message, emoji: String) {
-        val key = state.roomKey(roomId, direct, thread?.id)
+    /**
+     * Toggles this account's reaction with [key] on [message].
+     *
+     * [key] is the reaction's own identity (`Reaction.key`), not the display label: a custom
+     * emoji's label is `:custom:` and the old comparison could not tell two of them apart, so
+     * tapping the second custom pill removed the first. The row the instance stores carries
+     * the same key back, which is what makes a second tap remove rather than add.
+     */
+    suspend fun react(message: Message, key: String) {
+        val cacheKey = state.roomKey(roomId, direct, thread?.id)
         val token = state.auth.freshToken() ?: error("Sign in again.")
-        val existing = state.rooms.snapshot(key)?.reactions?.get(message.id).orEmpty().any { it.userId == myId && it.emoji == emoji }
-        if (existing) state.chats.removeReaction(session.endpoint, token, message.id, myId, emoji).getOrThrow()
-        else state.chats.addReaction(session.endpoint, token, message.id, myId, emoji).getOrThrow()
+        val mine = state.rooms.snapshot(cacheKey)?.reactions?.get(message.id).orEmpty()
+            .any { it.userId == myId && it.key == key }
+        val content = state.rooms.snapshot(cacheKey)?.reactions?.get(message.id).orEmpty()
+            .firstOrNull { it.key == key }?.content ?: key
+        if (mine) state.chats.removeReaction(session.endpoint, token, message.id, myId, content).getOrThrow()
+        else state.chats.addReaction(session.endpoint, token, message.id, myId, content).getOrThrow()
         runCatching { state.chats.reactionsFor(session.endpoint, token, listOf(message.id)).getOrThrow() }
-            .onSuccess { state.rooms.reactions(key, it) }
+            .onSuccess { state.rooms.reactions(cacheKey, it) }
     }
     fun action(work: suspend () -> Unit) { scope.launch {
         try { work() } catch (error: Exception) { failure = error.message ?: "The action failed." }
@@ -369,9 +380,9 @@ fun RoomScreen(state: AppState, roomId: String, direct: Boolean, appearance: Vis
                         reactions = reactions[row.message.id].orEmpty(),
                         myId = myId,
                         onActions = { selected = row.message },
-                        onReact = { emoji -> if (!row.isPending) action { react(row.message, emoji) } },
+                        onReact = { key -> if (!row.isPending) action { react(row.message, key) } },
                         onAuthor = { profileId -> selectedProfile = profileId },
-                        onShowReactors = { emoji -> reactors = row.message to emoji },
+                        onShowReactors = { key -> reactors = row.message to key },
                         onReply = { reply = row.message },
                         onRetry = { if (row.isFailed) send(row.message.plainText, row.message.replyTo, row.nonce ?: row.key, row.key) },
                         highlighted = highlighted == row.message.id,
@@ -501,13 +512,15 @@ fun RoomScreen(state: AppState, roomId: String, direct: Boolean, appearance: Vis
     val openReactors = reactors
     if (openReactors != null) {
         val (reactedMessage, emoji) = openReactors
-        val who = reactions[reactedMessage.id].orEmpty().filter { it.emoji == emoji }
+        // The same key the pill was drawn under, so the sheet lists exactly that pill's people.
+        val who = reactions[reactedMessage.id].orEmpty().filter { it.key == emoji }
         ModalBottomSheet(onDismissRequest = { reactors = null }) {
             Column(Modifier.fillMaxWidth().padding(16.dp)) {
-                Text(emoji + " " + who.size, style = MaterialTheme.typography.titleMedium,
+                Text(reactionLabel(who.firstOrNull() ?: Reaction(messageId = reactedMessage.id, customEmojiContent = emoji)) +
+                    " " + who.size, style = MaterialTheme.typography.titleMedium,
                     modifier = Modifier.testTag("reactors-title"))
                 Spacer(Modifier.height(8.dp))
-                if (who.isEmpty()) Text("No reactions yet.", style = MaterialTheme.typography.bodyMedium)
+                if (who.isEmpty()) Text("Nobody has reacted with this yet.", style = MaterialTheme.typography.bodyMedium)
                 for (reaction in who) {
                     val person = reaction.userId?.let { people[it] }
                     val name = person?.shownName ?: reaction.userId?.let { "Account " + it.take(8) } ?: "Someone"
@@ -734,25 +747,10 @@ private fun MessageRow(
                         color = MaterialTheme.colorScheme.error, maxLines = 2, overflow = TextOverflow.Ellipsis)
                     TextButton(onClick = onRetry, modifier = Modifier.testTag("send-retry")) { Text("Retry") }
                 }
-                if (reactions.isNotEmpty()) Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    reactions.groupBy { it.emoji }.forEach { (emoji, group) ->
-                        val mine = group.any { it.userId == myId }
-                        Surface(
-                            shape = MaterialTheme.shapes.small,
-                            color = if (mine) MaterialTheme.colorScheme.primaryContainer
-                            else MaterialTheme.colorScheme.surfaceContainerHigh,
-                            modifier = Modifier
-                                .combinedClickable(onClick = { onShowReactors(emoji) }, onLongClick = { onReact(emoji) })
-                                .testTag("reaction-" + emoji),
-                        ) {
-                            Text(
-                                reactionLabel(group.first()) + " " + group.size,
-                                Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
-                                style = MaterialTheme.typography.labelMedium,
-                            )
-                        }
-                    }
-                }
+                if (reactions.isNotEmpty()) MessageReactions(
+                    message = message, reactions = reactions, myId = myId,
+                    onToggle = onReact, onShowReactors = onShowReactors,
+                )
             }
         }
     }
@@ -780,6 +778,3 @@ private fun BotBadge() {
     }
 }
 
-/** What a reaction pill shows for its emoji: the custom emoji's name, else the glyph. */
-private fun reactionLabel(reaction: Reaction): String =
-    if (reaction.emojiId != null) ":custom:" else reaction.emoji

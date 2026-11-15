@@ -219,10 +219,10 @@ class AppState(
     }
 
     fun applyUnread(rows: List<UnreadCountRow>) {
-        val channels = rows.mapNotNull { row -> row.channelId?.takeIf { row.unreadCount > 0 }?.let { it to row.unreadCount } }.toMap()
+        val channels = rows.mapNotNull { row -> row.channelId?.takeIf { row.unreadMessages > 0 }?.let { it to row.unreadMessages } }.toMap()
         val mentions = rows.mapNotNull { row -> row.channelId?.takeIf { row.unreadMentions > 0 }?.let { it to row.unreadMentions } }.toMap()
         val conversations = rows.mapNotNull { row ->
-            row.conversationId?.takeIf { row.unreadCount > 0 }?.let { it to row.unreadCount }
+            row.conversationId?.takeIf { row.unreadMessages > 0 }?.let { it to row.unreadMessages }
         }.toMap()
         _unread.value = UnreadBadges(channels, conversations, mentions)
     }

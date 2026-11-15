@@ -58,6 +58,12 @@ data class RailTarget(val serverId: String?)
 fun ServerRail(
     state: AppState,
     modifier: Modifier = Modifier,
+    /**
+     * Called after a tile has changed what the middle column shows, so the shell can put the
+     * content where the person can see it. The rail itself does not know whether it is a
+     * permanent column or a drawer over the content.
+     */
+    onSelected: () -> Unit = {},
 ) {
     val signedIn = state.auth.state.collectAsState().value as? AuthState.SignedIn
     val baseUrl = signedIn?.endpoint?.baseUrl
@@ -103,6 +109,10 @@ fun ServerRail(
                 onClick = {
                     state.selectedServerId.value = null
                     state.showingDms.value = true
+                    // The content under the rail is what the person asked to see.
+                    state.openChannelId.value = null
+                    state.openConversationId.value = null
+                    onSelected()
                 },
             ) {
                 Icon(Icons.Outlined.Home, contentDescription = "Home and direct messages")
@@ -124,6 +134,11 @@ fun ServerRail(
                     onClick = {
                         state.selectedServerId.value = entry.server.id
                         state.showingDms.value = false
+                        // A server tile opens that server's channel list, not whatever room was
+                        // left open in another server.
+                        state.openChannelId.value = null
+                        state.openConversationId.value = null
+                        onSelected()
                     },
                 ) {
                     ServerAvatar(

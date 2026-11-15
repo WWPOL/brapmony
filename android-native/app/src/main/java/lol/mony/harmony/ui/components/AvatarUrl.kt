@@ -51,20 +51,50 @@ object AvatarUrl {
     }
 
     /**
-     * A server's icon or banner, resolved the same way an avatar is.
+     * The buckets the reference uploads server branding into.
      *
-     * `servers.icon` and `servers.banner` are written by the same uploader that writes
-     * `profiles.avatar_url`, so they hold the same three shapes: an absolute URL, a site-relative
-     * path, or a bare storage path. A bare path names the `server-icons` bucket, which is where
-     * the web client's server uploader puts them.
+     * These are the names in `storage.buckets` (`src/utils/serverUtils.ts`), spelled with
+     * underscores: `server_icons` holds the icon, `server_banners` the cover. This client had
+     * them hyphenated, so every bare storage path became a 404 and a server with a cover drew
+     * a name with no picture.
      */
-    fun resolveServer(baseUrl: String?, path: String?): String? {
+    const val SERVER_ICONS_BUCKET = "server_icons"
+    const val SERVER_BANNERS_BUCKET = "server_banners"
+
+    /** A server's icon: `servers.icon`, read out of the `server_icons` bucket. */
+    fun resolveServerIcon(baseUrl: String?, path: String?): String? =
+        resolveBucket(baseUrl, path, SERVER_ICONS_BUCKET)
+
+    /**
+     * A server's cover: `servers.banner`, read out of the `server_banners` bucket.
+     *
+     * A different bucket from the icon, because the uploader stores a banner as
+     * `<server-id>/banner-<ms>.<ext>` in its own bucket and normalises the column to that bare
+     * object path (`normalizeServerBannerForStorage`). Resolving it against the icon bucket, or
+     * against nothing at all, is what left the header without its picture.
+     */
+    fun resolveServerBanner(baseUrl: String?, path: String?): String? =
+        resolveBucket(baseUrl, path, SERVER_BANNERS_BUCKET)
+
+    /**
+     * A server's icon, resolved the same way an avatar is.
+     *
+     * `servers.icon` is written by the same uploader that writes `profiles.avatar_url`, so it
+     * holds the same three shapes: an absolute URL, a site-relative path, or a bare storage
+     * path. A bare path names the `server_icons` bucket.
+     */
+    fun resolveServer(baseUrl: String?, path: String?): String? = resolveServerIcon(baseUrl, path)
+
+    /** A bare object path joined to `bucket` under the instance's storage route. */
+    private fun resolveBucket(baseUrl: String?, path: String?, bucket: String): String? {
         val raw = path?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+        // The bundled placeholder the schema defaults to is not a picture of this server.
+        if (raw == "/default_server.webp" || raw == "default_server.webp") return null
         if (SCHEME.matches(raw) || raw.startsWith("/")) return resolve(baseUrl, raw)
         val base = baseUrl?.toHttpUrlOrNull() ?: return null
         val prefix = base.encodedPath.trimEnd('/')
         return base.newBuilder()
-            .encodedPath(prefix + "/storage/v1/object/public/server-icons/" + raw.trimStart('/'))
+            .encodedPath(prefix + "/storage/v1/object/public/" + bucket + "/" + raw.trimStart('/'))
             .query(null).fragment(null).build().toString()
     }
 

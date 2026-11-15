@@ -96,10 +96,9 @@ private fun ChannelList(state: AppState, serverId: String, modifier: Modifier) {
     }
     val baseUrl = state.auth.state.collectAsState().value.let { (it as? AuthState.SignedIn)?.endpoint?.baseUrl }
     Column(modifier.fillMaxHeight()) {
-        // The server's own banner and icon, as the web client's channel sidebar header shows
-        // them: the banner fills a strip, the icon overlaps its lower edge, and the name sits
-        // beside them. A server without a banner simply gets the plain bar.
-        ServerHeader(tree?.server, baseUrl)
+        // The server's own cover and icon, drawn once by the shared composable so the rail,
+        // the header and the tests all resolve branding the same way.
+        tree?.server?.let { ServerBranding(it, baseUrl = baseUrl) }
         TopAppBar(title = { Text(tree?.server?.name ?: "Channels", maxLines = 1) },
             actions = {
                 IconButton(onClick = { state.serverTrees.value = state.serverTrees.value - serverId; retry++ }) {
@@ -163,48 +162,7 @@ private fun ChannelList(state: AppState, serverId: String, modifier: Modifier) {
     if (voice != null) VoiceChannelScreen(state, voice!!, onClose = { voice = null })
 }
 
-/**
- * The server's banner and icon, as the web client's channel sidebar header draws them.
- *
- * The banner is a wide strip at the top; the icon sits on the strip's lower edge, half over it,
- * with the name beside. A server that has neither still gets its name, so the header is never
- * empty space. Both images resolve through the instance because the columns hold relative paths
- * as often as absolute URLs.
- */
-@Composable
-private fun ServerHeader(server: Server?, baseUrl: String?) {
-    if (server == null) return
-    val banner = AvatarUrl.resolveServer(baseUrl, server.banner)
-    Column(Modifier.fillMaxWidth().testTag("server-header")) {
-        Box(Modifier.fillMaxWidth().height(if (banner != null) 88.dp else 0.dp)) {
-            if (banner != null) {
-                AsyncImage(
-                    model = ImageRequest.Builder(LocalContext.current).data(banner).crossfade(true).build(),
-                    contentDescription = null,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize().testTag("server-banner"),
-                )
-            }
-        }
-        Row(
-            Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            ServerAvatar(server.name, server.icon, size = 40.dp, selected = true, baseUrl = baseUrl)
-            Spacer(Modifier.width(12.dp))
-            Column(Modifier.weight(1f)) {
-                Text(server.name, style = MaterialTheme.typography.titleMedium, maxLines = 1,
-                    overflow = TextOverflow.Ellipsis)
-                if (server.memberCount > 0) Text(
-                    if (server.memberCount == 1) "1 member" else server.memberCount.toString() + " members",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
-    }
-}
-
+/** The direct-message list: the conversations this account is part of. */
 @Composable
 private fun DirectMessages(state: AppState, modifier: Modifier) {
     var rows by remember { mutableStateOf<List<DirectConversation>?>(null) }
