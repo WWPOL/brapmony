@@ -246,3 +246,27 @@ test('a publish is not cancelled half way through moving the stable name', () =>
   assert.equal(publish['cancel-in-progress'], false, 'and a publish is never cancelled');
   assert.notEqual(publish.group, native.concurrency.group);
 });
+
+// `android-actions/setup-android` defaults to the package list `tools platform-tools`.
+// cmdline-tools 16.0 no longer carries `tools`, so sdkmanager exits 1 inside the action and
+// the job fails before any of its own steps run -- which is how run 43641479379 died with
+// only deprecation warnings to read. Every use in this repository must name its packages.
+test('setup-android names its packages, because the default list includes the removed tools', () => {
+  const files = [NATIVE, RELEASE, '.github/workflows/tauri.yml'];
+  let seen = 0;
+  for (const file of files) {
+    const doc = parse(file);
+    for (const [job, spec] of Object.entries(doc.jobs || {})) {
+      for (const step of spec.steps || []) {
+        if (!String(step.uses || '').startsWith('android-actions/setup-android@')) continue;
+        seen += 1;
+        const packages = step.with && step.with.packages;
+        assert.ok(packages, `${file} ${job}: setup-android must pass packages, not take the default`);
+        const list = String(packages).split(/\s+/).filter(Boolean);
+        assert.ok(!list.includes('tools'), `${file} ${job}: \`tools\` is not in cmdline-tools 16.0`);
+        assert.ok(list.includes('platform-tools'), `${file} ${job}: adb comes from platform-tools`);
+      }
+    }
+  }
+  assert.ok(seen >= 3, `expected every setup-android use to be covered, saw ${seen}`);
+});

@@ -411,7 +411,11 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
+      # The action's default list carries `tools`, which cmdline-tools 16.0 does not ship, so
+      # the list is named explicitly here too (see release.yml's Tauri job).
       - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3.2.2
+        with:
+          packages: platform-tools
       - run: sdkmanager 'platform-tools' 'platforms;android-37.0' 'build-tools;37.0.0'
       # Same layout as the release keystore of the Tauri job, in android-native/,
       # which is the tree that build reads. The secrets are passed through env so a

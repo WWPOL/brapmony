@@ -58,7 +58,14 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
+      # Name the packages instead of taking the action's default, which is
+      # `tools platform-tools`. cmdline-tools 16.0 does not carry `tools`, and this repository
+      # already names the list for that reason in release.yml and tauri.yml. Run 43641479379
+      # failed inside this step and its detailed log was not readable, so this matches the
+      # documented precedent rather than a log line quoted from that run.
       - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3.2.2
+        with:
+          packages: platform-tools
       - run: sdkmanager 'platform-tools' 'platforms;android-37.0' 'build-tools;37.0.0'
       # A debug keystore is generated per checkout and therefore has a random certificate, so
       # two runs would sign with different keys and Android would refuse to install one over
