@@ -5,7 +5,7 @@ Status: design and fork step, 2026-11-16. Fork-only. Nothing here goes upstream.
 ## Why
 
 harmony.rooday.com has one Discord bridge: `discord_bridges` row `9c792d43-3dfa-403e-a763-5a178c4f976b`,
-mode `instance`, bot `2fbbc834-8316-4ffe-ac71-24826e5c29da`. That bot owns about 180k bridged and
+mode `instance`, bot `2fbbc834-8316-4ffe-ac71-24826e5c29da`. That bot owns its bridged and
 imported messages and 402 reactions. The "instance bot" Discord application is the server owner's own
 app.
 
@@ -77,7 +77,7 @@ first. The fork function enforces this.
 
 ### What the self-run bridge needs
 
-- Image `ghcr.io/y4my4my4m/harmony-discord-bridge` (or the fork's build). Its `Dockerfile` runs as
+- Image `ghcr.io/y4my4my4m/harmony-discord-bridge` (upstream's; this instance runs the fork's `ghcr.io/wwpol/harmony-discord-bridge`). Its `Dockerfile` runs as
   `node` (uid 1000) with `DATA_DIR=/data`, `HEALTH_PORT=8080`, `VOLUME /data`.
 - Env (`src/env.ts:46-125`, `bridge-rebuild/docker-compose.yml`): `HARMONY_URL` (the instance's
   public address, e.g. `https://harmony.rooday.com`), `HARMONY_SETUP_CODE` (first start only),
@@ -154,14 +154,17 @@ commands run on the server, in the Harmony folder.
 1. **Update the instance** to the rebuild so migration `20261116990018` exists:
    `HARMONY_REMOTE=fork harmony update --version master` (the update takes its own backup too).
 2. **Take a backup**: `harmony backup --no-storage` (this change does not touch uploads), and copy
-   the folder off the server. The bridge host's own volume is not in it, so also copy the host's
-   `instance/9c792d43-3dfa-403e-a763-5a178c4f976b/permission-sync.yml` and `app-emojis/` (step 6
-   uses them).
+   the folder off the server. The bridge host's own files are not in it, so copy out its permission
+   file too (step 6 uses it):
+   `sudo docker cp harmony-discord-bridge-host:/data/instance/9c792d43-3dfa-403e-a763-5a178c4f976b/permission-sync.yml ~/permission-sync.yml`.
+   Also write down how many messages the bridge bot has now, for step 9:
+   `sudo docker exec -i supabase-db psql -U postgres -d postgres -tAc "SELECT count(*) FROM messages WHERE bot_id = '2fbbc834-8316-4ffe-ac71-24826e5c29da'"`.
 3. **Turn the instance bot offer off**: Admin panel, Discord bridge, instance bot, switch it off.
    Or in SQL:
-   `docker exec -i supabase-db psql -U supabase_admin -h 127.0.0.1 -d postgres -c "UPDATE instance_config SET config_value = 'false'::jsonb WHERE config_key = 'discord_bridge_instance_bot_enabled'"`.
-   Within a minute the bridge host stops the instance bot; its log says "Instance bot disabled ...
-   stopping its bridges". Don't leave it on: the host would remove the bot from your Discord server
+   `sudo docker exec -i supabase-db psql -U postgres -d postgres -c "UPDATE instance_config SET config_value = 'false'::jsonb WHERE config_key = 'discord_bridge_instance_bot_enabled'"`.
+   The bridge host should stop the instance bot within about a minute, since it polls every 60 s
+   (`sudo docker logs harmony-discord-bridge-host`; the line should read "Instance bot disabled on this
+   Harmony instance; stopping its bridges", from the bridge source, not yet seen on this instance). Don't leave it on: the host would remove the bot from your Discord server
    10 minutes after the bridge stops being an instance bridge, and the function refuses while the
    offer is on for the bridge's own application. If you offer another application to other
    communities, it may stay on.
@@ -169,9 +172,9 @@ commands run on the server, in the Harmony folder.
    code it prints; it works for 30 minutes.
 
    ```
-   docker exec -i supabase-db psql -U supabase_admin -h 127.0.0.1 -d postgres -c \
+   sudo docker exec -i supabase-db psql -U postgres -d postgres -c \
      "SELECT auth_user_id, username FROM profiles WHERE is_admin"
-   docker exec -i supabase-db psql -U supabase_admin -h 127.0.0.1 -d postgres <<'SQL'
+   sudo docker exec -i supabase-db psql -U postgres -d postgres <<'SQL'
    BEGIN;
    SELECT set_config('request.jwt.claim.sub', '<ADMIN auth_user_id>', true);
    SELECT set_config('request.jwt.claims', json_build_object('sub', '<ADMIN auth_user_id>')::text, true);
@@ -185,33 +188,46 @@ commands run on the server, in the Harmony folder.
    shows `self` and `2fbbc834-8316-4ffe-ac71-24826e5c29da`.
 5. **Stop anything else using the same Discord application token** (an old bridge container, a
    dev bridge). Two programs on one token relay everything twice.
-6. **Copy the bridge's local files into a new volume** before the first start:
+6. **Put the permission file into a new volume** before the first start. This instance's bridge
+   host keeps only `permission-sync.yml` (no `app-emojis` folder), so that is all to copy; the
+   volume must end up owned by uid 1000, which the last command does whatever happens before it.
 
    ```
-   docker volume create harmony-bridge
-   docker run --rm -v harmony-bridge:/data -v HOST_DATA_VOLUME:/host:ro alpine sh -c '
-     cp /host/instance/9c792d43-3dfa-403e-a763-5a178c4f976b/permission-sync.yml /data/ &&
-     mkdir -p /data/app-emojis && cp -r /host/app-emojis/. /data/app-emojis/ &&
-     chown -R 1000:1000 /data'
+   sudo docker volume create harmony-bridge
+   sudo docker run --rm -v harmony-bridge:/data -v "$HOME":/src:ro alpine sh -c \
+     'cp /src/permission-sync.yml /data/permission-sync.yml; chown -R 1000:1000 /data'
    ```
 
-   `HOST_DATA_VOLUME` is the volume mounted at `/data` in the bridge host container
-   (`docker inspect <host container> --format '{{json .Mounts}}'`). Skip a file that doesn't exist.
-7. **Start the self-run bridge** with the same Discord application's bot token and the code:
+   If the file is missing, the bridge starts with a blank permission-sync state; the second command
+   still sets the owner. If you ever have an `app-emojis` folder to bring too, copy it with
+   `cp -r /src/app-emojis /data/ 2>/dev/null || true` on its own line before the `chown`, never
+   chained to it with `&&`.
+7. **Start the self-run bridge** with the same Discord application's bot token and the code. The
+   image is the fork's: use tag `master`, or a pinned `sha-...` tag once the rebuilt bridge is
+   published (prefer the pinned tag, since `master` moves).
 
    ```
-   docker run -d --name harmony-bridge --restart unless-stopped \
+   sudo docker run -d --name harmony-bridge --restart unless-stopped \
      -v harmony-bridge:/data \
      -e HARMONY_URL=https://harmony.rooday.com \
      -e HARMONY_SETUP_CODE=HB-ABCD-EF23-GH45 \
      -e DISCORD_TOKEN=<the application's bot token> \
-     ghcr.io/y4my4my4m/harmony-discord-bridge:latest
-   docker logs -f harmony-bridge
+     ghcr.io/wwpol/harmony-discord-bridge:master
+   sudo docker logs -f harmony-bridge
    ```
 
-   Wait for "Setup code redeemed" and a connected line. The code is used once; later restarts use
-   `credentials.json`, so recreate the container without `HARMONY_SETUP_CODE` afterwards. Use the
-   fork's bridge image instead if you run the fork's build.
+   Wait for "Setup code redeemed" and a connected line (wording from the bridge source, not yet
+   seen running). The code is used once and `credentials.json` in the volume keeps the login, so
+   after the first start recreate the container without the code and the data stays:
+
+   ```
+   sudo docker rm -f harmony-bridge
+   sudo docker run -d --name harmony-bridge --restart unless-stopped \
+     -v harmony-bridge:/data \
+     -e HARMONY_URL=https://harmony.rooday.com \
+     -e DISCORD_TOKEN=<the application's bot token> \
+     ghcr.io/wwpol/harmony-discord-bridge:master
+   ```
 8. **Turn on history import**: Admin panel, Discord history import, History import = "Self-run
    bridges" (read its warning first). Or set `instance_config` `bridge_history_import` to
    `"self_run"`.
@@ -225,18 +241,19 @@ commands run on the server, in the Harmony folder.
    - Import: import one small channel; it finishes and its messages appear, older than the live
      ones.
    - `SELECT count(*) FROM messages WHERE bot_id = '2fbbc834-8316-4ffe-ac71-24826e5c29da'` is at
-     least what it was before (about 180k).
-10. **Clean up**: once everything checks out, remove the old host's copy of
-    `instance/9c792d43-3dfa-403e-a763-5a178c4f976b/` and leave the offer off.
+     least the number you wrote down in step 2: all of its existing messages are still there.
+10. **Clean up**: once everything checks out, leave the offer off. The old host
+    container (`harmony-discord-bridge-host`) can stay; it has nothing to run. Keep `~/permission-sync.yml`
+    for a while in case of rollback.
 
 ### Rollback
 
-Stop the self bridge first (`docker stop harmony-bridge`) if it has started. Then:
+Stop the self bridge first (`sudo docker stop harmony-bridge`) if it has started. Then:
 
 1. Put the row back as an instance bridge, with a fresh token for the host:
 
    ```
-   docker exec -i supabase-db psql -U supabase_admin -h 127.0.0.1 -d postgres <<'SQL'
+   sudo docker exec -i supabase-db psql -U postgres -d postgres <<'SQL'
    BEGIN;
    UPDATE discord_bridges SET mode = 'instance' WHERE id = '9c792d43-3dfa-403e-a763-5a178c4f976b' AND mode = 'self';
    INSERT INTO discord_bridge_secrets (bridge_id, discord_token_secret, harmony_token_secret)
@@ -249,7 +266,7 @@ Stop the self bridge first (`docker stop harmony-bridge`) if it has started. The
    ```
 
 2. Turn the instance bot offer back on (step 3 reversed), set History import back to Off if you
-   want, and `docker rm harmony-bridge`. The messages and reactions never moved, so no data needs
+   want, and `sudo docker rm -f harmony-bridge`. The messages and reactions never moved, so no data needs
    restoring.
 
 Only if the database is damaged: `harmony restore` the step 2 backup. That drops everything
