@@ -4,7 +4,7 @@
 -- Fixture roles: alice owns server_1 and bob is an accepted member of it.
 BEGIN;
 SET LOCAL search_path = tests, public;
-SELECT plan(12);
+SELECT plan(13);
 
 UPDATE public.profiles SET display_name = 'Alice A', pronouns = 'she/her'
  WHERE id = '11111111-0000-0000-0000-000000000001';
@@ -63,6 +63,33 @@ UPDATE public.user_servers SET nickname = '   '
 SELECT tests.authenticate_as('aaaaaaaa-0000-0000-0000-000000000001');
 SELECT ok(NOT (tests.md914_member(public.get_server_member_list('55555555-0000-0000-0000-000000000005'), 'bob') ? 'nickname'),
           'a blank nickname is not carried');
+
+-- The viewer's own place in a stored order (lists over 200 members) uses the same name key as
+-- the order: bob "Aab", alice "Ccc", zed "zed" -> bob, alice, zed. With display names alone bob
+-- ("Xbob") would sort after alice.
+SELECT tests.clear_authentication();
+INSERT INTO public.profiles (id, username, display_name, is_local, domain)
+VALUES ('e9140000-0000-0000-0000-000000000001', 'zed', 'Zed', true, 'localhost');
+INSERT INTO public.user_servers (user_id, server_id, status)
+VALUES ('e9140000-0000-0000-0000-000000000001', '55555555-0000-0000-0000-000000000005', 'accepted');
+UPDATE public.profiles SET display_name = 'Xbob' WHERE id = '22222222-0000-0000-0000-000000000002';
+UPDATE public.user_servers SET nickname = 'Aab'
+ WHERE user_id = '22222222-0000-0000-0000-000000000002' AND server_id = '55555555-0000-0000-0000-000000000005';
+UPDATE public.user_servers SET nickname = 'Ccc'
+ WHERE user_id = '11111111-0000-0000-0000-000000000001' AND server_id = '55555555-0000-0000-0000-000000000005';
+INSERT INTO public.user_presence (profile_id, status, online, published_status, published_at) VALUES
+  ('22222222-0000-0000-0000-000000000002', 1, true, 1, now()),
+  ('e9140000-0000-0000-0000-000000000001', 1, true, 1, now())
+ON CONFLICT (profile_id) DO UPDATE SET status = 1, online = true, published_status = 1;
+SELECT is((public.server_member_order_for(
+             ROW('55555555-0000-0000-0000-000000000005', now(), 0, 3,
+                 '[{"key":"online","count":2},{"key":"offline","count":1}]'::jsonb,
+                 ARRAY['22222222-0000-0000-0000-000000000002', 'e9140000-0000-0000-0000-000000000001',
+                       '11111111-0000-0000-0000-000000000001']::uuid[])::public.server_member_order,
+             '11111111-0000-0000-0000-000000000001')).member_ids,
+          ARRAY['22222222-0000-0000-0000-000000000002', '11111111-0000-0000-0000-000000000001',
+                'e9140000-0000-0000-0000-000000000001']::uuid[],
+          'a nicknamed viewer is placed by the name the order sorts by');
 
 SELECT * FROM finish();
 ROLLBACK;
