@@ -219,6 +219,10 @@ CREATE TABLE IF NOT EXISTS supabase_migrations.schema_migrations (
 );
 SQL
 
+# Fork-only: see CLAUDE.md "Syncing with upstream".
+source "$SCRIPT_DIR/fork-ledger-renames.sh"
+rename_fork_ledger "$REPO_DIR/db_schema/LEDGER-RENAMES.tsv"
+
 applied="$(psql_exec -tAc 'SELECT version FROM supabase_migrations.schema_migrations')"
 pending=0
 failed=0
