@@ -1,0 +1,2 @@
+# Fork shell scripts must keep LF endings, so they also run in WSL.
+scripts/fork/*.sh text eol=lf
