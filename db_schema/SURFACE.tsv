@@ -148,6 +148,7 @@ bridge_author_lock_key	p_server_id uuid, p_platform text, p_remote_user_id text	
 bridge_delete_server_sound	p_bot_id uuid, p_server_id uuid, p_sound_id uuid	text	definer	public, pg_temp	service_role	client
 bridge_evict_removed_emojis	p_bot_id uuid, p_server_id uuid, p_ids uuid[]	TABLE(id uuid, path text)	definer	public, pg_temp	service_role	client
 bridge_evict_retired_stickers	p_bot_id uuid, p_server_id uuid, p_ids uuid[]	TABLE(id uuid, path text)	definer	public, pg_temp	service_role	client
+bridge_get_server_profile	p_bot_id uuid, p_server_id uuid	TABLE(name text, description text, icon text, banner text, icon_discord_hash text, icon_path text, banner_discord_hash text, banner_path text)	definer	public, pg_temp	service_role	client
 bridge_import_admit	p_bot_id uuid, p_import_id uuid, p_count integer	jsonb	definer	public, pg_temp	service_role	client
 bridge_import_automod_hit	p_compiled jsonb, p_server_id uuid, p_channel_id uuid, p_category uuid, p_content jsonb	text	definer	public, pg_temp		unreferenced
 bridge_import_guard	p_bot_id uuid, p_import_id uuid	discord_bridge_imports	definer	public, pg_temp	service_role	client
@@ -193,6 +194,7 @@ bridge_privacy_stop_imports	p_server_id uuid, p_error text	void	definer	public, 
 bridge_remove_server_emoji	p_bot_id uuid, p_server_id uuid, p_emoji_id uuid	text	definer	public, pg_temp	service_role	client
 bridge_require_server_bot	p_bot_id uuid, p_server_id uuid	void	definer	public, pg_temp		unreferenced
 bridge_retire_server_sticker	p_bot_id uuid, p_server_id uuid, p_sticker_id uuid	text	definer	public, pg_temp	service_role	client
+bridge_update_server_profile	p_bot_id uuid, p_server_id uuid, p_changes jsonb	TABLE(changed boolean, previous_icon text, previous_banner text, name text, description text, icon text, banner text)	definer	public, pg_temp	service_role	client
 broadcast_bot_installation_change		trigger	definer	public, pg_temp	service_role	trigger
 broadcast_bot_presence_change		trigger	definer	public, pg_temp	service_role	trigger
 broadcast_category_change		trigger	definer	public, extensions, pg_temp	anon+authenticated+service_role	trigger
@@ -1073,6 +1075,8 @@ server_member_stats_on_insert		trigger	definer	public, pg_temp	service_role	trig
 server_member_stats_on_update		trigger	definer	public, pg_temp	service_role	trigger
 server_newcomer_alerts_state	p_server_id uuid	jsonb	invoker	public, pg_temp	service_role	unreferenced
 server_now		bigint	invoker	pg_catalog, pg_temp	authenticated+service_role	client
+server_profile_description	p_description text	text	invoker	public, pg_temp	service_role	unreferenced
+server_profile_name	p_name text	text	invoker	public, pg_temp	service_role	unreferenced
 server_settings_system_channel_check		trigger	definer	public, pg_temp		trigger
 server_template_bits	p_value jsonb, p_path text	bigint	invoker	public, pg_temp	service_role	unreferenced
 server_template_bool	p_value jsonb, p_path text, p_default boolean	boolean	invoker	public, pg_temp	service_role	unreferenced

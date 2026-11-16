@@ -179,6 +179,7 @@ describe('gateway IDENTIFY', () => {
     expect(event.frame.d.session_id).toMatch(/^[0-9a-f-]{36}$/)
     expect(event.frame.d.capabilities).toEqual([
       'bridge_sound_sync', 'bridge_emoji_sync', 'bridge_sticker_sync', 'bridge_history_import', 'bridge_privacy',
+      'bridge_profile_sync',
     ])
     expect(gateway.getConnectedBotCount()).toBe(1)
   })

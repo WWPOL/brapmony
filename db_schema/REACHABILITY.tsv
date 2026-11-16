@@ -148,6 +148,7 @@ bridge_author_lock_key	invoker	bigint	service_role	client, trigger	called by bri
 bridge_delete_server_sound	definer	text	service_role	client	rpc in bot-gateway/src/api/BotRestAPI.ts
 bridge_evict_removed_emojis	definer	TABLE(id uuid, path text)	service_role	client	named in bot-gateway/src/api/BotRestAPI.ts, bot-gateway/src/api/__tests__/BotRestAPI.discordEmoji.test.ts
 bridge_evict_retired_stickers	definer	TABLE(id uuid, path text)	service_role	client	named in bot-gateway/src/api/BotRestAPI.ts, bot-gateway/src/api/__tests__/BotRestAPI.discordSticker.test.ts
+bridge_get_server_profile	definer	TABLE(name text, description text, icon text, banner text, icon_discord_hash text, icon_path text, banner_discord_hash text, banner_path text)	service_role	client	rpc in bot-gateway/src/api/BotRestAPI.ts
 bridge_import_admit	definer	jsonb	service_role	client	rpc in bot-gateway/src/bridge/historyImport.ts
 bridge_import_automod_hit	definer	text	-	client	called by bridge_import_messages
 bridge_import_guard	definer	discord_bridge_imports	service_role	client	rpc in bot-gateway/src/bridge/historyImport.ts
@@ -193,6 +194,7 @@ bridge_privacy_stop_imports	definer	void	-	client	called by bridge_privacy_purge
 bridge_remove_server_emoji	definer	text	service_role	client	rpc in bot-gateway/src/api/BotRestAPI.ts
 bridge_require_server_bot	definer	void	-	client	called by bridge_delete_server_sound, bridge_evict_removed_emojis, bridge_evict_retired_stickers, +5
 bridge_retire_server_sticker	definer	text	service_role	client	rpc in bot-gateway/src/api/BotRestAPI.ts
+bridge_update_server_profile	definer	TABLE(changed boolean, previous_icon text, previous_banner text, name text, description text, icon text, banner text)	service_role	client	rpc in bot-gateway/src/api/BotRestAPI.ts
 broadcast_bot_installation_change	definer	trigger	service_role	trigger	trigger public.bot_server_permissions AFTER INSERT/DELETE/UPDATE (broadcast_bot_installation_change)
 broadcast_bot_presence_change	definer	trigger	service_role	trigger	trigger public.bot_presence AFTER INSERT/UPDATE (broadcast_bot_presence_change)
 broadcast_category_change	definer	trigger	anon+authenticated+service_role	trigger	trigger public.channel_categories AFTER INSERT/DELETE/UPDATE (trg_broadcast_category_change)
@@ -1017,7 +1019,7 @@ sanitize_entity_name	invoker	trigger	anon+authenticated+service_role	trigger	tri
 sanitize_member_nickname	invoker	trigger	anon+authenticated+service_role	trigger	trigger public.user_servers BEFORE INSERT/UPDATE (sanitize_member_nickname_trigger)
 sanitize_post_text	invoker	trigger	anon+authenticated+service_role	trigger	trigger public.posts BEFORE INSERT/UPDATE (sanitize_post_text_trigger)
 sanitize_profile_pronouns	invoker	trigger	anon+authenticated+service_role	trigger	trigger public.profiles BEFORE INSERT/UPDATE (sanitize_profile_pronouns_trigger)
-sanitize_profile_string	invoker	text	anon+authenticated+service_role	client, trigger	called by create_server_from_template, sanitize_bot_text, sanitize_channel_text, +11
+sanitize_profile_string	invoker	text	anon+authenticated+service_role	client, trigger	called by create_server_from_template, sanitize_bot_text, sanitize_channel_text, +12
 sanitize_profile_text	invoker	trigger	anon+authenticated+service_role	client, trigger	trigger public.profiles BEFORE INSERT/UPDATE (sanitize_profile_text_trigger)
 sanitize_report_text	invoker	trigger	anon+authenticated+service_role	trigger	trigger public.reports BEFORE INSERT/UPDATE (sanitize_report_text_trigger)
 sanitize_server_text	invoker	trigger	anon+authenticated+service_role	trigger	trigger public.servers BEFORE INSERT/UPDATE (sanitize_server_text_trigger)
@@ -1073,6 +1075,8 @@ server_member_stats_on_insert	definer	trigger	service_role	trigger	trigger publi
 server_member_stats_on_update	definer	trigger	service_role	trigger	trigger public.user_servers AFTER UPDATE (z_user_servers_member_stats_update)
 server_newcomer_alerts_state	invoker	jsonb	service_role	client, trigger	called by get_server_newcomer_alerts, handle_newcomer_first_message, set_server_newcomer_alerts
 server_now	invoker	bigint	authenticated+service_role	client, trigger	rpc in src/services/activities/activityService.ts
+server_profile_description	invoker	text	service_role	client	called by bridge_update_server_profile, update_server
+server_profile_name	invoker	text	service_role	client	called by bridge_update_server_profile, update_server
 server_settings_system_channel_check	definer	trigger	-	trigger	trigger public.server_settings BEFORE INSERT/UPDATE (server_settings_system_channel_check)
 server_template_bits	invoker	bigint	service_role	client	called by server_template_canonical
 server_template_bool	invoker	boolean	service_role	client	called by server_template_canonical

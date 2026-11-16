@@ -102,10 +102,17 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   member's, also one linked by name) and restores only emoji it removed (`403`
   `EMOJI_REMOVED` for one a person removed); a server keeps the 500 it removed
   last.
+- **Discord bridge server profile sync.** The Discord bridge bot can copy a
+  Discord server's name, description, icon and banner onto its paired Harmony
+  server through `GET /servers/{id}/profile/discord` and `PATCH
+  /servers/{id}/profile/discord` (capability `bridge_profile_sync`). Images are
+  copied from Discord's CDN using the guild ID stored on the bridge, and a
+  replaced image Harmony stored is deleted. A description or banner is written
+  only as sent: the bridge decides whether the Discord server has one.
 - **Bot API: gateway capabilities.** `READY` and `GET /users/@me` carry
   `capabilities`, the features this gateway has (`bridge_sound_sync`,
   `bridge_emoji_sync`, `bridge_sticker_sync`, `bridge_history_import`,
-  `bridge_privacy`), so a bot can tell an older gateway without calling a
+  `bridge_privacy`, `bridge_profile_sync`), so a bot can tell an older gateway without calling a
   route that answers `404`.
 - **Import Discord history.** A Discord bridge you run yourself can copy a
   paired channel's older messages, threads and pins into its Harmony channel,
