@@ -99,8 +99,8 @@ apsql() { local c="$1"; shift; docker exec -i "$c" psql -X -h 127.0.0.1 -U supab
 start_pg() {
   local name="$1"
   docker rm -f "$name" >/dev/null 2>&1 || true
-  docker run -d --name "$name" -e POSTGRES_PASSWORD=postgres "$IMAGE" >/dev/null
   OWNED+=("$name")
+  docker run -d --name "$name" -e POSTGRES_PASSWORD=postgres "$IMAGE" >/dev/null
 }
 
 # The image restarts once while it initialises; three answers in a row is the final server.
@@ -322,6 +322,9 @@ SUPABASE_DB_CONTAINER="$B" bash "$HEAD_TREE/self-host/bootstrap.sh" > "$WORK/fre
 
 take "$A" census "$WORK/a.census"
 take "$B" census "$WORK/b.census"
+for side in a b; do
+  [ -s "$WORK/$side.census" ] || { err "the $side census is empty; the comparison would prove nothing"; exit 1; }
+done
 take "$A" ledger "$WORK/a.ledger"
 take "$B" ledger "$WORK/b.ledger"
 take "$A" rowcount "$WORK/rows.after"

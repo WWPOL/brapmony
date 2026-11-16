@@ -272,7 +272,7 @@ BEGIN
     EXECUTE format(
         'CREATE OR REPLACE FUNCTION public.public_instance_config_keys() RETURNS text[] '
         'LANGUAGE sql IMMUTABLE SET search_path = public, pg_temp AS %L',
-        format('SELECT %L::text[]', (SELECT array_agg(k ORDER BY k)
+        format('SELECT %L::text[]', (SELECT array_agg(k ORDER BY k COLLATE "C")
                                        FROM unnest(public.public_instance_config_keys()) AS k)));
 END;
 $do$;

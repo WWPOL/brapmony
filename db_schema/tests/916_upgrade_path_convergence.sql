@@ -18,9 +18,9 @@ SELECT ok((SELECT prosrc FROM pg_proc WHERE oid = 'public.bridge_import_server_s
 SELECT ok(public.public_instance_config_keys() @> ARRAY['bridge_history_import', 'discord_migration_account_creation'],
   'the public key list holds the upstream and the fork key');
 SELECT is(public.public_instance_config_keys(),
-  (SELECT array_agg(k ORDER BY k) FROM unnest(public.public_instance_config_keys()) AS k),
+  (SELECT array_agg(k ORDER BY k COLLATE "C") FROM unnest(public.public_instance_config_keys()) AS k),
   'the public key list is sorted');
-SELECT is(public.public_instance_config_keys(), (SELECT array_agg(DISTINCT k ORDER BY k) FROM unnest(public.public_instance_config_keys()) AS k),
+SELECT is(public.public_instance_config_keys(), (SELECT array_agg(k ORDER BY k COLLATE "C") FROM (SELECT DISTINCT k FROM unnest(public.public_instance_config_keys()) AS k) d),
   'and holds no key twice');
 
 SELECT * FROM finish();
