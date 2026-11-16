@@ -2,3 +2,14 @@
 #   <kind><TAB><name><TAB><one-line reason>
 # kind is the first column of the census (table, column, index, function, ...); a name ending
 # in * matches a prefix. An entry that matches nothing is reported as stale.
+instance_config	thread_sidebar_default	Set by the instance admin in the admin panel; a fresh install has no value until someone sets it
+trigger	storage.buckets.*	Storage service triggers from a newer storage schema in the production dump than the image; not owned by our migrations
+trigger	storage.objects.protect_objects_delete	Storage service trigger from a newer storage schema than the image
+trigger	storage.objects.update_objects_updated_at	Storage service trigger from a newer storage schema than the image
+trigger	realtime.subscription.tr_check_filters	Realtime service trigger from a newer realtime schema than the image
+constraint	public.drive_folders.drive_folders_name_check	Same CHECK; pg_dump/pg_restore reparses it, only the parenthesis nesting differs (dump mode)
+constraint	public.notification_channels.notification_channels_level_check	Same CHECK; pg_dump/pg_restore changes the deparsed ARRAY cast form (dump mode)
+constraint	public.stickers.stickers_dimensions_check	Same CHECK; pg_dump/pg_restore reparses it, only the parenthesis nesting differs (dump mode)
+trigger	public.channels.z_channels_audit_update	Same WHEN clause; pg_dump/pg_restore reparse changes only the parenthesis nesting (dump mode)
+trigger	public.server_roles.z_server_roles_audit_update	Same WHEN clause; pg_dump/pg_restore reparse changes only the parenthesis nesting (dump mode)
+trigger	public.servers.z_servers_audit	Same WHEN clause; pg_dump/pg_restore reparse changes only the parenthesis nesting (dump mode)

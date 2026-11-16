@@ -251,6 +251,22 @@ if [ -n "$FROM_DUMP" ]; then
   else
     echo "    no roles.sql beside the dump; roles the dump references may be missing"
   fi
+  # The image gives new objects in public full privileges for anon/authenticated/service_role
+  # through default privileges; production has none (migration 20261007900001). pg_dump only
+  # emits the GRANTs that differ from a plain object, so restoring into the image's defaults
+  # leaves extra grants on every table and function. Clear them before the restore.
+  apsql "$A" -q <<'SQL' >/dev/null
+DO $$
+DECLARE r record;
+BEGIN
+  FOR r IN SELECT pg_get_userbyid(defaclrole) AS owner FROM pg_default_acl
+            WHERE defaclnamespace = 'public'::regnamespace LOOP
+    EXECUTE format('ALTER DEFAULT PRIVILEGES FOR ROLE %I IN SCHEMA public REVOKE ALL ON TABLES FROM anon, authenticated, service_role', r.owner);
+    EXECUTE format('ALTER DEFAULT PRIVILEGES FOR ROLE %I IN SCHEMA public REVOKE ALL ON SEQUENCES FROM anon, authenticated, service_role', r.owner);
+    EXECUTE format('ALTER DEFAULT PRIVILEGES FOR ROLE %I IN SCHEMA public REVOKE ALL ON FUNCTIONS FROM anon, authenticated, service_role', r.owner);
+  END LOOP;
+END $$;
+SQL
   rc=0
   docker exec -i "$A" pg_restore -U supabase_admin -h 127.0.0.1 -d postgres --clean --if-exists \
     < "$FROM_DUMP" > "$WORK/restore.log" 2>&1 || rc=$?
@@ -288,13 +304,17 @@ fi
 take "$A" rowcount "$WORK/rows.before"
 if [ -z "$FROM_DUMP" ]; then take "$A" probe "$WORK/probe.before"; fi
 take "$A" ledger "$WORK/ledger.before"
+# Upstream's 20261112800001 deletes finished mirror jobs (state 'done'); only the others must survive.
+mirror_keep="$(apsql "$A" -tAc "SELECT count(*) FROM public.bridge_mirror_queue WHERE state IS DISTINCT FROM 'done'" 2>/dev/null || true)"
 note_before="$(wc -l < "$WORK/ledger.before" | tr -d '[:space:]')"
 
 # ---------------------------------------------------------------- upgrade A, fresh B
 
 log "upgrading $A with this checkout's bootstrap.sh --migrations-only"
+t_up=$SECONDS
 SUPABASE_DB_CONTAINER="$A" bash "$HEAD_TREE/self-host/bootstrap.sh" --migrations-only > "$WORK/upgrade.log" 2>&1 || {
   err "the upgrade's bootstrap.sh failed"; tail -25 "$WORK/upgrade.log" >&2; exit 1; }
+echo "    migration step took $((SECONDS - t_up)) s"
 if grep -qE '^Error:|failed\.' "$WORK/upgrade.log"; then
   err "the upgrade reported a failure"; grep -E '^Error:|failed\.' "$WORK/upgrade.log" >&2; exit 1
 fi
@@ -408,6 +428,7 @@ fi
 lost=0
 while IFS=$'\t' read -r t n; do
   after="$(awk -F'\t' -v t="$t" '$1 == t {print $2}' "$WORK/rows.after")"
+  if [ "$t" = public.bridge_mirror_queue ] && [[ "$mirror_keep" =~ ^[0-9]+$ ]]; then n="$mirror_keep"; fi
   if [ "${after:-0}" -lt "$n" ]; then
     err "table $t lost rows in the upgrade: $n before, ${after:-0} after"; lost=1
   fi
