@@ -1,0 +1,4 @@
+# Expected differences between an upgraded instance and a fresh install, one per line:
+#   <kind><TAB><name><TAB><one-line reason>
+# kind is the first column of the census (table, column, index, function, ...); a name ending
+# in * matches a prefix. An entry that matches nothing is reported as stale.
