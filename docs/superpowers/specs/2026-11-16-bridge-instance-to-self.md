@@ -186,8 +186,9 @@ commands run on the server, in the Harmony folder.
    The result is a code like `HB-ABCD-EF23-GH45`. Check that
    `SELECT mode, bot_id FROM discord_bridges WHERE id = '9c792d43-3dfa-403e-a763-5a178c4f976b'`
    shows `self` and `2fbbc834-8316-4ffe-ac71-24826e5c29da`.
-5. **Stop anything else using the same Discord application token** (an old bridge container, a
-   dev bridge). Two programs on one token relay everything twice.
+5. **Stop anything else using the same Discord application token** (the instance's bridge host,
+   `harmony-discord-bridge-host`, must not run this bridge after the conversion; also any old or
+   dev bridge container). Two programs on one token relay everything twice.
 6. **Put the permission file into a new volume** before the first start. This instance's bridge
    host keeps only `permission-sync.yml` (no `app-emojis` folder), so that is all to copy; the
    volume must end up owned by uid 1000, which the last command does whatever happens before it.
@@ -203,15 +204,17 @@ commands run on the server, in the Harmony folder.
    `cp -r /src/app-emojis /data/ 2>/dev/null || true` on its own line before the `chown`, never
    chained to it with `&&`.
 7. **Start the self-run bridge** with the same Discord application's bot token and the code. The
-   image is the fork's: use tag `master`, or a pinned `sha-...` tag once the rebuilt bridge is
-   published (prefer the pinned tag, since `master` moves).
+   image is the one the fork's CI publishes for the rebuilt bridge. Check the tag on the fork's
+   GitHub packages page before running (`master` is unverified and moves); prefer a pinned
+   `sha-...` tag. Replace `<BOT_TOKEN>` whole, with the bot token and no quotes or angle
+   brackets left, and replace `master` below with the tag you chose.
 
    ```
    sudo docker run -d --name harmony-bridge --restart unless-stopped \
      -v harmony-bridge:/data \
      -e HARMONY_URL=https://harmony.rooday.com \
      -e HARMONY_SETUP_CODE=HB-ABCD-EF23-GH45 \
-     -e DISCORD_TOKEN=<the application's bot token> \
+     -e DISCORD_TOKEN=<BOT_TOKEN> \
      ghcr.io/wwpol/harmony-discord-bridge:master
    sudo docker logs -f harmony-bridge
    ```
@@ -225,7 +228,7 @@ commands run on the server, in the Harmony folder.
    sudo docker run -d --name harmony-bridge --restart unless-stopped \
      -v harmony-bridge:/data \
      -e HARMONY_URL=https://harmony.rooday.com \
-     -e DISCORD_TOKEN=<the application's bot token> \
+     -e DISCORD_TOKEN=<BOT_TOKEN> \
      ghcr.io/wwpol/harmony-discord-bridge:master
    ```
 8. **Turn on history import**: Admin panel, Discord history import, History import = "Self-run

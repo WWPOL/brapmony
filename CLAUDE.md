@@ -100,3 +100,13 @@ With the repository variable `PUBLISH_IMAGES=true`, `images.yml` publishes
   change. Re-check this after every sync.
 - `db_schema/LEDGER-RENAMES.tsv` maps the old fork migration versions to the renumbered
   ones, for instances that applied the old numbers.
+- Before deploying a sync, run `scripts/fork/check-upgrade-path.sh --from-ref <previous fork tag>`
+  (optionally `--from-dump <harmony backup database.dump>`). It upgrades the old fork schema
+  the way `harmony update` would, compares the result with a fresh install, and must exit 0.
+  In WSL it needs `--git-dir <main checkout>/.git`, run through the test kit's `wsl-run.sh`.
+- Upstream sometimes edits an already-released migration in place, and an instance that ran
+  the old version never sees the edit. `check-upgrade-path.sh` catches this. The fix is a fork
+  migration that re-creates the current upstream objects, as `20261116990017` does.
+- `self-host/fork-ledger-renames.sh` applies `db_schema/LEDGER-RENAMES.tsv` from `bootstrap.sh`.
+  When a sync renumbers fork migrations again, add rows there (old version and name to new
+  version and name).
