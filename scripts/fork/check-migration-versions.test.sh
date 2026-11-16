@@ -12,7 +12,7 @@ git config user.email t@example.test
 git config user.name test
 git config commit.gpgsign false
 mkdir -p db_schema/migrations
-touch db_schema/migrations/20261110900004_upstream.sql
+touch db_schema/migrations/20261110900004_upstream.sql db_schema/migrations/20261116990099_upstream_odd.sql
 git add . && git commit -qm upstream
 git branch up
 
@@ -35,15 +35,16 @@ touch db_schema/migrations/20261116990001_fork_a.sql db_schema/migrations/202611
 git add . && git commit -qm pass
 expect "passes" 0 "ok: 2 fork migrations"
 
-# Collides with a version upstream uses.
-touch db_schema/migrations/20261110900004_other_name.sql
+# Collides with a version upstream uses. The version is inside the fork range, so only the
+# collision check can fail it.
+touch db_schema/migrations/20261116990099_other_name.sql
 git add . && git commit -qm collide
-expect "collides" 1 "20261110900004_other_name.sql"
+expect "collides" 1 "version collides with up: db_schema/migrations/20261116990099_other_name.sql"
 git reset -q --hard HEAD~1
 
 # Wrong range.
 touch db_schema/migrations/20261116100001_fork_c.sql
 git add . && git commit -qm range
-expect "wrong range" 1 "outside the fork range"
+expect "wrong range" 1 "outside the fork range (99xxxx): db_schema/migrations/20261116100001_fork_c.sql"
 
 exit "$fail"
