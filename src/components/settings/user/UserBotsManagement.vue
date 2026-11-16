@@ -789,7 +789,11 @@ async function deleteBot(bot: BotRow) {
     toast.success(t('bots.delete.success', { name }))
   } catch (error) {
     debug.error('Failed to delete bot:', error)
-    toast.error(t('bots.delete.failed'))
+    // 23503: the bot still has messages, and the database says so in plain words.
+    const reason = (error as { code?: string; message?: string } | null)?.code === '23503'
+      ? (error as { message: string }).message
+      : t('bots.delete.failed')
+    toast.error(reason)
   } finally {
     deleting.value = false
   }

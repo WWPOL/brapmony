@@ -229,4 +229,29 @@ describe('UserBotsManagement token handling', () => {
     expect(notifyRejection).toHaveBeenCalledWith(rpcResults.create_bot.error)
     expect(toast.error).not.toHaveBeenCalled()
   })
+
+  it('a bot that still has messages shows the database message when delete is refused', async () => {
+    const message = 'This bot still has messages in a server. Disconnect its bridge first; its messages are kept.'
+    const wrapper = mountComponent()
+    await openBot(wrapper)
+    vi.mocked(supabase.from).mockImplementation(((table: string) =>
+      table === 'bots' ? query({ data: null, error: { code: '23503', message } }) : query({ data: [], error: null })) as never)
+
+    await wrapper.find('.btn-danger').trigger('click')
+    await flushPromises()
+
+    expect(toast.error).toHaveBeenCalledWith(message)
+  })
+
+  it('any other delete failure shows the generic message', async () => {
+    const wrapper = mountComponent()
+    await openBot(wrapper)
+    vi.mocked(supabase.from).mockImplementation(((table: string) =>
+      table === 'bots' ? query({ data: null, error: { code: '42501', message: 'permission denied' } }) : query({ data: [], error: null })) as never)
+
+    await wrapper.find('.btn-danger').trigger('click')
+    await flushPromises()
+
+    expect(toast.error).toHaveBeenCalledWith('bots.delete.failed')
+  })
 })

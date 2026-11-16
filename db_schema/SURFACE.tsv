@@ -705,6 +705,7 @@ get_user_prekey_bundle	p_user_id uuid, p_device_id text	jsonb	definer	public, pg
 get_user_push_subscriptions	p_user_id uuid	TABLE(subscription_id uuid, endpoint text, p256dh text, auth text, push_enabled boolean, push_offline_only boolean, transport text)	definer	public, extensions, pg_temp	service_role	client
 get_voice_activity	p_channel uuid	jsonb	definer	public, pg_temp	authenticated+service_role	client
 get_voice_channel_participants	p_channel_id uuid	TABLE(user_id uuid, username text, display_name text, avatar_url text, is_federated boolean, federated_domain text, joined_at timestamp with time zone, is_muted boolean, is_deafened boolean, is_video_enabled boolean, is_screen_sharing boolean)	definer	public, extensions, pg_temp	service_role	unreferenced
+guard_bot_delete_keeps_history		trigger	invoker	public, pg_temp	service_role	trigger
 guard_bot_permission_grants		trigger	invoker	public, pg_temp	service_role	trigger
 guard_bridge_author_optout		trigger	definer	public, pg_temp	service_role	trigger
 guard_bridge_reaction_optout		trigger	definer	public, pg_temp	service_role	trigger
