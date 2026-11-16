@@ -156,9 +156,9 @@ const UPLOAD_IDLE_MS = 120_000
 export async function uploadFileToStorage(
   filePath: string,
   objectPath: string,
-  opts: { contentType: string; cacheControl: string; size: number },
+  opts: { contentType: string; cacheControl: string; size: number; bucket?: string },
 ): Promise<void> {
-  const url = new URL(`${supabaseUrl.replace(/\/+$/, '')}/storage/v1/object/${MESSAGE_MEDIA_BUCKET}/${objectPath}`)
+  const url = new URL(`${supabaseUrl.replace(/\/+$/, '')}/storage/v1/object/${opts.bucket ?? MESSAGE_MEDIA_BUCKET}/${objectPath}`)
   const send = url.protocol === 'https:' ? httpsRequest : httpRequest
   const source = createReadStream(filePath)
   let req: ReturnType<typeof send> | undefined
@@ -209,8 +209,15 @@ export async function uploadFileToStorage(
 }
 
 export interface MirrorFileOptions {
-  botId: string
-  channelId: string
+  /** Required unless `target` is set. */
+  botId?: string
+  channelId?: string
+  /**
+   * Store in another bucket as `<folder>/<stem>-<ms>.<ext>` (the web app's naming for avatars and
+   * banners) instead of the channel's room of message_media. `url` is then empty: the caller
+   * builds the bucket's public URL from `path`.
+   */
+  target?: { bucket: string; folder: string; stem: string }
   fileName?: string
   contentType?: string
   /** Size Discord reported for the attachment, checked before any download. */
@@ -300,7 +307,10 @@ export async function mirrorFileToStorage(
   if (!isAllowedSourceUrl(sourceUrl)) throw new Error('Refusing to mirror disallowed URL host')
   if (opts.knownSize !== undefined && opts.knownSize > opts.ceiling) throw new TooLargeError(opts.knownSize)
 
-  const allows = opts.allows ?? ((bytes: number) => mirrorAllows(opts.channelId, bytes))
+  // A target bucket (avatars, banners) is outside any channel's mirror cap, so only the ceiling applies.
+  const allows = opts.allows ?? (opts.target
+    ? async () => true
+    : (bytes: number) => mirrorAllows(opts.channelId as string, bytes))
   let admitted = -1
   // bridge_mirror_allows takes a bigint: whole bytes, never negative.
   const admit = async (size: number) => {
@@ -367,6 +377,14 @@ export async function mirrorFileToStorage(
 
     await admit(size)
 
+    if (opts.target) {
+      const { bucket, folder, stem } = opts.target
+      const targetPath = `${folder}/${stem}-${Date.now()}.${extension}`
+      await uploadFileToStorage(file, targetPath, { contentType, cacheControl: '31536000', size, bucket })
+      return { path: targetPath, url: '', contentType, bytes: size }
+    }
+
+    if (!opts.botId || !opts.channelId) throw new Error('botId and channelId are required without a target')
     const storagePath = `c/${opts.channelId.toLowerCase()}/bridge/${opts.botId}/${randomUUID()}.${extension}`
     try {
       try {
