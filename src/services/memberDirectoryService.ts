@@ -18,6 +18,11 @@ export interface DirectoryMember {
   avatar_url?: string | null
   banner_url?: string | null
   bio?: string | null
+  /** Account pronouns. */
+  pronouns?: string | null
+  /** The member's nickname and avatar on the server asked about. */
+  nickname?: string | null
+  server_avatar_url?: string | null
   color?: string | null
   /** profiles.status: the manual choice. */
   status?: number | null

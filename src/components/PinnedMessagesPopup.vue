@@ -59,7 +59,7 @@
                   <button type="button" class="message-info jump-btn" @click.stop="jumpToMessage(message.id)">
                     <span class="message-author" :style="{ color: getAuthorColor(message) }">
                       <template v-if="foreignAuthorOf(message)">{{ foreignAuthorOf(message)!.name }}</template>
-                      <DisplayName v-else :userId="message.user_id" :fallback="getUserDisplayName(message.user_id)" />
+                      <DisplayName v-else :userId="message.user_id" :server-id="profileServerId" :fallback="getUserDisplayName(message.user_id)" />
                     </span>
                     <span class="message-time">
                       {{ formatTimestamp(message.created_at) }}
@@ -88,6 +88,7 @@
                     v-else
                     :content="message.content"
                     :message-id="message.id"
+                    :server-id="profileServerId"
                     :embed-payloads="message.metadata?.embeds"
                     :media-hidden="mediaHidden"
                   />
@@ -116,6 +117,7 @@ import { useServerChannelStore } from '@/stores/useServerChannel'
 import { usePinActions } from '@/composables/usePinActions'
 import { usePinsStore, pinScopeKey } from '@/stores/usePins'
 import { useUserData } from '@/composables/useUserData'
+import { getMemberDisplayName, getMemberAvatarUrl } from '@/composables/useMemberProfile'
 import { format } from 'date-fns'
 import Avatar from '@/components/common/Avatar.vue'
 import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
@@ -149,11 +151,7 @@ const { canPinMessages: canPinInChannel } = useChannelMessagePermissions(
   () => serverChannelStore.currentServerId,
   () => (props.conversationId ? null : props.channelId),
 )
-const { 
-  getUserDisplayName: getDisplayName, 
-  getUserColor: getColor,
-  getUserAvatarUrl: getAvatarUrl
-} = useUserData()
+const { getUserColor: getColor } = useUserData()
 
 const pinsStore = usePinsStore()
 const { setPinned } = usePinActions()
@@ -215,9 +213,12 @@ const close = () => {
   emit('close')
 }
 
+// A DM has no server, so its pins keep account profiles.
+const profileServerId = computed(() => (props.conversationId ? null : serverChannelStore.currentServerId))
+
 const getUserDisplayName = (userId?: string) => {
   if (!userId) return 'Unknown'
-  return getDisplayName(userId).value
+  return getMemberDisplayName(userId, profileServerId.value).value
 }
 
 const getUserColorValue = (userId?: string) => {
@@ -227,7 +228,7 @@ const getUserColorValue = (userId?: string) => {
 
 const getUserAvatar = (userId?: string) => {
   if (!userId) return '/default_avatar.webp'
-  return getAvatarUrl(userId).value
+  return getMemberAvatarUrl(userId, profileServerId.value).value
 }
 
 // Bridged people and webhooks have no profile: their message carries the name shown in chat

@@ -120,7 +120,7 @@ function createMemberDirectory() {
   }
 
   async function cache(id: string, members: DirectoryMember[]): Promise<void> {
-    await userDataService.primeMembers(members)
+    await userDataService.primeMembers(members, id)
     useServerRolesStore().setMemberRoles(id, members)
   }
 

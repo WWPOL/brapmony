@@ -75,6 +75,8 @@ export interface BridgeConfig {
   history_import: HistoryImportState
   // Changes with every opt-out and opt-in of the server (bridge_privacy_optout_ids().version).
   privacy_version: string | null
+  // permission_bit_names(): the name at index i is role-permission bit i.
+  permission_bits: string[]
 }
 
 export type ImportBlock = 'instance_off' | 'bridge_mode'
@@ -119,7 +121,7 @@ export async function loadBridgeForBot(botId: string): Promise<BridgeRow | null 
  * state. Null when a lookup fails: an unknown encryption state is not reported as plaintext.
  */
 export async function buildBridgeConfig(bridge: BridgeRow, baseUrl: string | null): Promise<BridgeConfig | null> {
-  const [pairsResult, channelsResult, categoriesResult, encryptedResult] = await Promise.all([
+  const [pairsResult, channelsResult, categoriesResult, encryptedResult, bitNamesResult] = await Promise.all([
     supabase
       .from('discord_bridge_channels')
       .select('harmony_channel_id, discord_channel_id, discord_channel_name, direction')
@@ -127,6 +129,7 @@ export async function buildBridgeConfig(bridge: BridgeRow, baseUrl: string | nul
     supabase.from('channels').select('*').eq('server_id', bridge.server_id),
     supabase.from('channel_categories').select('id, name').eq('server_id', bridge.server_id),
     supabase.rpc('discord_bridge_encrypted_channel_ids', { p_bridge_id: bridge.id }),
+    supabase.rpc('permission_bit_names'),
   ])
   const [block, optouts] = await Promise.all([
     importBlock(bridge.id),
@@ -144,6 +147,7 @@ export async function buildBridgeConfig(bridge: BridgeRow, baseUrl: string | nul
     ['channels', channelsResult],
     ['channel_categories', categoriesResult],
     ['discord_bridge_encrypted_channel_ids', encryptedResult],
+    ['permission_bit_names', bitNamesResult],
   ] as const) {
     if (result.error || !Array.isArray(result.data)) {
       console.error(`bridge ${bridge.id} config: ${what} lookup failed:`, result.error?.message)
@@ -201,6 +205,7 @@ export async function buildBridgeConfig(bridge: BridgeRow, baseUrl: string | nul
     harmony_channels: harmonyChannels,
     history_import: { enabled: block === null, reason: block },
     privacy_version: typeof privacyVersion === 'string' ? privacyVersion : null,
+    permission_bits: (bitNamesResult.data as unknown[]).map(String),
   }
 }
 

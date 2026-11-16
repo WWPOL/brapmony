@@ -85,6 +85,12 @@ function makeApp(options: BridgeV2Options = {}) {
   return app
 }
 
+const PERMISSION_BITS = [
+  ...Array.from({ length: 32 }, (_, i) => `BIT_${i}`),
+  'CHANGE_NICKNAME',
+  'MANAGE_NICKNAMES',
+]
+
 const auth = { Authorization: `Bot ${TOKEN}` }
 
 beforeEach(() => {
@@ -99,6 +105,7 @@ beforeEach(() => {
     discord_bridge_encrypted_channel_ids: ({ p_bridge_id }) => ({ data: p_bridge_id === BRIDGE_ID ? [] : null, error: null }),
     discord_bridge_import_block: () => ({ data: 'instance_off', error: null }),
     bridge_privacy_optout_ids: () => ({ data: { version: '0:0', remote_user_ids: [] }, error: null }),
+    permission_bit_names: () => ({ data: PERMISSION_BITS, error: null }),
   }
   mocks.rpc.mockReset()
   mocks.rpc.mockImplementation(async (fn: string, args: any) => {
@@ -384,7 +391,9 @@ describe('GET /bridge/v2/config', () => {
       harmony_channels: [{ id: GENERAL, name: 'general', type: 0, category: 'Community', category_id: CATEGORY, encrypted: false }],
       history_import: { enabled: false, reason: 'instance_off' },
       privacy_version: '0:0',
+      permission_bits: PERMISSION_BITS,
     })
+    expect(res.body.permission_bits[32]).toBe('CHANGE_NICKNAME')
     expect(rpcCalls('discord_bridge_encrypted_channel_ids')).toEqual([{ p_bridge_id: BRIDGE_ID }])
     expect(rpcCalls('discord_bridge_import_block')).toEqual([{ p_bridge_id: BRIDGE_ID }])
     expect(rpcCalls('bridge_privacy_optout_ids')).toEqual([{ p_server_id: SERVER_ID, p_platform: 'discord' }])

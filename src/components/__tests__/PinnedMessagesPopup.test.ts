@@ -44,6 +44,7 @@ vi.mock('@/stores/usePins', () => ({
     isListStale: () => false,
   }),
 }))
+vi.mock('@/composables/useMemberProfile', () => import('@/composables/__tests__/accountOnlyMemberProfile'))
 vi.mock('@/composables/useUserData', () => ({
   useUserData: () => ({
     getUserDisplayName: () => ref('U1'),

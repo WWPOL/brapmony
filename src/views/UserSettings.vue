@@ -131,6 +131,8 @@
             @upload-banner="handleBannerUpload"
           />
 
+          <ServerProfilesSettings v-if="activeSection === 'server-profiles'" />
+
           <SecuritySettings v-if="activeSection === 'security'" />
 
           <!-- Privacy & Safety Section (includes encryption) -->
@@ -246,6 +248,7 @@ import { useToast } from 'vue-toastification'
 
 // Components
 import UserAccountSettings from '@/components/settings/user/UserAccountSettings.vue'
+import ServerProfilesSettings from '@/components/settings/user/ServerProfilesSettings.vue'
 import PrivacySettings from '@/components/settings/user/PrivacySettings.vue'
 import SecuritySettings from '@/components/settings/user/SecuritySettings.vue'
 import AppearanceSettings from '@/components/settings/user/AppearanceSettings.vue'
@@ -404,6 +407,7 @@ async function readPersonalStickers() {
 // Navigation sections
 const userSections = computed(() => [
   { id: 'account', label: 'settings.account', icon: UserIcon },
+  { id: 'server-profiles', label: 'serverProfile.tabLabel', icon: UserIcon },
   { id: 'security', label: 'settings.security', icon: LockIcon },
   { id: 'privacy', label: 'settings.privacy', icon: ShieldIcon },
   { id: 'bots', label: 'settings.myBots', icon: RobotIcon },
@@ -586,6 +590,7 @@ const handleProfileUpdate = async (updatedProfile: Partial<User>): Promise<boole
       avatarUrl: updatedProfile.avatar_url,
       color: (updatedProfile as any).color,
       bio: (updatedProfile as any).bio,
+      pronouns: (updatedProfile as any).pronouns,
       // Note: verified field not included as it's not in UserPresence interface
     })
     
