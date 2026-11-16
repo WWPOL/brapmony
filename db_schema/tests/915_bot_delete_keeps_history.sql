@@ -6,7 +6,7 @@
 
 BEGIN;
 SET LOCAL search_path = tests, public;
-SELECT plan(8);
+SELECT plan(12);
 
 GRANT USAGE ON SCHEMA tests TO service_role;
 
@@ -23,7 +23,23 @@ INSERT INTO public.discord_bridges (id, server_id, bot_id, mode, discord_guild_i
   ('f9150000-0000-0000-0000-0000000000c3', '55555555-0000-0000-0000-000000000005', 'f9150000-0000-0000-0000-0000000000b3', 'self',
    '915000000000000003', '11111111-0000-0000-0000-000000000001');
 
+-- bot915e belongs to alice but speaks in a server she is not a member of: RLS hides its messages from her.
+INSERT INTO public.servers (id, name, owner) VALUES
+  ('f9150000-0000-0000-0000-0000000000d1', 'S 915', '22222222-0000-0000-0000-000000000002');
+INSERT INTO public.channels (id, server_id, name, type) VALUES
+  ('f9150000-0000-0000-0000-0000000000e1', 'f9150000-0000-0000-0000-0000000000d1', 'other915', 0);
+INSERT INTO public.bots (id, username, display_name, owner_id, bot_type) VALUES
+  ('f9150000-0000-0000-0000-0000000000b5', 'bot915e', 'Bot 915e', '11111111-0000-0000-0000-000000000001', 'bridge');
+INSERT INTO public.messages (id, channel_id, bot_id, content) VALUES
+  ('f9150000-0000-0000-0000-0000000000a5', 'f9150000-0000-0000-0000-0000000000e1', 'f9150000-0000-0000-0000-0000000000b5', '[{"type": "text", "text": "hidden"}]');
+
 SELECT tests.authenticate_as('aaaaaaaa-0000-0000-0000-000000000001');
+
+SELECT is((SELECT count(*)::int FROM public.messages WHERE bot_id = 'f9150000-0000-0000-0000-0000000000b5'), 0,
+  'the owner cannot read that bot''s messages');
+SELECT throws_ok($q$DELETE FROM public.bots WHERE id = 'f9150000-0000-0000-0000-0000000000b5'$q$,
+  '23503', 'This bot still has messages in a server. Disconnect its bridge first; its messages are kept.',
+  'the owner is still refused when RLS hides the messages');
 
 SELECT throws_ok($q$DELETE FROM public.bots WHERE id = 'f9150000-0000-0000-0000-0000000000b1'$q$,
   '23503', 'This bot still has messages in a server. Disconnect its bridge first; its messages are kept.',
@@ -52,6 +68,12 @@ SELECT is((SELECT is_active FROM public.bots WHERE id = 'f9150000-0000-0000-0000
   'deleting a bridge deactivates its bot instead of deleting it');
 SELECT is((SELECT count(*)::int FROM public.messages WHERE id = 'f9150000-0000-0000-0000-0000000000a3'), 1,
   'and keeps the bot''s messages');
+
+-- The helper answers signed-in clients only, not anon.
+SELECT ok(has_function_privilege('authenticated', 'public.bot_has_messages(uuid)', 'EXECUTE'),
+  'a signed-in client can reach the helper the trigger calls');
+SELECT ok(NOT has_function_privilege('anon', 'public.bot_has_messages(uuid)', 'EXECUTE'),
+  'anon cannot call the helper');
 
 SELECT * FROM finish();
 ROLLBACK;

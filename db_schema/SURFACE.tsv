@@ -129,6 +129,7 @@ bot_command_upsert_row	p_bot_id uuid, p_command jsonb, OUT o_created boolean, OU
 bot_commands_replace	p_bot_id uuid, p_commands jsonb	jsonb	definer	public, pg_temp	service_role	client
 bot_create_thread	p_bot_id uuid, p_channel_id uuid, p_name text, p_parent_message_id uuid, p_discord_thread_id text, p_discord_user jsonb	uuid	definer	public, pg_temp	service_role	client
 bot_flag_permission	p_flag text	text	invoker	public, pg_temp	authenticated+service_role	unreferenced
+bot_has_messages	p_bot_id uuid	boolean	definer	public, pg_temp	authenticated+service_role	unreferenced
 bot_install_mask	p_install jsonb	bigint	invoker	public, pg_temp		unreferenced
 bot_interaction_ack	p_bot_id uuid, p_id uuid, p_defer boolean, p_ephemeral boolean, p_reply jsonb	jsonb	definer	public, pg_temp	service_role	client
 bot_interaction_content	p_reply jsonb	jsonb	definer	public, pg_temp		unreferenced

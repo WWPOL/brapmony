@@ -129,6 +129,7 @@ bot_command_upsert_row	definer	record	-	client	called by bot_command_upsert, bot
 bot_commands_replace	definer	jsonb	service_role	client	rpc in bot-gateway/src/api/BotRestAPI.ts
 bot_create_thread	definer	uuid	service_role	client	rpc in bot-gateway/src/api/BotRestAPI.ts
 bot_flag_permission	invoker	text	authenticated+service_role	client, trigger	called by assert_grantable_bot_flags
+bot_has_messages	definer	boolean	authenticated+service_role	trigger	called by guard_bot_delete_keeps_history
 bot_install_mask	invoker	bigint	-	client	called by bot_channel_access
 bot_interaction_ack	definer	jsonb	service_role	client	rpc in bot-gateway/src/api/BotRestAPI.ts
 bot_interaction_content	definer	jsonb	-	client	called by bot_interaction_ack, bot_interaction_reply
