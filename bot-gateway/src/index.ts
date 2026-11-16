@@ -238,6 +238,66 @@ async function bridgeOptOutIds(serverId: string): Promise<Set<string> | null> {
   return new Set((data as Array<{ remote_user_id: string }>).map(row => row.remote_user_id))
 }
 
+/** Rows of discord_migration_links read per query. */
+const LINK_PAGE = 1000
+/** Account ids checked against user_servers per query. */
+const MEMBER_CHECK_BATCH = 200
+/** The Discord ids of a server's accepted linked members, kept briefly: autosuggest reloads often. */
+const linkedIdsCache = new TTLCache<string, string[]>(200, 30_000)
+
+/** Discord ids of a server's active links whose Harmony account is an accepted member. Null on a failed lookup. */
+async function loadLinkedDiscordIds(serverId: string): Promise<string[] | null> {
+  const links: Array<{ user_id: string; discord_user_id: string }> = []
+  // Keyset pages on the (server_id, discord_user_id) key: one empty read for a server that never migrated.
+  for (let after = ''; ;) {
+    const { data, error } = await supabase
+      .from('discord_migration_links')
+      .select('user_id, discord_user_id')
+      .eq('server_id', serverId)
+      .eq('status', 'active')
+      .gt('discord_user_id', after)
+      .order('discord_user_id')
+      .limit(LINK_PAGE)
+    if (error) return null
+    const page = (data ?? []) as Array<{ user_id: string; discord_user_id: string }>
+    links.push(...page)
+    if (page.length < LINK_PAGE) break
+    after = page[page.length - 1].discord_user_id
+  }
+  const ids: string[] = []
+  for (let i = 0; i < links.length; i += MEMBER_CHECK_BATCH) {
+    const batch = links.slice(i, i + MEMBER_CHECK_BATCH)
+    const { data: members, error } = await supabase
+      .from('user_servers')
+      .select('user_id')
+      .eq('server_id', serverId)
+      .eq('status', 'accepted')
+      .in('user_id', batch.map((l) => l.user_id))
+    if (error) return null
+    const accepted = new Set(((members ?? []) as Array<{ user_id: string }>).map((m) => m.user_id))
+    for (const l of batch) if (accepted.has(l.user_id)) ids.push(l.discord_user_id)
+  }
+  return ids
+}
+
+/**
+ * Discord ids of the server's members who linked a Harmony account through Migrate from Discord and
+ * are accepted members of the server. Those people are listed as Harmony members, so the clients
+ * leave their Discord entry out. Ids only, and only those in the list being served; a failed lookup answers none.
+ */
+async function linkedDiscordIds(serverId: string, listed: Array<{ id: string }>): Promise<string[]> {
+  let linked = linkedIdsCache.get(serverId)
+  if (!linked) {
+    const loaded = await loadLinkedDiscordIds(serverId)
+    if (!loaded) return []
+    linked = loaded
+    linkedIdsCache.set(serverId, linked)
+  }
+  if (linked.length === 0) return []
+  const present = new Set(listed.map((u) => u.id))
+  return linked.filter((id) => present.has(id))
+}
+
 // Discord bridge users, consumed by the frontend for mention autosuggest.
 // The caller must view the channel: the list is that channel's Discord members.
 app.get('/bridged-users/:channelId', async (req, res): Promise<void> => {
@@ -281,7 +341,8 @@ app.get('/bridged-users/:channelId', async (req, res): Promise<void> => {
   res.json({
     channel_id: channelId,
     has_bridge: hasBridge,
-    users: bridgedUsers
+    users: bridgedUsers,
+    linked_discord_ids: hasBridge ? await linkedDiscordIds(channel.server_id, bridgedUsers) : [],
   })
 })
 
@@ -327,6 +388,7 @@ app.get('/bridged-users/server/:serverId', async (req, res): Promise<void> => {
     server_id: serverId,
     has_bridge: hasBridge,
     users: bridgedUsers,
+    linked_discord_ids: hasBridge ? await linkedDiscordIds(serverId, bridgedUsers) : [],
   })
 })
 

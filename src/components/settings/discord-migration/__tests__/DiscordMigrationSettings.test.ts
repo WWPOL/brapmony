@@ -114,6 +114,7 @@ async function mountPanel(cfg: MigrationConfig) {
 }
 
 beforeEach(() => {
+  localStorage.clear()
   vi.clearAllMocks()
   missingKeys.length = 0
   rolesMock.mockResolvedValue(HARMONY_ROLES)
@@ -134,8 +135,10 @@ describe('role map', () => {
     expect(missingKeys).toEqual([])
   })
 
-  it('enables Open migration once the server says the migration is ready', async () => {
+  it('enables Open migration once the server says the migration is ready and the redirect is ticked', async () => {
     const w = await mountPanel(config({ readiness: { ready: true, unmapped_roles: [], has_credentials: true, has_guild: true, roles_fetched: true } }))
+    expect(w.find('[data-testid="open-migration"]').attributes('disabled')).toBeDefined()
+    await w.find('[data-testid="redirect-added"]').setValue(true)
     expect(w.find('[data-testid="open-migration"]').attributes('disabled')).toBeUndefined()
     await w.find('[data-testid="open-migration"]').trigger('click')
     await flushPromises()
@@ -438,5 +441,121 @@ describe('open and finished', () => {
     await flushPromises()
     expect(confirmMock).toHaveBeenCalledTimes(1)
     expect(api.setState).toHaveBeenCalledWith(SERVER, 'open')
+  })
+})
+
+describe('Discord server ID prefill', () => {
+  it('fills the field from the bridge and says so when nothing is saved yet', async () => {
+    const w = await mountPanel(config({ discord_guild_id: null, bridge_discord_guild_id: '777' }))
+    expect((w.find('[data-testid="guild-input"]').element as HTMLInputElement).value).toBe('777')
+    expect(w.find('[data-testid="guild-from-bridge"]').text()).toBe("Filled in from this server's Discord bridge.")
+    expect(missingKeys).toEqual([])
+  })
+
+  it('leaves the field empty without a bridge guild', async () => {
+    const w = await mountPanel(config({ discord_guild_id: null, bridge_discord_guild_id: null }))
+    expect((w.find('[data-testid="guild-input"]').element as HTMLInputElement).value).toBe('')
+    expect(w.find('[data-testid="guild-from-bridge"]').exists()).toBe(false)
+  })
+
+  it('prefers the saved guild id over the bridge', async () => {
+    const w = await mountPanel(config({ discord_guild_id: '900', bridge_discord_guild_id: '777' }))
+    expect((w.find('[data-testid="guild-input"]').element as HTMLInputElement).value).toBe('900')
+    expect(w.find('[data-testid="guild-from-bridge"]').exists()).toBe(false)
+  })
+
+  it('drops the hint once the owner edits the field', async () => {
+    const w = await mountPanel(config({ discord_guild_id: null, bridge_discord_guild_id: '777' }))
+    await w.find('[data-testid="guild-input"]').setValue('555')
+    expect(w.find('[data-testid="guild-from-bridge"]').exists()).toBe(false)
+  })
+})
+describe('member channel overrides', () => {
+  const row = (over: Record<string, unknown> = {}) => ({
+    discord_channel_id: '801',
+    channel_name: 'general',
+    discord_user_id: '601',
+    allow: ['VIEW_CHANNEL', 'SEND_MESSAGES'],
+    deny: ['ATTACH_FILES'],
+    status: 'linked',
+    username: 'bob',
+    ...over,
+  })
+
+  it('lists each override with its permissions and who it reaches', async () => {
+    const w = await mountPanel(
+      config({
+        member_overrides: [
+          row(),
+          row({ discord_channel_id: '802', channel_name: 'staff', discord_user_id: '602', allow: [], deny: ['VIEW_CHANNEL'], status: 'not_linked', username: null }),
+          row({ discord_channel_id: '803', channel_name: 'lounge', status: 'unpaired', username: null }),
+        ],
+      } as never),
+    )
+    const rows = w.findAll('[data-testid="override-row"]')
+    expect(rows).toHaveLength(3)
+    expect(rows[0].text()).toContain('#general')
+    expect(rows[0].text()).toContain('Discord member 601')
+    expect(rows[0].text()).toContain('Allows: View Channel, Send Messages')
+    expect(rows[0].text()).toContain('Denies: Attach Files')
+    expect(rows[0].text()).toContain('Linked to @bob')
+    expect(rows[1].text()).toContain('Allows: nothing')
+    expect(rows[1].text()).toContain('Not linked yet')
+    expect(rows[2].text()).toContain('Channel not paired')
+    expect(w.find('[data-testid="overrides-toggle"]').exists()).toBe(false)
+    expect(missingKeys).toEqual([])
+  })
+
+  it('collapses a long list until asked to show all', async () => {
+    const many = Array.from({ length: 8 }, (_, i) => row({ discord_user_id: String(700 + i) }))
+    const w = await mountPanel(config({ member_overrides: many } as never))
+    expect(w.findAll('[data-testid="override-row"]')).toHaveLength(5)
+    await w.find('[data-testid="overrides-toggle"]').trigger('click')
+    expect(w.findAll('[data-testid="override-row"]')).toHaveLength(8)
+  })
+
+  it('shows nothing without overrides and keeps the unpaired channel warning', async () => {
+    const w = await mountPanel(
+      config({ readiness_warnings: { unpaired_channels: ['random'], member_overrides: 2 }, member_overrides: [] } as never),
+    )
+    expect(w.find('[data-testid="dm-overrides"]').exists()).toBe(false)
+    expect(w.findAll('[data-testid="warning"]')).toHaveLength(1)
+  })
+})
+describe('redirect address checklist', () => {
+  const READY = { ready: true, unmapped_roles: [], has_credentials: true, has_guild: true, roles_fetched: true }
+
+  it.each(['instance_bot', 'bridge', 'own'] as const)('shows the redirect address and blocks Open for the %s source', async (credential_source) => {
+    const w = await mountPanel(config({ credential_source, readiness: READY }))
+    const block = w.find('[data-testid="dm-redirect"]')
+    expect(block.exists()).toBe(true)
+    expect(block.text()).toContain('/bot-gateway/bridge/v2/migrate/callback')
+    expect(w.find('[data-testid="open-migration"]').attributes('disabled')).toBeDefined()
+    expect(missingKeys).toEqual([])
+  })
+
+  it('follows the server when the panel switches to another one', async () => {
+    localStorage.setItem(`harmony:discord-migration-redirect:${SERVER}`, '1')
+    const w = await mountPanel(config({ readiness: READY }))
+    expect((w.find('[data-testid="redirect-added"]').element as HTMLInputElement).checked).toBe(true)
+    await w.setProps({ serverId: 'other-server' })
+    await flushPromises()
+    expect((w.find('[data-testid="redirect-added"]').element as HTMLInputElement).checked).toBe(false)
+    expect(localStorage.getItem(`harmony:discord-migration-redirect:${SERVER}`)).toBe('1')
+    await w.find('[data-testid="redirect-added"]').setValue(true)
+    expect(localStorage.getItem('harmony:discord-migration-redirect:other-server')).toBe('1')
+    await w.setProps({ serverId: SERVER })
+    await flushPromises()
+    expect((w.find('[data-testid="redirect-added"]').element as HTMLInputElement).checked).toBe(true)
+  })
+
+  it('remembers the tick for this server in this browser', async () => {
+    const first = await mountPanel(config({ readiness: READY }))
+    await first.find('[data-testid="redirect-added"]').setValue(true)
+    expect(localStorage.getItem(`harmony:discord-migration-redirect:${SERVER}`)).toBe('1')
+    const second = await mountPanel(config({ readiness: READY }))
+    expect((second.find('[data-testid="redirect-added"]').element as HTMLInputElement).checked).toBe(true)
+    await second.find('[data-testid="redirect-added"]').setValue(false)
+    expect(localStorage.getItem(`harmony:discord-migration-redirect:${SERVER}`)).toBeNull()
   })
 })

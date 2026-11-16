@@ -38,11 +38,15 @@ export interface MigrationPreview {
 export interface ClaimResult {
   serverId: string
   rolesGranted: string[]
+  /** The claimer owns the server: roles are only ever added to them. */
+  isOwner: boolean
 }
 
 export interface MigrationLink {
   status: string
   syncFields: SyncField[]
+  /** The member saved a choice (an empty one counts); until then every field is ticked. */
+  syncChosen: boolean
   discordJoinedAt: string | null
 }
 
@@ -95,8 +99,8 @@ export async function createAccount(input: {
 export async function claim(ticket: string): Promise<ClaimResult> {
   const { data, error } = await supabase.rpc('discord_migration_claim', { p_ticket: ticket })
   if (error) throw new DiscordMigrationError(rpcCode(error))
-  const row = (data ?? {}) as { server_id?: string; roles_granted?: string[] }
-  return { serverId: String(row.server_id ?? ''), rolesGranted: row.roles_granted ?? [] }
+  const row = (data ?? {}) as { server_id?: string; roles_granted?: string[]; is_owner?: boolean }
+  return { serverId: String(row.server_id ?? ''), rolesGranted: row.roles_granted ?? [], isOwner: row.is_owner === true }
 }
 
 // -------------------------------------------------------------------------------------------
@@ -176,10 +180,11 @@ export function completePendingClaimsOnce(userId: string): void {
 export async function myLink(serverId: string): Promise<MigrationLink | null> {
   const { data, error } = await supabase.rpc('discord_migration_my_link', { p_server_id: serverId })
   if (error || !data) return null
-  const row = data as { status?: string; sync_fields?: string[]; discord_joined_at?: string | null }
+  const row = data as { status?: string; sync_fields?: string[]; sync_chosen?: boolean; discord_joined_at?: string | null }
   return {
     status: row.status ?? 'active',
     syncFields: (row.sync_fields ?? []).filter((f): f is SyncField => (SYNC_FIELDS as readonly string[]).includes(f)),
+    syncChosen: row.sync_chosen === true,
     discordJoinedAt: row.discord_joined_at ?? null,
   }
 }
@@ -193,6 +198,31 @@ export async function setMySync(serverId: string, fields: SyncField[]): Promise<
   if (error) throw new DiscordMigrationError(rpcCode(error))
   if (fields.length === 0) return
   await requestMySync(serverId)
+  await refreshMyProfiles(serverId)
+}
+
+/**
+ * The gateway writes the copied fields as the service role, so the signed-in client learns nothing from
+ * its own save: load the account profile and this server's member fields again. Never throws; the next
+ * realtime event or page load shows the same data.
+ */
+export async function refreshMyProfiles(serverId: string): Promise<void> {
+  try {
+    const [{ authContextService }, { userDataService }, { loadMyServerProfile }, { useProfileStore }] = await Promise.all([
+      import('@/services/AuthContextService'),
+      import('@/services/userDataService'),
+      import('@/services/serverProfileService'),
+      import('@/stores/useProfile'),
+    ])
+    const profileId = await authContextService.getCurrentProfileId()
+    await Promise.all([
+      userDataService.fetchUserProfile(profileId, true),
+      useProfileStore().fetchProfile(profileId, false),
+      loadMyServerProfile(serverId, profileId),
+    ])
+  } catch {
+    /* a stale name until the next load is the worst case */
+  }
 }
 
 /**
