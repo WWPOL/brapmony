@@ -390,7 +390,7 @@ discord_bridge_import_start	definer	SETOF discord_bridge_imports	authenticated	c
 discord_bridge_import_start_internal	definer	SETOF discord_bridge_imports	service_role	client	rpc in bot-gateway/src/bridge/historyImport.ts
 discord_bridge_import_update	definer	discord_bridge_imports	service_role	client	rpc in bot-gateway/src/bridge/historyImport.ts
 discord_bridge_instance_bot_clear	definer	void	authenticated	client	rpc in src/components/settings/discord-bridge/bridgeApi.ts
-discord_bridge_instance_bot_configured	definer	boolean	-	client	called by discord_bridge_instance_bot_secrets, discord_bridge_instance_bot_status, discord_bridge_instance_hosted, +3
+discord_bridge_instance_bot_configured	definer	boolean	-	client	called by discord_bridge_instance_bot_secrets, discord_bridge_instance_bot_status, discord_bridge_instance_hosted, +4
 discord_bridge_instance_bot_enabled	definer	boolean	-	client	named in src/components/settings/discord-bridge/__tests__/BridgeInstance.test.ts, src/components/settings/discord-bridge/bridgeApi.ts
 discord_bridge_instance_bot_limit	definer	integer	-	client	named in src/components/settings/discord-bridge/__tests__/BridgeInstance.test.ts, src/components/settings/discord-bridge/bridgeApi.ts
 discord_bridge_instance_bot_purge	definer	trigger	-	trigger	trigger public.discord_bridge_instance_bot AFTER DELETE (discord_bridge_instance_bot_purge)
@@ -588,6 +588,7 @@ finish_following_import_item	definer	text	service_role	client	rpc in federation-
 fold_heart_reaction	invoker	trigger	anon+authenticated+service_role	trigger	trigger public.post_interactions BEFORE INSERT (trg_fold_heart_reaction)
 follow_initial_status	definer	text	service_role	client, trigger	called by finish_following_import_item, guard_follow_client_write
 following_import_budget	invoker	record	service_role	client	called by claim_following_import_batch, get_my_following_import
+fork_convert_bridge_to_self	definer	text	authenticated	http authenticated	nothing references it
 fulfill_megolm_key_request	definer	boolean	authenticated+service_role	client	rpc in src/services/encryption/MegolmKeyBackupService.ts
 generate_discord_bridge_pairing_code	invoker	text	anon+authenticated+service_role	client	called by get_or_create_discord_bridge_pairing, regenerate_discord_bridge_pairing
 generate_livekit_token	definer	jsonb	service_role	service key	nothing references it
@@ -831,7 +832,7 @@ list_server_webhooks	definer	jsonb	authenticated+service_role	http authenticated
 list_soundboard_library	definer	TABLE(id uuid, server_id uuid, server_name text, server_icon text, name text, emoji text, emoji_id uuid, emoji_name text, emoji_url text, volume numeric, duration_ms integer, storage_path text, created_at timestamp with time zone)	authenticated+service_role	client	rpc in src/services/soundboard/sounds.ts
 lock_managed_channel_webhook	invoker	channel_webhooks	service_role	client	called by delete_channel_webhook, regenerate_channel_webhook_token, update_channel_webhook
 lock_managed_outgoing_webhook	definer	outgoing_webhooks	service_role	client	called by delete_outgoing_webhook, list_outgoing_webhook_deliveries, rotate_outgoing_webhook_secret, +2
-log_admin_action	definer	uuid	service_role	client	called by admin_delete_accounts, admin_delete_outgoing_webhook, admin_drive_remove_file, +37
+log_admin_action	definer	uuid	service_role	client	called by admin_delete_accounts, admin_delete_outgoing_webhook, admin_drive_remove_file, +38
 log_key_generation	definer	trigger	anon+authenticated+service_role	trigger	trigger public.user_key_pairs AFTER INSERT (audit_key_generation)
 lookup_discord_bridge_pairing_public	definer	TABLE(server_id uuid)	anon+authenticated+service_role	client	rpc in bot-gateway/src/index.ts
 lookup_invite_by_code	definer	TABLE(id uuid, code text, server_id uuid, created_by uuid, uses integer, max_uses integer, used boolean, temporary boolean, expires_at timestamp with time zone, created_at timestamp with time zone, server_name text, server_icon text)	service_role	client	rpc in bot-gateway/src/api/BotRestAPI.ts

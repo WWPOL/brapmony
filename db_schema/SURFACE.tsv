@@ -588,6 +588,7 @@ finish_following_import_item	p_item_id bigint, p_target_profile_id uuid, p_failu
 fold_heart_reaction		trigger	invoker	public, pg_temp	anon+authenticated+service_role	trigger
 follow_initial_status	p_follower uuid, p_following uuid	text	definer	public, pg_temp	service_role	unreferenced
 following_import_budget	p_profile uuid, OUT remaining integer, OUT retry_after integer	record	invoker	public, pg_temp	service_role	unreferenced
+fork_convert_bridge_to_self	p_bridge_id uuid	text	definer	public, extensions, pg_temp	authenticated	unreferenced
 fulfill_megolm_key_request	p_request_id uuid, p_encrypted_key text, p_key_scope text	boolean	definer	public, pg_temp	authenticated+service_role	client
 generate_discord_bridge_pairing_code		text	invoker	public, pg_temp	anon+authenticated+service_role	unreferenced
 generate_livekit_token	room_name text, room_type text	jsonb	definer	public, extensions, pg_temp	service_role	unreferenced
