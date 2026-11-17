@@ -110,3 +110,8 @@ With the repository variable `PUBLISH_IMAGES=true`, `images.yml` publishes
 - `self-host/fork-ledger-renames.sh` applies `db_schema/LEDGER-RENAMES.tsv` from `bootstrap.sh`.
   When a sync renumbers fork migrations again, add rows there (old version and name to new
   version and name).
+
+## Live Discord testing
+
+See `FORK-TESTING.md` (fork-only, like this file) for the live Discord test kit and how to
+rebuild it.
