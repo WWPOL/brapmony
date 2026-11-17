@@ -1,0 +1,7 @@
+== the pre-fix build, meeting a truncated preferences file ==
+  Could not load this                                  [102,407][378,446]
+  Value not set.                                       [176,458][304,482]
+  Try again                                            [197,503][283,533]
+
+== its only control, which re-reads the same file ==
+  Try again at 240 518

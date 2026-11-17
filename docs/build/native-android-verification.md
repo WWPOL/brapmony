@@ -25,18 +25,26 @@ under QEMU's TCG interpreter, and the AOSP API 30 image behaves like this:
   failed 29189/-22` and `Service 'zygote' ... received signal 9` in the kernel
   log, after which `adb` reported `device not found`. Running the guest on
   **one core** stops the TCG thread races behind that: every run since has
-  stayed up long enough to install and drive the APK.
+  stayed up long enough to install and drive the APK. The `ui30small` image is
+  driven on two cores instead, because its `SystemUI` needs the second one to
+  come up inside the run.
 - Screencaps taken while it is up are a uniform black 480x960 PNG (0 of 460800
-  pixels non-black), even though SurfaceFlinger reports the display on and awake
-  with the activity's layers present.
+  pixels non-black) -- **on `aosp_atd`**. `ui30small` does produce real pixels
+  on the same host; see below.
 - The harness tears down the sandbox that owns the emulator process, so the
   emulator does not survive from one tool call to the next. A journey has to
-  boot, install and drive in a single run.
+  boot, install and drive in a single run. On this host those runs were being
+  torn down after roughly one to five minutes, which is less than a
+  `ui30small` boot alone (300 s) plus a 38 MB install, so a run produces
+  evidence only when all of it fits inside the window. The captures that exist
+  are the ones that did; the ones that do not exist are listed as missing in
+  [`evidence/android-native-ux/README.md`](evidence/android-native-ux/README.md)
+  rather than being filled in by argument.
 
-So the emulator is usable for **function**, in one long call, and not for
-**pixels**: every screenshot path returns black (see below). A task that
-blocks on device screenshots never finishes, and recording an all-black
-image as visual evidence would make the audit lie.
+So on `aosp_atd` the emulator is usable for **function**, in one long call, and
+not for **pixels**: every screenshot path returns black (see below). Recording an
+all-black image as visual evidence would make the audit lie. `ui30small` is the
+image that does produce pixels.
 
 ## What is verified, and what each part is worth
 
@@ -67,8 +75,11 @@ deferred lists read a nullable the tap had just cleared. Both are in
 reads the crash buffer after each phase and requires it to hold no
 `FATAL EXCEPTION`. It installs over the existing app without clearing its data.
 
-It does **not** cover what the screen looked like. Every capture path was
-tried and all of them fail the same way:
+It does **not** cover what the screen looked like -- on the `aosp_atd` image.
+That image's frames never reach `screencap`: it returns a uniform black
+480x960 PNG (0 of 460800 pixels non-black) even though SurfaceFlinger lists the
+app's layers and `dumpsys window` names the activity as focused. Every other
+path fails the same way:
 
 - `screencap` over `exec-out`, and `screencap` to a file then `adb pull`.
 - The emulator console's own screenshot, and `screenrecord` (which refuses to
@@ -80,9 +91,15 @@ tried and all of them fail the same way:
   animation, before the app took the display. That is the channel working and
   the app's frames missing, not a tool that was never tried.
 
-SurfaceFlinger lists the app's layers and `dumpsys window` names the activity as
-focused, so the app is drawing; the guest's GL output never reaches the host
-without KVM. A black PNG is not evidence of a screen, so none is kept as one.
+**A second image does produce pixels.** The same host, the same
+`-accel off -gpu swiftshader_indirect`, but the default `ui30small` AVD instead
+of `aosp_atd` -- 768x1280 at 320dpi, with a real `SystemUI` -- answers
+`screencap -p` with a real screen. So the earlier conclusion was too broad: it
+was a property of that image, not of the host. What the second image buys, and
+what it costs, is in
+[the UX evidence](evidence/android-native-ux/README.md): real screenshots, real
+status-bar and cutout insets to measure against, and a `SystemUI` that raises
+its own ANR dialog on a TCG emulator and has to be dismissed between steps.
 
 ### On the JVM: the composables, drawn
 

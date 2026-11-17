@@ -95,6 +95,16 @@ and `ServerBranding` is the one composable that draws a server's cover, icon and
 by the channel header and by the tests. A server with no branding gets its monogram and no
 reserved strip, rather than a band of nothing above the channel list.
 
+## 5. A preferences file that could not be decoded bricked the app
+
+Found by the emulator run of the four reports above, not by reasoning: the real APK launched to
+**"Could not load this / Unable to parse preferences proto. / Try again"**, and *Try again*
+re-read the same broken file. `SessionStore`'s DataStore had no corruption handler, so one
+truncated write — a kill or crash in the middle of `edit` — made every read throw, and nothing
+in the app could clear it. The store now replaces an undecodable file with an empty one; the
+cost is a sign-in, and what it buys is an app that starts. The reasoning and the alternatives
+are in [`native-android-preferences-recovery.md`](native-android-preferences-recovery.md).
+
 ## How this is verified, and what is not
 
 - **JVM render and interaction tests** (`ShellRailTest`, `ReactionGestureTest`,
@@ -103,13 +113,20 @@ reserved strip, rather than a band of nothing above the channel list.
   the inset padding, the collapse rule, the gesture mapping or the bucket names fails them.
 - **The branding test fetches over HTTP** from a local server that 404s the hyphenated bucket
   names, so a wrong bucket is a missing picture rather than a passing string comparison.
-- **Emulator evidence** (`docs/build/evidence/android-native-emulator/`) is a run of the real
-  debug APK against a stub instance, driven with `adb shell input`. It records the
-  accessibility tree, the rail's measured bounds against the status bar, the rail's absence
-  after selecting a server, the reaction toggle and reactor sheet, and the branding nodes.
-- **Not verified:** a physical phone. The host has no `/dev/kvm`, so the emulator runs under
-  TCG; its framebuffer never reaches `screencap`, so the emulator evidence is trees and
-  measurements rather than screenshots. The visual evidence is the JVM captures.
+- **Emulator evidence** is two runs, and they are worth different things.
+  `docs/build/evidence/android-native-emulator/` is the `aosp_atd` run: the real debug APK
+  against a stub instance, driven with `adb shell input`, recording the accessibility tree and
+  the rail's measured bounds. That image cannot take a screenshot, so it is trees and
+  measurements.
+  `docs/build/evidence/android-native-ux/` holds what the `ui30small` run measured — the real
+  insets the app is given, a 48 px status bar and a 96 px emulated cutout — and the tree of a
+  separate failure it found: a truncated preferences file that bricked the app. That run was
+  blocked before sign-in (first by `SystemUI`'s own ANR dialog, then by the AOSP keyboard's
+  contacts prompt), so it does **not** hold the rail's bounds under those insets; the JVM test
+  is what pins the rail. The directory's README says which file is which.
+- **Not verified:** a physical phone. Every run is on an emulator under TCG, at one density
+  and one screen size; rotation, gesture navigation and a real device's particular cutout shape
+  are untested.
 - **Not fixed:** the cover renders at 96dp with `ContentScale.Crop`, but the app does not ask
   the instance's image proxy for a cover-sized variant the way the web client does
   (`bannerRenderSize`), so a large upload is downloaded whole and scaled on the device. That is

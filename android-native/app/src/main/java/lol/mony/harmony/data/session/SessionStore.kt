@@ -3,6 +3,7 @@ package lol.mony.harmony.data.session
 import android.content.Context
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
+import androidx.datastore.core.handlers.ReplaceFileCorruptionHandler
 import androidx.datastore.preferences.core.*
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
@@ -18,7 +19,21 @@ import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
 
-private val Context.sessionData by preferencesDataStore(name = "brapmony-session")
+/**
+ * Corrupt preferences are replaced with an empty store rather than thrown.
+ *
+ * Without this, one truncated write -- a kill or a crash in the middle of `edit` -- leaves a
+ * file that cannot be decoded, and *every* read throws `CorruptionException`. The app has
+ * nowhere to fall back to: `HarmonyRoot` turns the throw into "Could not load this / Unable to
+ * parse preferences proto.", and its own "Try again" re-reads the same file, so the screen is
+ * permanent and only a reinstall clears it. Replacing the file costs a sign-in (the tokens are
+ * sealed with a Keystore key and the drafts and appearance cache are conveniences), which is
+ * the right trade against an app that cannot start.
+ */
+private val Context.sessionData by preferencesDataStore(
+    name = "brapmony-session",
+    corruptionHandler = ReplaceFileCorruptionHandler { emptyPreferences() },
+)
 
 @Serializable
 data class StoredSession(
